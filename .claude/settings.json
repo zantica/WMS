@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./init.sh)",
+      "Bash(powershell -ExecutionPolicy Bypass -File ./init.ps1)",
+      "Bash(pnpm build)",
+      "Bash(pnpm test)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm db:generate)",
+      "Bash(pnpm --filter @wms/api test*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ]
+  }
+}

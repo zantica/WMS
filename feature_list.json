@@ -1,0 +1,150 @@
+{
+  "project": "WMS SaaS Multi-Tenant",
+  "version": "1.0.0",
+  "workflow": "hybrid-leader-subagents",
+  "features": [
+    {
+      "id": "F1.1",
+      "milestone": "Hito 1 — Esqueleto + Ledger",
+      "title": "Monorepo Turborepo + Esquema Prisma Multi-Tenant + Shared Types",
+      "boundedContext": "Core / Topology & Catalog",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Configuración Turborepo con @wms/db, @wms/shared-types y @wms/api",
+        "Modelos Prisma para Tenant, User, Warehouse, Location, Product, InventoryTransaction, InventoryBalance, SalesOrder, WarehouseTask",
+        "Seed inicial con tenant demo, ubicaciones y productos"
+      ]
+    },
+    {
+      "id": "F1.2",
+      "milestone": "Hito 1 — Esqueleto + Ledger",
+      "title": "Caso de uso moveStock con Ledger Inmutable y SELECT FOR UPDATE",
+      "boundedContext": "Inventory Ledger",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Transacción Serializable con bloqueo FOR UPDATE en inventory_balances",
+        "Prevención de saldos negativos (INSUFFICIENT_STOCK)",
+        "Tests unitarios en move-stock.test.ts con cobertura >= 80%"
+      ]
+    },
+    {
+      "id": "F1.3",
+      "milestone": "Hito 1 — Esqueleto + Ledger",
+      "title": "Caso de uso allocateOrder y API REST base (Products, Locations, Inventory, Orders, Receipts, Tasks)",
+      "boundedContext": "Fulfillment & Tasks",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Reserva ATP ordenada por location.code ASC con generación de tarea PICKING",
+        "Rutas Fastify v1 con validación Zod, auth por x-api-key y manejo centralizado de WmsError",
+        "Tests unitarios en allocate-order.test.ts pasando al 100%"
+      ]
+    },
+    {
+      "id": "F2.1",
+      "milestone": "Hito 2 — App Expo + Inbound + Putaway",
+      "title": "Generación automática de tarea PUTAWAY al completar RECEIVING",
+      "boundedContext": "Fulfillment & Tasks",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Caso de uso en apps/api/src/use-cases/ para sugerir ubicación STORAGE destino y crear WarehouseTask de tipo PUTAWAY al cerrar una recepción",
+        "Endpoint o integración en /api/v1/receipts/:taskId/confirm-line cuando todos los steps pasan a COMPLETED",
+        "Tests unitarios cubriendo creación de PUTAWAY y casos borde (>= 80% coverage)"
+      ]
+    },
+    {
+      "id": "F2.2",
+      "milestone": "Hito 2 — App Expo + Inbound + Putaway",
+      "title": "Tests unitarios e integración para flujos de Receipts y Tasks en @wms/api",
+      "boundedContext": "Fulfillment & Tasks",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Extraer lógica crítica de confirmación de escaneo (confirm-line / confirm step) a use-cases testeables si aplica",
+        "Tests unitarios para validación de código de barras (INVALID_SCAN), secuencia y manejo de excepciones de operario",
+        "Mantener cobertura global de use-cases >= 80%"
+      ]
+    },
+    {
+      "id": "F2.3",
+      "milestone": "Hito 2 — App Expo + Inbound + Putaway",
+      "title": "Esqueleto de App Móvil para Operarios en apps/mobile (Expo + TypeScript)",
+      "boundedContext": "Mobile Operator App",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Inicializar paquete @wms/mobile en apps/mobile integrado con Turborepo y @wms/shared-types",
+        "Cliente HTTP tipado consumiendo ApiResponse<T> / ApiError con configuración de API key / Auth",
+        "Navegación base (Expo Router) con pantallas de Login/Config, Lista de Tareas (RECEIVING / PUTAWAY / PICKING) y Escáner"
+      ]
+    },
+    {
+      "id": "F2.4",
+      "milestone": "Hito 2 — App Expo + Inbound + Putaway",
+      "title": "Flujo móvil de Recepción (Inbound) y Putaway guiado por escaneo de códigos QR/Barras",
+      "boundedContext": "Mobile Operator App",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Pantalla de ejecución de recepción en @wms/mobile conectada a POST /api/v1/receipts/:taskId/confirm-line",
+        "Pantalla de ejecución de Putaway conectada a POST /api/v1/tasks/:id/start y POST /api/v1/tasks/:id/steps/:stepId/confirm",
+        "Feedback visual inmediato ante errores de dominio (INVALID_SCAN, INSUFFICIENT_STOCK)"
+      ]
+    },
+    {
+      "id": "F3.1",
+      "milestone": "Hito 3 — Motor de Pedidos + Picking",
+      "title": "Cancelación de Pedidos y liberación atómica de reservas (ALLOCATION_CANCEL)",
+      "boundedContext": "Inventory Ledger / Fulfillment",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Caso de uso cancelOrder que revierta allocatedQty con SELECT FOR UPDATE y registre transacciones ALLOCATION_CANCEL en el Ledger",
+        "Cancelar tareas de PICKING pendientes asociadas al pedido",
+        "Endpoint POST /api/v1/orders/:id/cancel y suite de tests unitarios (>= 80% coverage)"
+      ]
+    },
+    {
+      "id": "F3.2",
+      "milestone": "Hito 3 — Motor de Pedidos + Picking",
+      "title": "Gestión de Excepciones de Picking y Re-asignación de Stock",
+      "boundedContext": "Fulfillment & Tasks",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Caso de uso para manejar rotura de stock o ubicación vacía durante el picking (StepStatus = EXCEPTION)",
+        "Intentar re-alocar stock desde otra ubicación STORAGE con ATP > 0 o pasar el pedido a ON_HOLD",
+        "Tests unitarios exhaustivos validando la consistencia de allocatedQty y onHandQty"
+      ]
+    },
+    {
+      "id": "F3.3",
+      "milestone": "Hito 3 — Motor de Pedidos + Picking",
+      "title": "Flujo móvil de Picking y Packing paso a paso en @wms/mobile",
+      "boundedContext": "Mobile Operator App",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Interfaz guiada por secuencia de ubicación (locationCode ASC) para tareas PICKING",
+        "Doble validación de escaneo (ubicación + barcode de producto) y reporte de incidencias en tiempo real"
+      ]
+    },
+    {
+      "id": "F4.1",
+      "milestone": "Hito 4 — Panel Web + Integración External",
+      "title": "Esqueleto del Dashboard Web en apps/web (Next.js App Router + @wms/shared-types)",
+      "boundedContext": "Web Supervisor Dashboard",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Inicializar @wms/web en apps/web dentro del monorepo Turborepo",
+        "Vistas de catálogo de productos, mapa de ubicaciones, balances de inventario (onHand vs allocated vs ATP) y libro mayor (kardex)",
+        "Panel de monitoreo de pedidos y tareas activas"
+      ]
+    },
+    {
+      "id": "F4.2",
+      "milestone": "Hito 4 — Panel Web + Integración External",
+      "title": "Autenticación JWT (Clerk) y Webhooks de Integración Externa (E-commerce / ERP)",
+      "boundedContext": "Multi-Tenancy & External Integrations",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Completar validación JWT real en apps/api/src/plugins/auth.ts con roles (ADMIN, SUPERVISOR, OPERATOR)",
+        "Endpoints de entrada/salida (webhooks) para ingesta idempotente de pedidos (externalId) y notificación al pasar a SHIPPED",
+        "Tests unitarios para autenticación, permisos por rol e idempotencia de webhooks"
+      ]
+    }
+  ]
+}

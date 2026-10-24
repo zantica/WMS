@@ -1,0 +1,30 @@
+{
+  "name": "wms",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @wms/db generate",
+    "db:migrate": "pnpm --filter @wms/db migrate:dev",
+    "db:push": "pnpm --filter @wms/db db:push",
+    "db:studio": "pnpm --filter @wms/db studio",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:seed": "pnpm --filter @wms/db seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "prettier": "^3.3.0",
+    "eslint": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

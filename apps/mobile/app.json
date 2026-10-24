@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "WMS Operator",
+    "slug": "wms-mobile",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "wms-operator",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wms.operator",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Se requiere acceso a la cámara para escanear códigos de barras y QR de ubicaciones y productos del almacén."
+      }
+    },
+    "android": {
+      "package": "com.wms.operator",
+      "permissions": ["android.permission.CAMERA"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permitir a WMS Operator usar la cámara para escanear ubicaciones y productos."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

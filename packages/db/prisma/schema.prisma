@@ -1,0 +1,316 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// MULTI-TENANCY & AUTH
+// ─────────────────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  apiKey    String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  warehouses Warehouse[]
+  users      User[]
+
+  @@map("tenants")
+}
+
+model User {
+  id       String   @id @default(cuid())
+  tenantId String
+  clerkId  String   @unique
+  name     String
+  email    String
+  role     UserRole @default(OPERATOR)
+  isActive Boolean  @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  OPERATOR
+}
+
+// ─────────────────────────────────────────────────────────────
+// BOUNDED CONTEXT A: TOPOLOGÍA & CATÁLOGO
+// ─────────────────────────────────────────────────────────────
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locations Location[]
+  orders    SalesOrder[]
+
+  @@index([tenantId])
+  @@map("warehouses")
+}
+
+model Location {
+  id          String       @id @default(cuid())
+  tenantId    String
+  warehouseId String
+  /// Código escaneable: ej. "PAS01-EST02-NIV01" — impreso como QR en la estantería
+  code        String
+  type        LocationType
+  description String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+
+  warehouse Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  balances  InventoryBalance[]
+  fromTx    InventoryTransaction[] @relation("FromLocation")
+  toTx      InventoryTransaction[] @relation("ToLocation")
+  taskSteps TaskStep[]
+
+  @@unique([warehouseId, code])
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@map("locations")
+}
+
+enum LocationType {
+  RECEIVING  // Zona de descarga — stock entra aquí primero
+  STORAGE    // Estanterías — stock disponible para picking
+  PACKING    // Mesa de armado — stock en proceso de despacho
+  DISPATCH   // Zona de salida — stock listo para courier
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  tenantId    String
+  sku         String
+  name        String
+  /// EAN13 o Code128
+  barcode     String?
+  description String?
+  weightGrams Int?
+  widthCm     Float?
+  heightCm    Float?
+  depthCm     Float?
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  balances     InventoryBalance[]
+  transactions InventoryTransaction[]
+  orderLines   OrderLine[]
+  taskSteps    TaskStep[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, barcode])
+  @@index([tenantId])
+  @@map("products")
+}
+
+// ─────────────────────────────────────────────────────────────
+// BOUNDED CONTEXT B: INVENTORY LEDGER (⚠️ CRÍTICO)
+// ─────────────────────────────────────────────────────────────
+
+/// Registro inmutable de cada movimiento de stock.
+/// NUNCA se hacen UPDATE ni DELETE en esta tabla.
+/// Es el libro mayor de contabilidad del almacén.
+model InventoryTransaction {
+  id             String    @id @default(cuid())
+  tenantId       String
+  productId      String
+  fromLocationId String?
+  toLocationId   String?
+  /// Siempre positivo — la dirección la dan from/toLocationId
+  quantity       Decimal   @db.Decimal(12, 4)
+  reason         TxReason
+  /// ID del documento de origen: orderId, receiptId, adjustmentId...
+  referenceId    String?
+  userId         String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+
+  product      Product   @relation(fields: [productId], references: [id])
+  fromLocation Location? @relation("FromLocation", fields: [fromLocationId], references: [id])
+  toLocation   Location? @relation("ToLocation", fields: [toLocationId], references: [id])
+
+  @@index([tenantId, productId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, referenceId])
+  @@map("inventory_transactions")
+}
+
+enum TxReason {
+  INBOUND_RECEIPT   // Paso 1: Mercancía llega → RECEIVING
+  PUTAWAY           // Paso 2: RECEIVING → STORAGE
+  ALLOCATION        // Paso 3: Reserva virtual para pedido
+  ALLOCATION_CANCEL // Cancelación de reserva (pedido cancelado)
+  PICK              // Paso 4: STORAGE → PACKING
+  OUTBOUND_SHIPMENT // Paso 5: Sale del almacén definitivamente
+  ADJUSTMENT        // Corrección manual (requiere justificación en notes)
+  RETURN_INBOUND    // Devolución de cliente que entra al almacén
+}
+
+/// Proyección en tiempo real del stock por ubicación + producto.
+/// Se actualiza en la MISMA transacción SQL que inserta en InventoryTransaction.
+/// Nunca la leas directamente para operaciones críticas — usa SELECT FOR UPDATE.
+model InventoryBalance {
+  id           String  @id @default(cuid())
+  tenantId     String
+  locationId   String
+  productId    String
+  /// Stock físico real en esta ubicación
+  onHandQty    Decimal @default(0) @db.Decimal(12, 4)
+  /// Comprometido en pedidos activos (incluido en onHandQty, no adicional)
+  allocatedQty Decimal @default(0) @db.Decimal(12, 4)
+  updatedAt    DateTime @updatedAt
+
+  location Location @relation(fields: [locationId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@unique([locationId, productId])
+  @@index([tenantId, productId])
+  @@map("inventory_balances")
+}
+
+// ─────────────────────────────────────────────────────────────
+// BOUNDED CONTEXT C: FULFILLMENT & TASKS
+// ─────────────────────────────────────────────────────────────
+
+model SalesOrder {
+  id           String      @id @default(cuid())
+  tenantId     String
+  warehouseId  String
+  /// ID en el sistema externo (Shopify, WooCommerce, ERP...)
+  externalId   String?
+  externalRef  String?     // Número de pedido legible (#1234)
+  status       OrderStatus @default(PENDING)
+  customerName String?
+  customerEmail String?
+  shippingAddress Json?
+  notes        String?
+  priority     Int         @default(0) // Mayor = más urgente
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
+  lines     OrderLine[]
+  tasks     WarehouseTask[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, externalId])
+  @@map("sales_orders")
+}
+
+enum OrderStatus {
+  PENDING    // Recibido, esperando stock o asignación
+  ALLOCATED  // Stock reservado, tarea de picking creada
+  PICKING    // Operario en proceso de picking
+  PACKED     // En mesa de packing, listo para etiquetar
+  SHIPPED    // Despachado, webhook enviado
+  CANCELLED  // Cancelado (reservas liberadas)
+  ON_HOLD    // En espera (stock insuficiente)
+}
+
+model OrderLine {
+  id           String  @id @default(cuid())
+  orderId      String
+  productId    String
+  requestedQty Decimal @db.Decimal(12, 4)
+  pickedQty    Decimal @default(0) @db.Decimal(12, 4)
+  unitPrice    Decimal? @db.Decimal(12, 2)
+
+  order   SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product    @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_lines")
+}
+
+model WarehouseTask {
+  id          String     @id @default(cuid())
+  tenantId    String
+  /// Nulo para tareas de recepción (RECEIVING/PUTAWAY) que no tienen pedido de venta
+  orderId     String?
+  /// Para tareas de recepción: referencia al aviso de entrada (futuro modelo InboundReceipt)
+  receiptRef  String?
+  type        TaskType
+  status      TaskStatus @default(PENDING)
+  assignedTo  String?    // userId
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  order SalesOrder? @relation(fields: [orderId], references: [id])
+  steps TaskStep[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, assignedTo, status])
+  @@map("warehouse_tasks")
+}
+
+enum TaskType {
+  RECEIVING // Recibir mercancía del proveedor
+  PUTAWAY   // Ubicar mercancía de RECEIVING a STORAGE
+  PICKING   // Recoger productos para un pedido
+  PACKING   // Armar y verificar el paquete antes de despacho
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXCEPTION   // Problema reportado por el operario
+}
+
+/// Un paso individual dentro de una tarea — lo que el operario hace en un punto concreto del almacén.
+model TaskStep {
+  id          String     @id @default(cuid())
+  taskId      String
+  /// Orden de recorrido (ordenado por location.code para minimizar desplazamiento)
+  sequence    Int
+  locationId  String
+  productId   String
+  expectedQty Decimal    @db.Decimal(12, 4)
+  scannedQty  Decimal    @default(0) @db.Decimal(12, 4)
+  status      StepStatus @default(PENDING)
+  /// Motivo del operario si reportó excepción
+  exceptionNote String?
+  completedAt DateTime?
+
+  task     WarehouseTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  location Location      @relation(fields: [locationId], references: [id])
+  product  Product       @relation(fields: [productId], references: [id])
+
+  @@index([taskId, sequence])
+  @@map("task_steps")
+}
+
+enum StepStatus {
+  PENDING
+  COMPLETED
+  EXCEPTION   // Operario reportó problema (dañado, no encontrado, etc.)
+  SKIPPED
+}
