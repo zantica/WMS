@@ -1,0 +1,444 @@
+/* apps/web/src/app/globals.css */
+/* Sistema de diseño industrial de alto contraste para el Dashboard de Supervisores (@wms/web) */
+
+:root {
+  --bg-base: #0b1120;
+  --bg-surface: #0f172a;
+  --bg-card: #1e293b;
+  --bg-card-hover: #263449;
+  --border-subtle: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --accent-blue: #38bdf8;
+  --accent-emerald: #10b981;
+  --accent-amber: #f59e0b;
+  --accent-rose: #f43f5e;
+  --accent-violet: #a855f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  line-height: 1.5;
+}
+
+.wms-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.wms-sidebar {
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem;
+  gap: 1.5rem;
+}
+
+.wms-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.wms-brand-badge {
+  background: linear-gradient(135deg, #0284c7, #10b981);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+.wms-brand-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.wms-brand-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.wms-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.wms-nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.6rem;
+  text-decoration: none;
+  color: var(--text-primary);
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.wms-nav-link:hover {
+  background-color: var(--bg-card);
+}
+
+.wms-nav-link-active {
+  background-color: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.wms-nav-label {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.wms-nav-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.wms-nav-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background-color: var(--bg-card);
+  color: var(--accent-blue);
+  border: 1px solid var(--border-subtle);
+}
+
+.wms-sidebar-footer {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+
+.wms-footer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.wms-Workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wms-topbar {
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.85rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.wms-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.wms-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.wms-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.wms-status-online {
+  background-color: var(--accent-emerald);
+  box-shadow: 0 0 8px var(--accent-emerald);
+}
+
+.wms-status-offline {
+  background-color: var(--accent-rose);
+}
+
+.wms-connection-panel {
+  background-color: #131c31;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 1rem 1.5rem;
+}
+
+.wms-main {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.wms-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.wms-page-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.wms-page-subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.wms-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+.wms-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 1.25rem;
+}
+
+.wms-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  padding: 1.15rem;
+}
+
+.wms-card-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wms-kpi-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.wms-kpi-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  margin: 0.25rem 0;
+}
+
+.wms-kpi-foot {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.wms-btn {
+  cursor: pointer;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.84rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid transparent;
+  transition: opacity 0.15s ease;
+}
+
+.wms-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wms-btn-primary {
+  background-color: #0284c7;
+  color: #ffffff;
+}
+
+.wms-btn-emerald {
+  background-color: #059669;
+  color: #ffffff;
+}
+
+.wms-btn-danger {
+  background-color: #e11d48;
+  color: #ffffff;
+}
+
+.wms-btn-secondary {
+  background-color: #334155;
+  color: #f8fafc;
+}
+
+.wms-btn-outline {
+  background-color: transparent;
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.wms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.wms-field input,
+.wms-field select,
+.wms-field textarea {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.45rem;
+  padding: 0.5rem 0.65rem;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+}
+
+.wms-table-wrap {
+  overflow-x: auto;
+}
+
+.wms-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.wms-table th,
+.wms-table td {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.wms-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wms-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.wms-tag-emerald {
+  background-color: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+}
+
+.wms-tag-blue {
+  background-color: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+}
+
+.wms-tag-amber {
+  background-color: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+}
+
+.wms-tag-rose {
+  background-color: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+}
+
+.wms-tag-slate {
+  background-color: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
+.wms-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.wms-muted {
+  color: var(--text-secondary);
+}
+
+.wms-alert-banner {
+  border-radius: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(244, 63, 94, 0.45);
+  background-color: rgba(244, 63, 94, 0.12);
+  color: #fecdd3;
+  font-size: 0.88rem;
+}
+
+.wms-success-banner {
+  border-radius: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+  font-size: 0.88rem;
+}
+
+.wms-location-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+  gap: 0.75rem;
+}
+
+.wms-location-cell {
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+.wms-location-occupied {
+  border-color: rgba(16, 185, 129, 0.55);
+  background-color: rgba(16, 185, 129, 0.07);
+}
+
+.wms-progress-track {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-surface);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wms-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7, #10b981);
+}

@@ -17,6 +17,7 @@ import { locationRoutes } from "./routes/locations.js";
 import { orderRoutes } from "./routes/orders.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { receiptRoutes } from "./routes/receipts.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 import { healthRoute } from "./routes/health.js";
 
 const PORT = Number(process.env["PORT"] ?? 3001);
@@ -95,6 +96,7 @@ async function buildServer() {
   await app.register(orderRoutes, { prefix: "/api/v1/orders" });
   await app.register(taskRoutes, { prefix: "/api/v1/tasks" });
   await app.register(receiptRoutes, { prefix: "/api/v1/receipts" });
+  await app.register(webhookRoutes, { prefix: "/api/v1/webhooks" });
 
   return app;
 }

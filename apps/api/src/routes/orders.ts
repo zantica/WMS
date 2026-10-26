@@ -7,6 +7,7 @@ import {
   cancelOrder,
   type CancelOrderResult,
 } from "../use-cases/inventory/cancel-order.js";
+import { notifyOrderShipped } from "../use-cases/integrations/notify-order-shipped.js";
 import { WmsError } from "../plugins/error-handler.js";
 import type { ApiResponse, SalesOrderDTO } from "@wms/shared-types";
 
@@ -193,11 +194,26 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
         data: { status: "SHIPPED" },
       });
 
-      // TODO Hito 4: emitir webhook `order.shipped` al e-commerce del cliente
+      const webhookResult = await notifyOrderShipped({
+        orderId: order.id,
+        tenantId: request.tenantId,
+        warehouseId: order.warehouseId,
+        externalId: order.externalId,
+        externalRef: order.externalRef,
+        lines: order.lines.map((line) => ({
+          productId: line.productId,
+          requestedQty: Number(line.requestedQty),
+          pickedQty: Number(line.pickedQty),
+        })),
+      });
 
       return {
         success: true,
-        data: { orderId: order.id, status: "SHIPPED" },
+        data: {
+          orderId: order.id,
+          status: "SHIPPED",
+          webhookDelivered: webhookResult.delivered,
+        },
       };
     },
   );

@@ -8,6 +8,7 @@
     "dev": "turbo run dev",
     "dev:api": "pnpm db:generate && pnpm --filter @wms/api dev",
     "dev:mobile": "pnpm --filter @wms/mobile dev",
+    "dev:web": "pnpm --filter @wms/web dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "db:generate": "pnpm --filter @wms/db generate",

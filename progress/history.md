@@ -100,3 +100,31 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Creación de `apps/mobile/src/workflows/picking.ts` con recorrido ordenado por `locationCode ASC`, máquina de estados de doble escaneo (`AWAITING_LOCATION` → `AWAITING_PRODUCT` → `READY_TO_CONFIRM`) y formateo de excepciones/re-asignaciones en tiempo real (`formatPickingExceptionFeedback`).
   - Creación de la pantalla guiada `apps/mobile/app/tasks/picking/[taskId].tsx` con validación dual (estantería `STORAGE` + barcode/SKU), reporte de incidencias conectado con `F3.2` y cierre en Mesa de Packing con confirmación de despacho (`POST /api/v1/orders/:id/dispatch`).
   - Suite de tests unitarios en `apps/mobile/src/workflows/__tests__/picking.test.ts` y actualización de `client.test.ts` e `inbound-putaway.test.ts`.
+
+
+---
+
+## [2026-10-26] Feature `F4.1` — Esqueleto del Dashboard Web en `apps/web` (Next.js App Router + `@wms/shared-types`)
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F4.1.md`](./impl_F4.1.md)
+  - Revisión: [`progress/review_F4.1.md`](./review_F4.1.md)
+- **Cambios clave**:
+  - Inicialización del paquete `@wms/web` en `apps/web/` con Next.js App Router, `WmsWebApiClient` (`src/lib/api-client.ts`) y agregadores puros del supervisor (`src/lib/dashboard-metrics.ts`).
+  - Vistas en `src/app/` para Resumen Ejecutivo (`/`), Catálogo y Mapa de Ubicaciones (`/catalog`), Balances `OnHand`/`Allocated`/`ATP` y Kardex (`/inventory`), y Monitoreo de Pedidos y Tareas (`/operations`).
+  - Suites de tests unitarios en `apps/web/src/lib/__tests__/api-client.test.ts` y `apps/web/src/lib/__tests__/dashboard-metrics.test.ts`.
+
+
+---
+
+## [2026-10-26] Feature `F4.2` y Cierre del Hito 4 — Autenticación JWT y Webhooks de Integración Externa
+- **Estado**: `done` (`VEREDICTO: APPROVED`) — **Hito 4 100% Completado**
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F4.2.md`](./impl_F4.2.md)
+  - Revisión: [`progress/review_F4.2.md`](./review_F4.2.md)
+- **Cambios clave**:
+  - Verificación criptográfica JWT (HMAC-SHA256 / `timingSafeEqual`), expiración, validación de estado de usuario activo y matching de tenant en `apps/api/src/plugins/auth.ts`.
+  - Guard de autorización por rol `requireRole` para `ADMIN`, `SUPERVISOR` y `OPERATOR`.
+  - Ingesta idempotente de pedidos externos por `(tenantId, externalId)` con soporte `autoAllocate` en `ingest-external-order.ts` y ruta `POST /api/v1/webhooks/orders`.
+  - Notificación saliente firmada `order.shipped` en `notify-order-shipped.ts` integrada en el despacho de pedidos.
+  - Suites completas de tests unitarios en `auth.test.ts` (17 tests) y `webhooks.test.ts` (15 tests).

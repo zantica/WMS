@@ -164,6 +164,55 @@ export interface AdjustmentInput {
 }
 
 // ─────────────────────────────────────────────────────────────
+// INTEGRACIONES EXTERNAS Y WEBHOOKS (Hito 4 — F4.2)
+// ─────────────────────────────────────────────────────────────
+
+export interface ExternalOrderLineInput {
+  productId?: string | undefined;
+  sku?: string | undefined;
+  requestedQty: number;
+  unitPrice?: number | undefined;
+}
+
+export interface IngestExternalOrderInput {
+  warehouseId: string;
+  externalId: string;
+  externalRef?: string | undefined;
+  customerName?: string | undefined;
+  customerEmail?: string | undefined;
+  priority?: number | undefined;
+  notes?: string | undefined;
+  autoAllocate?: boolean | undefined;
+  lines: ExternalOrderLineInput[];
+}
+
+export interface IngestExternalOrderResult {
+  orderId: string;
+  externalId: string;
+  status: OrderStatus;
+  idempotentReplay: boolean;
+  allocatedTaskId: string | null;
+}
+
+export interface OrderShippedWebhookLine {
+  productId: string;
+  sku?: string | undefined;
+  requestedQty: number;
+  pickedQty: number;
+}
+
+export interface OrderShippedWebhookPayload {
+  event: "order.shipped";
+  orderId: string;
+  externalId: string | null;
+  externalRef: string | null;
+  tenantId: string;
+  warehouseId: string;
+  shippedAt: string;
+  lines: OrderShippedWebhookLine[];
+}
+
+// ─────────────────────────────────────────────────────────────
 // RESPUESTAS ENVOLVENTES
 // ─────────────────────────────────────────────────────────────
 

@@ -127,7 +127,7 @@
       "milestone": "Hito 4 — Panel Web + Integración External",
       "title": "Esqueleto del Dashboard Web en apps/web (Next.js App Router + @wms/shared-types)",
       "boundedContext": "Web Supervisor Dashboard",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Inicializar @wms/web en apps/web dentro del monorepo Turborepo",
         "Vistas de catálogo de productos, mapa de ubicaciones, balances de inventario (onHand vs allocated vs ATP) y libro mayor (kardex)",
@@ -139,7 +139,7 @@
       "milestone": "Hito 4 — Panel Web + Integración External",
       "title": "Autenticación JWT (Clerk) y Webhooks de Integración Externa (E-commerce / ERP)",
       "boundedContext": "Multi-Tenancy & External Integrations",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Completar validación JWT real en apps/api/src/plugins/auth.ts con roles (ADMIN, SUPERVISOR, OPERATOR)",
         "Endpoints de entrada/salida (webhooks) para ingesta idempotente de pedidos (externalId) y notificación al pasar a SHIPPED",
