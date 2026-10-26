@@ -61,3 +61,42 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Creación de `apps/mobile/src/workflows/inbound-putaway.ts` y su suite de tests unitarios en `apps/mobile/src/workflows/__tests__/inbound-putaway.test.ts`.
   - Pantallas guiadas `apps/mobile/app/tasks/receiving/[taskId].tsx` (`POST /api/v1/receipts/:taskId/confirm-line` + transición directa al Putaway generado) y `apps/mobile/app/tasks/putaway/[taskId].tsx` (`POST /api/v1/tasks/:id/start` + `POST /api/v1/tasks/:id/steps/:stepId/confirm` + reporte de excepciones).
   - Feedback visual estructurado para errores de dominio (`INVALID_SCAN`, `INSUFFICIENT_STOCK`, `WRONG_STEP_SEQUENCE`, `LOCATION_NOT_FOUND`, `TASK_NOT_FOUND`).
+
+
+---
+
+## [2026-10-26] Feature `F3.1` — Cancelación de Pedidos y liberación atómica de reservas (`ALLOCATION_CANCEL`)
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F3.1.md`](./impl_F3.1.md)
+  - Revisión: [`progress/review_F3.1.md`](./review_F3.1.md)
+- **Cambios clave**:
+  - Nuevo caso de uso `cancelOrder` en `apps/api/src/use-cases/inventory/cancel-order.ts` con aislamiento `Serializable`, bloqueo pesimista `SELECT ... FOR UPDATE`, liberación de `allocatedQty` sin valores negativos, registro inmutable `ALLOCATION_CANCEL` y cancelación de tareas `PICKING` activas.
+  - Endpoint `POST /api/v1/orders/:id/cancel` en `apps/api/src/routes/orders.ts` con validación Zod y contrato `ApiResponse<CancelOrderResult>`.
+  - Suite de 10 tests unitarios en `apps/api/src/use-cases/inventory/__tests__/cancel-order.test.ts`.
+
+
+---
+
+## [2026-10-26] Feature `F3.2` — Gestión de Excepciones de Picking y Re-asignación de Stock
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F3.2.md`](./impl_F3.2.md)
+  - Revisión: [`progress/review_F3.2.md`](./review_F3.2.md)
+- **Cambios clave**:
+  - Nuevo caso de uso `handlePickingException` en `apps/api/src/use-cases/inventory/handle-picking-exception.ts` con aislamiento `Serializable` y `SELECT ... FOR UPDATE`: libera la reserva de la ubicación con excepción (`ALLOCATION_CANCEL`) y re-aloca en ubicaciones `STORAGE` alternativas con `ATP > 0` (`ALLOCATION` + nuevos `TaskStep`) o pasa el pedido a `ON_HOLD` liberando los pasos pendientes restantes.
+  - Integración en `apps/api/src/use-cases/tasks/confirm-task-step.ts` para tareas `PICKING`.
+  - Suite de 13 tests unitarios en `apps/api/src/use-cases/inventory/__tests__/handle-picking-exception.test.ts` y actualización de `apps/api/src/use-cases/tasks/__tests__/confirm-task-step.test.ts`.
+
+
+---
+
+## [2026-10-26] Feature `F3.3` y Cierre del Hito 3 — Flujo móvil de Picking y Packing paso a paso en `@wms/mobile`
+- **Estado**: `done` (`VEREDICTO: APPROVED`) — **Hito 3 100% Completado**
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F3.3.md`](./impl_F3.3.md)
+  - Revisión: [`progress/review_F3.3.md`](./review_F3.3.md)
+- **Cambios clave**:
+  - Creación de `apps/mobile/src/workflows/picking.ts` con recorrido ordenado por `locationCode ASC`, máquina de estados de doble escaneo (`AWAITING_LOCATION` → `AWAITING_PRODUCT` → `READY_TO_CONFIRM`) y formateo de excepciones/re-asignaciones en tiempo real (`formatPickingExceptionFeedback`).
+  - Creación de la pantalla guiada `apps/mobile/app/tasks/picking/[taskId].tsx` con validación dual (estantería `STORAGE` + barcode/SKU), reporte de incidencias conectado con `F3.2` y cierre en Mesa de Packing con confirmación de despacho (`POST /api/v1/orders/:id/dispatch`).
+  - Suite de tests unitarios en `apps/mobile/src/workflows/__tests__/picking.test.ts` y actualización de `client.test.ts` e `inbound-putaway.test.ts`.

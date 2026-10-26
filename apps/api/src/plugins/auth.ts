@@ -15,10 +15,11 @@ declare module "fastify" {
   }
 }
 
-const authPlugin: FastifyPluginAsync = async (app) => {
+export const authPlugin = fp(async (app) => {
+  app.decorateRequest("tenantId", "");
 
   // Hook global: extrae tenantId de JWT o API Key antes de cada request
-  app.addHook("preHandler", async (request, reply) => {
+  app.addHook("preHandler", async (request) => {
     // Las rutas públicas no necesitan auth
     const PUBLIC_PATHS = ["/health", "/docs", "/docs/"];
     if (PUBLIC_PATHS.some((p) => request.url.startsWith(p))) return;
@@ -53,6 +54,4 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 
     throw new WmsError("UNAUTHORIZED", "Authentication required", 401);
   });
-};
-
-export { authPlugin };
+});

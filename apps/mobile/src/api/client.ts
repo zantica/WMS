@@ -7,6 +7,7 @@ import type {
   ApiResponse,
   ConfirmScanInput,
   InventoryBalanceDTO,
+  OrderStatus,
   StepStatus,
   TaskStatus,
   TaskType,
@@ -42,6 +43,13 @@ export interface ConfirmTaskStepInput extends ConfirmScanInput {
   exceptionNote?: string | undefined;
 }
 
+export interface ReplacementStepSummary {
+  id: string;
+  locationId: string;
+  locationCode: string;
+  expectedQty: number;
+}
+
 export interface ConfirmTaskStepResponse {
   stepId: string;
   scannedQty: number;
@@ -51,6 +59,14 @@ export interface ConfirmTaskStepResponse {
   taskStatus: Extract<TaskStatus, "IN_PROGRESS" | "COMPLETED" | "EXCEPTION">;
   taskComplete: boolean;
   note?: string | undefined;
+  reallocated?: boolean | undefined;
+  orderStatus?: OrderStatus | undefined;
+  replacementSteps?: ReplacementStepSummary[] | undefined;
+}
+
+export interface DispatchOrderResponse {
+  orderId: string;
+  status: OrderStatus;
 }
 
 export interface ConfirmReceiptLineInput {
@@ -408,6 +424,18 @@ export class WmsApiClient {
           locationId: filters?.locationId,
         },
       },
+    );
+  }
+
+  /**
+   * POST /api/v1/orders/:id/dispatch — Confirma el cierre de Packing y despacha el pedido (SHIPPED).
+   */
+  public async dispatchOrder(
+    orderId: string,
+  ): Promise<DispatchOrderResponse> {
+    return this.requestEnvelope<DispatchOrderResponse>(
+      "POST",
+      `/api/v1/orders/${encodeURIComponent(orderId)}/dispatch`,
     );
   }
 }

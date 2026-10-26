@@ -152,6 +152,9 @@ export function resolveTaskExecutionRoute(
   if (taskType === "PUTAWAY") {
     return `/tasks/putaway/${encodedId}`;
   }
+  if (taskType === "PICKING" || taskType === "PACKING") {
+    return `/tasks/picking/${encodedId}`;
+  }
   return `/(tabs)/scanner?taskId=${encodedId}`;
 }
 

@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { WmsError } from "../../../plugins/error-handler.js";
 import { confirmTaskStep } from "../confirm-task-step.js";
+import { handlePickingException } from "../../inventory/handle-picking-exception.js";
 import { moveStock } from "../../inventory/move-stock.js";
 
 const mockPrisma = {
@@ -62,6 +63,10 @@ vi.mock("@wms/db", () => ({
 
 vi.mock("../../inventory/move-stock.js", () => ({
   moveStock: vi.fn(),
+}));
+
+vi.mock("../../inventory/handle-picking-exception.js", () => ({
+  handlePickingException: vi.fn(),
 }));
 
 const BASE_PUTAWAY_TASK = {
@@ -296,8 +301,28 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
 
   // ─────────────────────────────────────────────────────────────────────────────
   describe("Reporte de excepciones de operario (reportException / exceptionNote)", () => {
-    it("marca el paso y la tarea como EXCEPTION sin mover stock cuando se reporta excepción", async () => {
+    it("en tareas PICKING delega en handlePickingException y devuelve la información de re-asignación", async () => {
       mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
+      vi.mocked(handlePickingException).mockResolvedValue({
+        stepId: "step-pick-1",
+        taskId: "task-pick-1",
+        orderId: "order-1",
+        stepStatus: "EXCEPTION",
+        taskStatus: "IN_PROGRESS",
+        orderStatus: "PICKING",
+        reallocated: true,
+        releasedOriginalQty: 3,
+        replacementSteps: [
+          {
+            id: "step-pick-2",
+            sequence: 2,
+            locationId: "loc-storage-b02",
+            locationCode: "B-02-01",
+            expectedQty: 3,
+          },
+        ],
+        note: "Producto dañado en estantería",
+      });
 
       const result = await confirmTaskStep({
         taskId: "task-pick-1",
@@ -306,19 +331,16 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
         scannedCode: "A-01-01",
         reportException: true,
         exceptionNote: "Producto dañado en estantería",
+        userId: "user-op-1",
       });
 
       expect(moveStock).not.toHaveBeenCalled();
-      expect(mockPrisma.taskStep.update).toHaveBeenCalledWith({
-        where: { id: "step-pick-1" },
-        data: {
-          status: "EXCEPTION",
-          exceptionNote: "Producto dañado en estantería",
-        },
-      });
-      expect(mockPrisma.warehouseTask.update).toHaveBeenCalledWith({
-        where: { id: "task-pick-1" },
-        data: { status: "EXCEPTION" },
+      expect(handlePickingException).toHaveBeenCalledWith({
+        taskId: "task-pick-1",
+        stepId: "step-pick-1",
+        tenantId: "tenant-1",
+        exceptionNote: "Producto dañado en estantería",
+        userId: "user-op-1",
       });
 
       expect(result).toEqual({
@@ -327,13 +349,24 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
         expectedQty: 3,
         remainingQty: 3,
         stepStatus: "EXCEPTION",
-        taskStatus: "EXCEPTION",
+        taskStatus: "IN_PROGRESS",
         taskComplete: false,
         note: "Producto dañado en estantería",
+        reallocated: true,
+        orderStatus: "PICKING",
+        replacementSteps: [
+          {
+            id: "step-pick-2",
+            sequence: 2,
+            locationId: "loc-storage-b02",
+            locationCode: "B-02-01",
+            expectedQty: 3,
+          },
+        ],
       });
     });
 
-    it("usa nota por defecto cuando reportException es true sin exceptionNote explícito", async () => {
+    it("en tareas PUTAWAY usa nota por defecto y marca paso y tarea como EXCEPTION sin mover stock", async () => {
       mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PUTAWAY_TASK);
 
       const result = await confirmTaskStep({
@@ -347,6 +380,7 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
       expect(result.stepStatus).toBe("EXCEPTION");
       expect(result.taskStatus).toBe("EXCEPTION");
       expect(result.note).toBe("Operator reported exception");
+      expect(handlePickingException).not.toHaveBeenCalled();
       expect(moveStock).not.toHaveBeenCalled();
     });
   });

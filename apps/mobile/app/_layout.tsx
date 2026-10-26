@@ -37,6 +37,12 @@ export default function RootLayout(): JSX.Element {
             title: "Putaway Guiado a Estantería",
           }}
         />
+        <Stack.Screen
+          name="tasks/picking/[taskId]"
+          options={{
+            title: "Picking Guiado y Packing",
+          }}
+        />
       </Stack>
     </SessionProvider>
   );

@@ -10,11 +10,27 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import Constants from "expo-constants";
 import {
   WmsApiClient,
   createWmsClient,
   type HealthCheckResponse,
 } from "../api/client";
+
+/**
+ * Detecta automáticamente la IP de la máquina host (donde corre Metro / Expo)
+ * para que en un móvil físico no apunte a `localhost` (127.0.0.1 del teléfono).
+ */
+function resolveDefaultApiBaseUrl(): string {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (typeof hostUri === "string" && hostUri.trim().length > 0) {
+    const host = hostUri.split(":")[0]?.trim();
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
+      return `http://${host}:3001`;
+    }
+  }
+  return "http://localhost:3001";
+}
 
 export interface OperatorSession {
   apiBaseUrl: string;
@@ -38,7 +54,7 @@ export interface SessionContextValue {
 }
 
 export const DEFAULT_OPERATOR_SESSION: OperatorSession = {
-  apiBaseUrl: "http://localhost:3001",
+  apiBaseUrl: resolveDefaultApiBaseUrl(),
   apiKey: "demo-api-key-12345",
   warehouseId: "warehouse-demo",
   operatorName: "Operario Turno A",

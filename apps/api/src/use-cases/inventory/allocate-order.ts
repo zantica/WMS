@@ -70,14 +70,14 @@ export async function allocateOrder(
             allocated_qty: number;
           }>
         >`
-          SELECT ib.id, ib.location_id, l.code as location_code,
-                 ib.on_hand_qty, ib.allocated_qty
+          SELECT ib.id, ib."locationId" as location_id, l.code as location_code,
+                 ib."onHandQty" as on_hand_qty, ib."allocatedQty" as allocated_qty
           FROM inventory_balances ib
-          JOIN locations l ON l.id = ib.location_id
-          WHERE ib.product_id = ${line.productId}
-            AND ib.tenant_id = ${tenantId}
+          JOIN locations l ON l.id = ib."locationId"
+          WHERE ib."productId" = ${line.productId}
+            AND ib."tenantId" = ${tenantId}
             AND l.type = 'STORAGE'
-            AND (ib.on_hand_qty - ib.allocated_qty) > 0
+            AND (ib."onHandQty" - ib."allocatedQty") > 0
           ORDER BY l.code ASC
           FOR UPDATE OF ib
         `;

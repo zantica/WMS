@@ -280,6 +280,32 @@ describe("WmsApiClient (@wms/mobile)", () => {
     );
   });
 
+  it("dispatches a packed order (POST /api/v1/orders/:id/dispatch) and returns SHIPPED status", async () => {
+    const mockFetch = createMockFetch(200, {
+      success: true,
+      data: {
+        orderId: "order-101",
+        status: "SHIPPED",
+      },
+    });
+
+    const client = createWmsClient({
+      baseUrl: "http://localhost:3001",
+      apiKey: "demo-api-key-12345",
+      fetchImpl: mockFetch,
+    });
+
+    const res = await client.dispatchOrder("order-101");
+    expect(res).toEqual({
+      orderId: "order-101",
+      status: "SHIPPED",
+    });
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3001/api/v1/orders/order-101/dispatch",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("throws WmsApiClientError preserving code, statusCode, and details when API returns ApiError", async () => {
     const mockFetch = createMockFetch(
       422,

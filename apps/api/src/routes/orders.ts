@@ -3,11 +3,21 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { prisma } from "@wms/db";
 import { allocateOrder } from "../use-cases/inventory/allocate-order.js";
+import {
+  cancelOrder,
+  type CancelOrderResult,
+} from "../use-cases/inventory/cancel-order.js";
 import { WmsError } from "../plugins/error-handler.js";
 import type { ApiResponse, SalesOrderDTO } from "@wms/shared-types";
 
+const CancelOrderSchema = z
+  .object({
+    reason: z.string().trim().min(1).optional(),
+  })
+  .optional();
+
 const CreateOrderSchema = z.object({
-  warehouseId: z.string().cuid(),
+  warehouseId: z.string().min(1),
   externalId: z.string().optional(),
   externalRef: z.string().optional(),
   customerName: z.string().optional(),
@@ -17,7 +27,7 @@ const CreateOrderSchema = z.object({
   lines: z
     .array(
       z.object({
-        productId: z.string().cuid(),
+        productId: z.string().min(1),
         requestedQty: z.number().positive(),
         unitPrice: z.number().nonnegative().optional(),
       }),
@@ -188,6 +198,33 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
       return {
         success: true,
         data: { orderId: order.id, status: "SHIPPED" },
+      };
+    },
+  );
+
+  // POST /api/v1/orders/:id/cancel — Cancelación de pedido y liberación atómica de reservas
+  app.post<{ Params: { id: string } }>(
+    "/:id/cancel",
+    {
+      schema: {
+        tags: ["Orders"],
+        summary:
+          "Cancelar un pedido de venta y liberar atómicamente sus reservas pendientes (ALLOCATION_CANCEL)",
+      },
+    },
+    async (request): Promise<ApiResponse<CancelOrderResult>> => {
+      const parsedBody = CancelOrderSchema.parse(request.body);
+
+      const result = await cancelOrder({
+        orderId: request.params.id,
+        tenantId: request.tenantId,
+        userId: request.userId,
+        reason: parsedBody?.reason,
+      });
+
+      return {
+        success: true,
+        data: result,
       };
     },
   );

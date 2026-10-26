@@ -6,6 +6,10 @@
 
 import { prisma } from "@wms/db";
 import { WmsError } from "../../plugins/error-handler.js";
+import {
+  handlePickingException,
+  type ReplacementStepInfo,
+} from "../inventory/handle-picking-exception.js";
 import { moveStock } from "../inventory/move-stock.js";
 
 export interface ConfirmTaskStepParams {
@@ -28,6 +32,9 @@ export interface ConfirmTaskStepResult {
   taskStatus: "IN_PROGRESS" | "COMPLETED" | "EXCEPTION";
   taskComplete: boolean;
   note?: string;
+  reallocated?: boolean;
+  orderStatus?: string;
+  replacementSteps?: ReplacementStepInfo[];
 }
 
 /**
@@ -89,6 +96,33 @@ export async function confirmTaskStep(
   // ── 1. Excepción reportada por el operario ──────────────────────────────
   if (reportException || exceptionNote) {
     const note = exceptionNote ?? "Operator reported exception";
+
+    if (task.type === "PICKING") {
+      const exceptionResult = await handlePickingException({
+        taskId: task.id,
+        stepId: step.id,
+        tenantId,
+        exceptionNote: note,
+        ...(userId ? { userId } : {}),
+      });
+
+      return {
+        stepId: step.id,
+        scannedQty: Number(step.scannedQty),
+        expectedQty: Number(step.expectedQty),
+        remainingQty: Math.max(
+          0,
+          Number(step.expectedQty) - Number(step.scannedQty),
+        ),
+        stepStatus: "EXCEPTION",
+        taskStatus: exceptionResult.taskStatus,
+        taskComplete: false,
+        note: exceptionResult.note,
+        reallocated: exceptionResult.reallocated,
+        orderStatus: exceptionResult.orderStatus,
+        replacementSteps: exceptionResult.replacementSteps,
+      };
+    }
 
     await prisma.taskStep.update({
       where: { id: step.id },

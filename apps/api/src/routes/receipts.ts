@@ -9,19 +9,19 @@ import { confirmReceiptLine } from "../use-cases/tasks/confirm-receipt-line.js";
 import { WmsError } from "../plugins/error-handler.js";
 
 const CreateReceiptSchema = z.object({
-  warehouseId: z.string().cuid(),
+  warehouseId: z.string().min(1),
   supplierName: z.string().optional(),
   notes: z.string().optional(),
   lines: z.array(
     z.object({
-      productId: z.string().cuid(),
+      productId: z.string().min(1),
       expectedQty: z.number().positive(),
     }),
   ).min(1),
 });
 
 const ConfirmReceiptLineSchema = z.object({
-  productId: z.string().cuid(),
+  productId: z.string().min(1),
   scannedQty: z.number().positive(),
   barcode: z.string().optional(), // Para validación extra por cámara
 });

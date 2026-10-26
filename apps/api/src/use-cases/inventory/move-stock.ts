@@ -55,11 +55,11 @@ export async function moveStock(params: MoveStockParams): Promise<void> {
         const fromBalance = await tx.$queryRaw<
           Array<{ id: string; on_hand_qty: number; allocated_qty: number }>
         >`
-          SELECT id, on_hand_qty, allocated_qty
+          SELECT id, "onHandQty" as on_hand_qty, "allocatedQty" as allocated_qty
           FROM inventory_balances
-          WHERE location_id = ${fromLocationId}
-            AND product_id = ${productId}
-            AND tenant_id = ${tenantId}
+          WHERE "locationId" = ${fromLocationId}
+            AND "productId" = ${productId}
+            AND "tenantId" = ${tenantId}
           FOR UPDATE
         `;
 

@@ -92,7 +92,7 @@
       "milestone": "Hito 3 — Motor de Pedidos + Picking",
       "title": "Cancelación de Pedidos y liberación atómica de reservas (ALLOCATION_CANCEL)",
       "boundedContext": "Inventory Ledger / Fulfillment",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Caso de uso cancelOrder que revierta allocatedQty con SELECT FOR UPDATE y registre transacciones ALLOCATION_CANCEL en el Ledger",
         "Cancelar tareas de PICKING pendientes asociadas al pedido",
@@ -104,7 +104,7 @@
       "milestone": "Hito 3 — Motor de Pedidos + Picking",
       "title": "Gestión de Excepciones de Picking y Re-asignación de Stock",
       "boundedContext": "Fulfillment & Tasks",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Caso de uso para manejar rotura de stock o ubicación vacía durante el picking (StepStatus = EXCEPTION)",
         "Intentar re-alocar stock desde otra ubicación STORAGE con ATP > 0 o pasar el pedido a ON_HOLD",
@@ -116,7 +116,7 @@
       "milestone": "Hito 3 — Motor de Pedidos + Picking",
       "title": "Flujo móvil de Picking y Packing paso a paso en @wms/mobile",
       "boundedContext": "Mobile Operator App",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Interfaz guiada por secuencia de ubicación (locationCode ASC) para tareas PICKING",
         "Doble validación de escaneo (ubicación + barcode de producto) y reporte de incidencias en tiempo real"

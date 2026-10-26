@@ -147,7 +147,7 @@ describe("inbound-putaway workflows (@wms/mobile)", () => {
     });
   });
 
-  it("resolves Expo Router execution routes for RECEIVING, PUTAWAY, and PICKING tasks", () => {
+  it("resolves Expo Router execution routes for RECEIVING, PUTAWAY, PICKING, and PACKING tasks", () => {
     expect(
       resolveTaskExecutionRoute({ id: "task-rec-1", type: "RECEIVING" }),
     ).toBe("/tasks/receiving/task-rec-1");
@@ -156,7 +156,10 @@ describe("inbound-putaway workflows (@wms/mobile)", () => {
     ).toBe("/tasks/putaway/task-put-1");
     expect(
       resolveTaskExecutionRoute({ id: "task-pick-1", type: "PICKING" }),
-    ).toBe("/(tabs)/scanner?taskId=task-pick-1");
+    ).toBe("/tasks/picking/task-pick-1");
+    expect(
+      resolveTaskExecutionRoute({ id: "task-pack-1", type: "PACKING" }),
+    ).toBe("/tasks/picking/task-pack-1");
   });
 
   it("formats domain errors (INVALID_SCAN, INSUFFICIENT_STOCK, WRONG_STEP_SEQUENCE, etc.) into actionable operator banners", () => {
