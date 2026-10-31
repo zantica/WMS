@@ -107,7 +107,13 @@ pnpm db:studio
 
 ## Hitos
 
-- [x] **Hito 1** — Esqueleto + Ledger (este PR)
+### Fase 1: Core MVP (Completado)
+- [x] **Hito 1** — Esqueleto + Ledger
 - [x] **Hito 2** — App Expo + Inbound + Putaway
-- [ ] **Hito 3** — Motor de Pedidos + Picking
-- [ ] **Hito 4** — Panel Web + Integración External
+- [x] **Hito 3** — Motor de Pedidos + Picking
+- [x] **Hito 4** — Panel Web + Integración External
+
+### Fase 2: Diferenciación & Blindaje de Producción
+- [ ] **Hito 5** — Onboarding Flash: Bulk Import (CSV/Excel) y Generador de Etiquetas QR
+- [ ] **Hito 6** — Modo Offline-First y Sincronización Resiliente en App Móvil
+- [ ] **Hito 7** — Visibilidad de Errores (`correlationId`) y Seguridad en Base de Datos (PostgreSQL RLS)

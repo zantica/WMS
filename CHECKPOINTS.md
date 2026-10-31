@@ -30,4 +30,15 @@ Todo cambio de código evaluado por el subagente `reviewer` (o verificado tras u
 ## CP-4: Verificación Automatizada y Cobertura
 - [ ] **Suite de tests en verde**: `pnpm test` finaliza con código de salida `0`.
 - [ ] **Cobertura de casos de uso**: Los casos de uso en `apps/api/src/use-cases/**` mantienen **≥ 80%** en ramas (*branches*), funciones y líneas (`pnpm --filter @wms/api test:coverage`).
-- [ ] **Tests de casos borde**: Toda nueva lógica de negocio incluye tests para el camino feliz (*happy path*) y al menos un caso de error de dominio (`WmsError`) o condición de carrera/rollback.
+- [ ] **Tests de Happy Path y todos los demás escenarios**: Toda nueva feature incluye tests explícitos para:
+  1. **Happy Path** (flujo principal exitoso de principio a fin).
+  2. **Casos Borde (Edge Cases)** (listas vacías, límites de lote, formatos especiales, valores cero/extremos).
+  3. **Errores de Dominio y Validación** (`WmsError`, estados inválidos, datos malformados).
+  4. **Fallos, Idempotencia y Aislamiento** (reintentos duplicados, fallos a mitad de lote, rollback transaccional y rechazo de acceso entre distintos `tenantId`).
+
+## CP-5: Arquitectura Hexagonal, Puertos y Criterios de Hecho (Hitos 5–7)
+- [ ] **Desacoplamiento de infraestructura**: Los nuevos casos de uso y motores de dominio no importan directamente `Fastify`, `React`, `Expo` ni adaptadores concretos; reciben sus dependencias a través de interfaces/puertos (`ports/`).
+- [ ] **Puertos y Adaptadores explícitos**: Todo acceso externo nuevo (`DiagnosticsStore`, `TenantContextPort`, `IdempotencyStore`, `ColumnMapper`, `LabelRenderer`, `OfflineQueueStorage`) define su interfaz de puerto y su adaptador concreto en el borde.
+- [ ] **TDD y Pruebas de Fallo**: Tests unitarios con puertos simulados cubriendo camino feliz, reintentos duplicados, cortes parciales y aislamiento de tenant.
+- [ ] **Tests de integración con PostgreSQL**: Las features que involucren escrituras, bloqueos, idempotencia o políticas RLS incluyen verificación contra esquema/base de datos PostgreSQL.
+- [ ] **ADR documentado**: Si la feature introduce decisiones arquitectónicas no obvias (ej. conflictos offline, diseño RLS), existe su documento correspondiente en `docs/adr/`.

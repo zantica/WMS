@@ -1,24 +1,28 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
-- **Última actualización**: 2026-10-26
-- **Estado General**: 🏆 **¡TODOS LOS HITOS COMPLETADOS (100%)!**
-- **Hitos Finalizados**:
+- **Última actualización**: 2026-10-31
+- **Estado General**: 🚀 **Fase 2 Planificada (Arquitectura Hexagonal + Nuevo Orden de Ejecución)**
+- **Hitos Completados (Fase 1 Core MVP)**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
   - ✅ **Hito 3 — Motor de Pedidos + Picking** (`F3.1`, `F3.2`, `F3.3` en `done`)
   - ✅ **Hito 4 — Panel Web + Integración External** (`F4.1`, `F4.2` en `done`)
+- **Orden de Ejecución Activo (Fase 2)**:
+  1. ⏳ **`F7.1`** — Observabilidad Estructurada, `correlationId` y Puerto `DiagnosticsStore` (`pending`)
+  2. ⏳ **`F7.2`** — PostgreSQL Row Level Security (RLS) con `FORCE RLS` y Puerto `TenantContext` (`pending`)
+  3. ⏳ **`F6.1`** — Puerto `IdempotencyStore` y Endpoint `POST /api/v1/tasks/sync-batch` (`pending`)
+  4. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`)
+  5. ⏳ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`pending`)
+  6. ⏳ **`F6.2`** — Motor `OfflineSyncQueue` Hexagonal, Caché Local de Tareas y Auto-Sync con Cuarentena (`pending`)
+- **Siguiente Feature en Cola**: `F7.1` — *Observabilidad Estructurada, `correlationId` y Puerto `DiagnosticsStore`*
 
 ---
 
-## Resumen de Cierre del Hito 4 (`F4.1`, `F4.2`)
-1. **`F4.1` — Esqueleto del Dashboard Web en `apps/web` (Next.js App Router + `@wms/shared-types`)**:
-   - Implementación: [`progress/impl_F4.1.md`](./impl_F4.1.md) | Revisión: [`progress/review_F4.1.md`](./review_F4.1.md) (`APPROVED`)
-   - Vistas: Resumen Ejecutivo (`/`), Catálogo y Mapa de Ubicaciones (`/catalog`), Balances y Kardex (`/inventory`), Monitor de Pedidos y Tareas (`/operations`).
-   - Módulos probados: `api-client.ts` y `dashboard-metrics.ts` con cobertura en `src/lib/__tests__/`.
+## Principios Rectores de Fase 2 (Obligatorios para todo código nuevo)
 
-2. **`F4.2` — Autenticación JWT (Clerk) y Webhooks de Integración Externa (E-commerce / ERP)**:
-   - Implementación: [`progress/impl_F4.2.md`](./impl_F4.2.md) | Revisión: [`progress/review_F4.2.md`](./review_F4.2.md) (`APPROVED`)
-   - Validación JWT HS256, expiración, verificación de firma con `timingSafeEqual`, roles y guard `requireRole`.
-   - Ingesta de pedidos con idempotencia por `(tenantId, externalId)` (`POST /api/v1/webhooks/orders`).
-   - Notificación de despacho con firma HMAC `order.shipped` en `POST /api/v1/orders/:id/dispatch`.
-   - 32 tests unitarios en `auth.test.ts` y `webhooks.test.ts`.
+1. **Arquitectura Hexagonal (Puertos y Adaptadores)**:
+   - Dominio y casos de uso sin acoplamiento directo a infraestructura (`Fastify`, `Expo`, `React`, librerías de formato o almacenamiento).
+   - Todo recurso externo va detrás de un **Puerto** inyectado (`DiagnosticsStore`, `TenantContextPort`, `IdempotencyStore`, `ColumnMapper`, `LabelRenderer`, `OfflineQueueStorage`).
+2. **TDD, Integración Real y Contratos**:
+   - Tests unitarios con puertos simulados escritos primero (TDD) + tests de integración contra PostgreSQL real para locking, RLS e idempotencia.
+   - Contratos compartidos en `@wms/shared-types` y decisiones no obvias documentadas en ADRs (`docs/adr/`).

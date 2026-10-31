@@ -56,3 +56,22 @@ Es el corazón contable del almacén y opera bajo un patrón **Event Ledger + Sn
   `PENDING` → `ALLOCATED` → `PICKING` → `PACKED` → `SHIPPED` (con desvíos a `ON_HOLD` o `CANCELLED`).
 - **Ejecución por pasos (`WarehouseTask` & `TaskStep`)**:
   Toda operación de piso (recepción, putaway, picking, packing) se descompone en pasos secuenciales verificados por escaneo físico de código de barras/QR.
+
+---
+
+## 3. Reglas de Arquitectura Hexagonal y Escalabilidad (Hitos 5–7+)
+
+Todo código nuevo debe ser **desacoplado, mantenible y escalable** cumpliendo los siguientes principios comprobables:
+
+### 3.1 Desacoplamiento (Puertos y Adaptadores)
+- **Dominio y casos de uso libres de infraestructura**: Ningún caso de uso nuevo debe acoplarse directamente a Fastify, Expo, React ni librerías concretas de formato/almacenamiento. Las dependencias apuntan siempre hacia dentro.
+- **Todo lo que sale del proceso va detrás de un Puerto**: Base de datos, reloj, generador de IDs, almacenamiento de diagnóstico (`DiagnosticsStore`), idempotencia (`IdempotencyStore`), mapeadores de columnas (`ColumnMapper`), renderizado de etiquetas (`LabelRenderer`), cola local móvil (`OfflineQueueStorage`) y contexto de tenant (`TenantContextPort`). El adaptador concreto se inyecta en el borde.
+- **Un caso de uso por intención**: Independiente del transporte (invocable desde REST, un worker de cola o un test sin cambios).
+- **Contratos explícitos en `@wms/shared-types`**: Payloads (incluyendo prefijos de etiquetas como `LOC:A-01-01`), errores y DTOs se definen una única vez en `@wms/shared-types`.
+
+### 3.2 Mantenibilidad y Escalabilidad
+- **TDD (Test-Driven Development)**: Tests unitarios de dominio y casos de uso escritos primero, describiendo comportamiento y usando puertos simulados.
+- **API sin estado (Stateless)**: Nada que deba compartirse entre instancias vive acoplado a memoria global; si en el MVP se usa un adaptador en memoria (ej. `InMemoryDiagnosticsStore`), va detrás de su puerto para poder sustituirse por Redis/PostgreSQL/Sentry sin tocar el caso de uso.
+- **Operaciones idempotentes**: Toda operación reintentable (importaciones masivas, `sync-batch` móvil, webhooks) usa claves de idempotencia transaccionales por `(tenantId, idempotencyKey)`.
+- **Defensa en profundidad Multi-Tenant (RLS)**: Además del filtro `tenantId` en aplicación, PostgreSQL aplica Row Level Security (`FORCE ROW LEVEL SECURITY`) mediante `current_setting('app.current_tenant_id', true)` dentro del alcance de la transacción (`SET LOCAL`).
+- **Registro de Decisiones (ADR)**: Toda decisión arquitectónica no obvia (ej. política de resolución de conflictos offline, aislamiento RLS con auth previa) se documenta en `docs/adr/`.

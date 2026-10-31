@@ -1,6 +1,6 @@
 {
   "project": "WMS SaaS Multi-Tenant",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "workflow": "hybrid-leader-subagents",
   "features": [
     {
@@ -144,6 +144,78 @@
         "Completar validación JWT real en apps/api/src/plugins/auth.ts con roles (ADMIN, SUPERVISOR, OPERATOR)",
         "Endpoints de entrada/salida (webhooks) para ingesta idempotente de pedidos (externalId) y notificación al pasar a SHIPPED",
         "Tests unitarios para autenticación, permisos por rol e idempotencia de webhooks"
+      ]
+    },
+    {
+      "id": "F7.1",
+      "milestone": "Hito 7 — Visibilidad de Errores y Seguridad en Base de Datos",
+      "title": "Observabilidad Estructurada, correlationId y Puerto DiagnosticsStore",
+      "boundedContext": "Core / Observability & Error Visibility",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Puerto DiagnosticsStore desacoplado de infraestructura (con adaptador InMemoryDiagnosticsStore inicial) y contrato en @wms/shared-types",
+        "Plugin Fastify que inyecta/propaga x-correlation-id, enriquece logs estructurados (tenantId, userId, durationMs, errorCode), redacta secretos/tokens y devuelve correlationId en ApiError",
+        "Endpoint GET /api/v1/diagnostics/errors para ADMIN y SUPERVISOR consumiendo DiagnosticsStore + propagación de correlationId en clientes web y móvil + suite de tests unitarios (TDD)"
+      ]
+    },
+    {
+      "id": "F7.2",
+      "milestone": "Hito 7 — Visibilidad de Errores y Seguridad en Base de Datos",
+      "title": "PostgreSQL Row Level Security (RLS) con FORCE RLS y Puerto TenantContext",
+      "boundedContext": "Core / Database Security & Multi-Tenancy",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Migración SQL con políticas RLS (USING + WITH CHECK + FORCE ROW LEVEL SECURITY) basadas en current_setting('app.current_tenant_id', true) donde contexto vacío deniega acceso por defecto",
+        "Puerto de contexto de tenant e implementación de infraestructura withTenantContext(tenantId, fn) con SET LOCAL compatible con Serializable y SELECT FOR UPDATE, más camino controlado para resolución inicial de auth (API key / JWT)",
+        "Suite de tests unitarios y de integración contra PostgreSQL real validando aislamiento cruzado entre tenants y denegación sin contexto"
+      ]
+    },
+    {
+      "id": "F6.1",
+      "milestone": "Hito 6 — Modo Offline-First (Parte API)",
+      "title": "Puerto IdempotencyStore y Endpoint POST /api/v1/tasks/sync-batch",
+      "boundedContext": "Fulfillment & Tasks / API",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Puerto IdempotencyStore y persistencia transaccional única por (tenantId, idempotencyKey) en la misma transacción del Ledger para confirmTaskStep y confirmReceiptLine",
+        "Caso de uso y endpoint POST /api/v1/tasks/sync-batch procesando lotes en orden FIFO con registro de occurredAt (cliente) y receivedAt (servidor), política servidor-gana ante conflictos y ADR en docs/adr/",
+        "Tests unitarios (con puerto simulado) y de integración verificando que reintentos devuelven ALREADY_APPLIED con el resultado original sin duplicar InventoryTransaction ni alterar InventoryBalance"
+      ]
+    },
+    {
+      "id": "F5.1",
+      "milestone": "Hito 5 — Onboarding Flash: Bulk Import y Etiquetas QR",
+      "title": "Carga masiva (Bulk Import) desacoplada con modo dryRun, normalización y estrategia ColumnMapper",
+      "boundedContext": "Core / Topology & Catalog",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Casos de uso independientes del transporte con puertos para parser tabular y estrategia intercambiable ColumnMapper, expuestos en POST /api/v1/catalog/bulk-import y POST /api/v1/locations/bulk-import",
+        "Soporte de modo dryRun, normalización previa (ceros a la izquierda, EAN en notación científica, trim/uppercase), rechazo de barcodes duplicados entre SKUs distintos y prohibición estricta de mutar InventoryBalance directamente",
+        "Upsert idempotente por (tenantId, sku) y (tenantId, warehouseId, code) con reporte detallado fila por fila y tests unitarios + integración (>= 80% coverage)"
+      ]
+    },
+    {
+      "id": "F5.2",
+      "milestone": "Hito 5 — Onboarding Flash: Bulk Import y Etiquetas QR",
+      "title": "Puerto LabelRenderer (QR + Code128) con Prefijos Tipados y Vista Web de Impresión",
+      "boundedContext": "Core / Topology & Web Dashboard",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Esquema de payload de etiquetas con prefijo de entidad en @wms/shared-types (ej. LOC:A-01-01, SKU:...) para validación de tipo de lectura en móvil",
+        "Puerto LabelRenderer con adaptadores para QR y Code128 (lectores láser 1D) y dimensiones en milímetros, expuesto en POST /api/v1/labels/locations y POST /api/v1/labels/products",
+        "Integración en @wms/web (/catalog) para ejecutar bulk import (con previsualización dryRun) e imprimir cuadrículas de etiquetas + suite de tests"
+      ]
+    },
+    {
+      "id": "F6.2",
+      "milestone": "Hito 6 — Modo Offline-First (Parte Móvil)",
+      "title": "Motor OfflineSyncQueue Hexagonal, Caché Local de Tareas y Auto-Sync con Cuarentena en @wms/mobile",
+      "boundedContext": "Mobile Operator App",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Motor OfflineSyncQueue puro (sin dependencia directa de React ni Expo) con puertos inyectados: OfflineQueueStorage (adaptador SQLite/persistente), SyncTransport y ConnectivityMonitor",
+        "Generación de idempotencyKey en el instante del escaneo, caché local de pasos asignados para validación offline, backoff exponencial y estado de cuarentena para operaciones con conflicto permanente",
+        "Indicador visual permanente (ONLINE / OFFLINE / SYNCING), contador de cola y suite de tests unitarios y de fallo (cortes a mitad de lote, reintentos duplicados)"
       ]
     }
   ]
