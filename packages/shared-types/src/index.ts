@@ -213,6 +213,62 @@ export interface OrderShippedWebhookPayload {
 }
 
 // ─────────────────────────────────────────────────────────────
+// OBSERVABILIDAD Y DIAGNÓSTICOS (Hito 7 — F7.1)
+// ─────────────────────────────────────────────────────────────
+
+export const CORRELATION_ID_HEADER = "x-correlation-id" as const;
+
+export interface DiagnosticErrorRecord {
+  id: string;
+  tenantId: string;
+  correlationId: string;
+  errorCode: string;
+  message: string;
+  statusCode: number;
+  method: string;
+  path: string;
+  userId?: string | null | undefined;
+  details?: unknown;
+  occurredAt: string; // ISO 8601
+}
+
+export interface ListDiagnosticErrorsFilters {
+  limit?: number | undefined;
+  errorCode?: string | undefined;
+  correlationId?: string | undefined;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SEGURIDAD MULTI-TENANT Y CONTEXTO RLS (Hito 7 — F7.2)
+// ─────────────────────────────────────────────────────────────
+
+export const TENANT_CONTEXT_GUC = "app.current_tenant_id" as const;
+export const AUTH_CLERK_LOOKUP_GUC = "app.auth_clerk_id" as const;
+
+export type TenantIsolationLevel =
+  | "ReadUncommitted"
+  | "ReadCommitted"
+  | "RepeatableRead"
+  | "Serializable";
+
+export interface TenantContextOptions {
+  isolationLevel?: TenantIsolationLevel | undefined;
+  timeoutMs?: number | undefined;
+  maxWaitMs?: number | undefined;
+}
+
+export interface RlsTablePolicySpec {
+  tableName: string;
+  policyName: string;
+  kind: "direct_tenant_column" | "parent_relation" | "auth_controlled";
+  tenantColumn?: string | undefined;
+  parentTable?: string | undefined;
+  foreignKeyColumn?: string | undefined;
+  enableRls: true;
+  forceRls: true;
+}
+
+// ─────────────────────────────────────────────────────────────
 // RESPUESTAS ENVOLVENTES
 // ─────────────────────────────────────────────────────────────
 
@@ -226,6 +282,7 @@ export interface ApiError {
   error: {
     code: string;
     message: string;
+    correlationId?: string | undefined;
     details?: unknown;
   };
 }
@@ -242,4 +299,5 @@ export type WmsErrorCode =
   | "WRONG_STEP_SEQUENCE"
   | "TENANT_MISMATCH"
   | "UNAUTHORIZED"
+  | "FORBIDDEN"
   | "VALIDATION_ERROR";
