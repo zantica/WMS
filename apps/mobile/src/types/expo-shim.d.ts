@@ -71,23 +71,31 @@ declare namespace JSX {
 declare module "react-native" {
   import type { ReactNode } from "react";
 
-  export type StyleProp<T> = T | T[] | null | undefined | false;
+  export type StyleProp<T> =
+    | T
+    | null
+    | undefined
+    | false
+    | ReadonlyArray<StyleProp<T>>;
   export type ViewStyle = Record<string, unknown>;
   export type TextStyle = Record<string, unknown>;
 
   export interface ViewProps {
+    key?: string | number | null | undefined;
     style?: StyleProp<ViewStyle>;
     children?: ReactNode;
     testID?: string;
   }
 
   export interface TextProps {
+    key?: string | number | null | undefined;
     style?: StyleProp<TextStyle>;
     numberOfLines?: number;
     children?: ReactNode;
   }
 
   export interface TextInputProps {
+    key?: string | number | null | undefined;
     style?: StyleProp<TextStyle>;
     value?: string;
     onChangeText?: (text: string) => void;
@@ -105,6 +113,7 @@ declare module "react-native" {
   }
 
   export interface PressableProps {
+    key?: string | number | null | undefined;
     style?:
       | StyleProp<ViewStyle>
       | ((state: { pressed: boolean }) => StyleProp<ViewStyle>);
