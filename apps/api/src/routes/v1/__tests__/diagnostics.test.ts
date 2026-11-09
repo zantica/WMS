@@ -91,6 +91,35 @@ describe("Observability Plugin + ErrorHandler + GET /api/v1/diagnostics/errors (
   beforeEach(() => {
     vi.clearAllMocks();
     process.env["JWT_SECRET"] = JWT_SECRET;
+
+    mockPrisma.tenant.findUnique.mockImplementation(async ({ where }) => {
+      if (where.id) return { id: where.id, name: `Tenant ${where.id}` };
+      return null;
+    });
+
+    mockPrisma.user.findUnique.mockImplementation(async ({ where }) => {
+      if (!where.clerkId) return null;
+      const clerkId = where.clerkId;
+      const role = clerkId.startsWith("admin")
+        ? "ADMIN"
+        : clerkId === "op-99"
+          ? "OPERATOR"
+          : "SUPERVISOR";
+      const tenantId = clerkId === "admin-b"
+        ? "tenant-B"
+        : clerkId.startsWith("admin")
+          ? "tenant-A"
+          : clerkId === "user-sup-42"
+            ? "tenant-obs-1"
+            : "tenant-main";
+      return {
+        id: clerkId,
+        clerkId,
+        tenantId,
+        role,
+        isActive: true,
+      };
+    });
   });
 
   it("propagates a valid incoming x-correlation-id and generates a UUID when omitted or unsafe", async () => {

@@ -2,7 +2,7 @@
 // Auth plugin: valida JWT (Clerk / HS256) o API Key para llamadas máquina-a-máquina.
 // Decora `request.tenantId`, `request.userId` y `request.userRole` para uso en rutas.
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, createVerify, timingSafeEqual } from "node:crypto";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { prisma } from "@wms/db";
@@ -104,13 +104,48 @@ export interface VerifiedJwtClaims {
   exp: number;
 }
 
+export interface VerifyJwtOptions {
+  secret?: string | undefined;
+  clerkPublicKey?: string | undefined;
+}
+
 function resolveJwtSecret(explicitSecret?: string): string {
-  return (
-    explicitSecret ??
-    process.env["JWT_SECRET"] ??
-    process.env["CLERK_JWT_KEY"] ??
-    "wms-dev-jwt-secret"
-  );
+  const secret = explicitSecret ?? process.env["JWT_SECRET"];
+  if (secret && secret.trim().length > 0) {
+    return secret.trim();
+  }
+  if (process.env["NODE_ENV"] === "production") {
+    throw new WmsError(
+      "CONFIGURATION_ERROR",
+      "JWT_SECRET environment variable is mandatory in production",
+      500,
+    );
+  }
+  return "wms-dev-jwt-secret";
+}
+
+function formatPublicKeyPem(rawKey: string): string {
+  const trimmed = rawKey.trim();
+  if (trimmed.includes("-----BEGIN")) {
+    return trimmed;
+  }
+  return `-----BEGIN PUBLIC KEY-----\n${trimmed}\n-----END PUBLIC KEY-----`;
+}
+
+function verifyRs256Signature(
+  signingInput: string,
+  signatureB64: string,
+  publicKeyPem: string,
+): boolean {
+  try {
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(signingInput, "utf8");
+    const sigBuf = Buffer.from(signatureB64, "base64url");
+    const pem = formatPublicKeyPem(publicKeyPem);
+    return verifier.verify(pem, sigBuf);
+  } catch {
+    return false;
+  }
 }
 
 function isValidRole(value: unknown): value is UserRole {
@@ -156,14 +191,18 @@ export function createJwtToken(
 }
 
 /**
- * Verifica criptográficamente un token JWT (HS256), su expiración (`exp`)
- * y normaliza los claims de identidad y multi-tenancy (`sub`, `tenantId`, `role`).
+ * Verifica criptográficamente un token JWT (HS256 con JWT_SECRET o RS256 con clave pública Clerk),
+ * su expiración obligatoria (`exp`) y normaliza los claims de identidad y multi-tenancy (`sub`, `tenantId`, `role`).
  */
 export function verifyJwtToken(
   token: string,
-  secret?: string,
+  optionsOrSecret?: string | VerifyJwtOptions,
 ): VerifiedJwtClaims {
-  const resolvedSecret = resolveJwtSecret(secret);
+  const options: VerifyJwtOptions =
+    typeof optionsOrSecret === "string"
+      ? { secret: optionsOrSecret }
+      : (optionsOrSecret ?? {});
+
   const normalizedToken = token.startsWith("Bearer ")
     ? token.slice("Bearer ".length).trim()
     : token.trim();
@@ -187,23 +226,40 @@ export function verifyJwtToken(
     throw new WmsError("UNAUTHORIZED", "Invalid JWT header encoding", 401);
   }
 
-  if (headerJson.alg !== "HS256") {
-    throw new WmsError("UNAUTHORIZED", "Unsupported JWT algorithm", 401);
-  }
-
   const signingInput = `${headerB64}.${payloadB64}`;
-  const expectedSignature = createHmac("sha256", resolvedSecret)
-    .update(signingInput, "utf8")
-    .digest("base64url");
 
-  const actualSigBuf = Buffer.from(signatureB64, "utf8");
-  const expectedSigBuf = Buffer.from(expectedSignature, "utf8");
+  if (headerJson.alg === "HS256") {
+    const resolvedSecret = resolveJwtSecret(options.secret);
+    const expectedSignature = createHmac("sha256", resolvedSecret)
+      .update(signingInput, "utf8")
+      .digest("base64url");
 
-  if (
-    actualSigBuf.length !== expectedSigBuf.length ||
-    !timingSafeEqual(actualSigBuf, expectedSigBuf)
-  ) {
-    throw new WmsError("UNAUTHORIZED", "Invalid JWT signature", 401);
+    const actualSigBuf = Buffer.from(signatureB64, "utf8");
+    const expectedSigBuf = Buffer.from(expectedSignature, "utf8");
+
+    if (
+      actualSigBuf.length !== expectedSigBuf.length ||
+      !timingSafeEqual(actualSigBuf, expectedSigBuf)
+    ) {
+      throw new WmsError("UNAUTHORIZED", "Invalid JWT signature", 401);
+    }
+  } else if (headerJson.alg === "RS256") {
+    const publicKey =
+      options.clerkPublicKey ?? process.env["CLERK_JWT_KEY"];
+    if (!publicKey || !publicKey.trim()) {
+      throw new WmsError(
+        "UNAUTHORIZED",
+        "Clerk public key is not configured for RS256 verification",
+        401,
+      );
+    }
+
+    const isValid = verifyRs256Signature(signingInput, signatureB64, publicKey);
+    if (!isValid) {
+      throw new WmsError("UNAUTHORIZED", "Invalid JWT signature", 401);
+    }
+  } else {
+    throw new WmsError("UNAUTHORIZED", "Unsupported JWT algorithm", 401);
   }
 
   let rawClaims: Record<string, unknown>;
@@ -216,13 +272,33 @@ export function verifyJwtToken(
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const exp = typeof rawClaims["exp"] === "number" ? rawClaims["exp"] : 0;
-  const iat =
-    typeof rawClaims["iat"] === "number" ? rawClaims["iat"] : nowSeconds;
 
-  if (typeof rawClaims["exp"] === "number" && rawClaims["exp"] <= nowSeconds) {
+  // Exigir exp numérico válido (no infinito ni ausente)
+  if (
+    typeof rawClaims["exp"] !== "number" ||
+    !Number.isFinite(rawClaims["exp"]) ||
+    rawClaims["exp"] <= 0
+  ) {
+    throw new WmsError("UNAUTHORIZED", "JWT token missing expiration (exp)", 401);
+  }
+
+  if (rawClaims["exp"] <= nowSeconds) {
     throw new WmsError("UNAUTHORIZED", "JWT token has expired", 401);
   }
+
+  if (
+    typeof rawClaims["nbf"] === "number" &&
+    Number.isFinite(rawClaims["nbf"]) &&
+    rawClaims["nbf"] > nowSeconds
+  ) {
+    throw new WmsError("UNAUTHORIZED", "JWT token not yet valid (nbf)", 401);
+  }
+
+  const exp = rawClaims["exp"];
+  const iat =
+    typeof rawClaims["iat"] === "number" && Number.isFinite(rawClaims["iat"])
+      ? rawClaims["iat"]
+      : nowSeconds;
 
   const subCandidate =
     rawClaims["sub"] ?? rawClaims["clerkId"] ?? rawClaims["userId"];
@@ -343,10 +419,13 @@ export const authPlugin = fp(async (app) => {
         }
       }
 
-      const devTenantId =
-        process.env["NODE_ENV"] !== "production"
-          ? (request.headers["x-dev-tenant-id"] as string | undefined)
-          : undefined;
+      // Hallazgo 4: Bypass x-dev-tenant-id solo con opt-in explícito (development o flag explícito)
+      const isDevTenantAllowed =
+        process.env["NODE_ENV"] === "development" ||
+        process.env["ALLOW_DEV_TENANT_HEADER"] === "true";
+      const devTenantId = isDevTenantAllowed
+        ? (request.headers["x-dev-tenant-id"] as string | undefined)
+        : undefined;
       const resolvedTenantId = claims.tenantId ?? devTenantId;
 
       if (!resolvedTenantId) {
@@ -357,9 +436,21 @@ export const authPlugin = fp(async (app) => {
         );
       }
 
+      // Hallazgo 3: Si el usuario no existe en BD, verificar que el tenant existe y nunca otorgar rol elevado (forzar OPERATOR)
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: resolvedTenantId },
+      });
+      if (!tenant) {
+        throw new WmsError(
+          "UNAUTHORIZED",
+          "Tenant specified in token does not exist",
+          401,
+        );
+      }
+
       request.tenantId = resolvedTenantId;
       request.userId = claims.sub;
-      request.userRole = claims.role ?? "OPERATOR";
+      request.userRole = "OPERATOR";
       return;
     }
 
