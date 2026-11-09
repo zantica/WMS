@@ -192,6 +192,7 @@ export interface IngestExternalOrderResult {
   status: OrderStatus;
   idempotentReplay: boolean;
   allocatedTaskId: string | null;
+  allocationError?: string | undefined;
 }
 
 export interface OrderShippedWebhookLine {
@@ -300,4 +301,5 @@ export type WmsErrorCode =
   | "TENANT_MISMATCH"
   | "UNAUTHORIZED"
   | "FORBIDDEN"
-  | "VALIDATION_ERROR";
+  | "VALIDATION_ERROR"
+  | "CONFIGURATION_ERROR";
