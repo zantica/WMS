@@ -151,7 +151,7 @@
       "milestone": "Hito 7 — Visibilidad de Errores y Seguridad en Base de Datos",
       "title": "Observabilidad Estructurada, correlationId y Puerto DiagnosticsStore",
       "boundedContext": "Core / Observability & Error Visibility",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Puerto DiagnosticsStore desacoplado de infraestructura (con adaptador InMemoryDiagnosticsStore inicial) y contrato en @wms/shared-types",
         "Plugin Fastify que inyecta/propaga x-correlation-id, enriquece logs estructurados (tenantId, userId, durationMs, errorCode), redacta secretos/tokens y devuelve correlationId en ApiError",
@@ -163,7 +163,7 @@
       "milestone": "Hito 7 — Visibilidad de Errores y Seguridad en Base de Datos",
       "title": "PostgreSQL Row Level Security (RLS) con FORCE RLS y Puerto TenantContext",
       "boundedContext": "Core / Database Security & Multi-Tenancy",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Migración SQL con políticas RLS (USING + WITH CHECK + FORCE ROW LEVEL SECURITY) basadas en current_setting('app.current_tenant_id', true) donde contexto vacío deniega acceso por defecto",
         "Puerto de contexto de tenant e implementación de infraestructura withTenantContext(tenantId, fn) con SET LOCAL compatible con Serializable y SELECT FOR UPDATE, más camino controlado para resolución inicial de auth (API key / JWT)",

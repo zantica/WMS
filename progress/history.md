@@ -128,3 +128,32 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Ingesta idempotente de pedidos externos por `(tenantId, externalId)` con soporte `autoAllocate` en `ingest-external-order.ts` y ruta `POST /api/v1/webhooks/orders`.
   - Notificación saliente firmada `order.shipped` en `notify-order-shipped.ts` integrada en el despacho de pedidos.
   - Suites completas de tests unitarios en `auth.test.ts` (17 tests) y `webhooks.test.ts` (15 tests).
+
+
+---
+
+## [2026-10-31] Feature `F7.1` — Observabilidad Estructurada, `correlationId` y Puerto `DiagnosticsStore`
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F7.1.md`](./impl_F7.1.md)
+  - Revisión: [`progress/review_F7.1.md`](./review_F7.1.md)
+  - ADR: [`docs/adr/001-observability-and-diagnostics-port.md`](../docs/adr/001-observability-and-diagnostics-port.md)
+- **Cambios clave**:
+  - Nuevos contratos en `@wms/shared-types` (`CORRELATION_ID_HEADER`, `DiagnosticErrorRecord`, `ListDiagnosticErrorsFilters`, `FORBIDDEN`, `ApiError.error.correlationId`).
+  - Puerto hexagonal `DiagnosticsStore` (`apps/api/src/ports/diagnostics-store.ts`), adaptador `InMemoryDiagnosticsStore` (ring buffer FIFO por `tenantId`) y casos de uso puros en `apps/api/src/use-cases/diagnostics/` (`recordDiagnosticError`, `listDiagnosticErrors`, `redactSensitiveData`, `resolveSafeCorrelationId`).
+  - Plugin Fastify `observabilityPlugin`, actualización de `errorHandler`, ruta `GET /api/v1/diagnostics/errors` (restringida a `ADMIN`/`SUPERVISOR`) y propagación de `x-correlation-id` en `@wms/web` y `@wms/mobile`.
+  - 155 tests pasando en total y cobertura de `99.65%` en `@wms/api`.
+
+
+---
+
+## [2026-10-31] Feature `F7.2` y Cierre del Hito 7 — PostgreSQL Row Level Security (RLS) con `FORCE RLS` y Puerto `TenantContext`
+- **Estado**: `done` (`VEREDICTO: APPROVED`) — **Hito 7 100% Completado**
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F7.2.md`](./impl_F7.2.md)
+  - Revisión: [`progress/review_F7.2.md`](./review_F7.2.md)
+  - ADR: [`docs/adr/002-postgresql-rls-and-tenant-context.md`](../docs/adr/002-postgresql-rls-and-tenant-context.md)
+- **Cambios clave**:
+  - Migración SQL `packages/db/prisma/migrations/20261031010000_tenant_rls/migration.sql` y módulo `@wms/db/rls` habilitando `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` con predicados `USING` y `WITH CHECK` (denegación por defecto ante contexto vacío/nulo) sobre las 10 tablas multi-tenant y resolución controlada de auth (`app.auth_clerk_id`).
+  - Puerto hexagonal `TenantContextPort` (`apps/api/src/ports/tenant-context.ts`), caso de uso `executeInTenantContext` (`apps/api/src/use-cases/security/tenant-context.ts`) y adaptador `PrismaTenantContextAdapter` (`withTenantContext` con `SET LOCAL` vía `set_config('app.current_tenant_id', tenantId, true)` compatible con `IsolationLevel.Serializable`, `SELECT ... FOR UPDATE` y reutilización de `TransactionClient` en los casos de uso del Ledger).
+  - 171 tests pasando en el monorepo (137 en `@wms/api`) y cobertura de `99.20%` en `use-cases` (`100%` en `security/tenant-context.ts`).
