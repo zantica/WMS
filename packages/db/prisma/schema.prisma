@@ -218,7 +218,7 @@ model SalesOrder {
   tasks     WarehouseTask[]
 
   @@index([tenantId, status])
-  @@index([tenantId, externalId])
+  @@unique([tenantId, externalId])
   @@map("sales_orders")
 }
 
