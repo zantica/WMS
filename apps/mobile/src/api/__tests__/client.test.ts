@@ -3,7 +3,11 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { InventoryBalanceDTO, WarehouseTaskDTO } from "@wms/shared-types";
-import { WmsApiClientError, createWmsClient } from "../client.js";
+import {
+  CORRELATION_ID_HEADER,
+  WmsApiClientError,
+  createWmsClient,
+} from "../client.js";
 
 function createMockFetch(
   status: number,
@@ -40,11 +44,12 @@ describe("WmsApiClient (@wms/mobile)", () => {
       "http://192.168.1.50:3001/health",
       expect.objectContaining({
         method: "GET",
-        headers: {
+        headers: expect.objectContaining({
           Accept: "application/json",
           "x-api-key": "demo-api-key-12345",
           Authorization: "Bearer jwt-token-abc",
-        },
+          [CORRELATION_ID_HEADER]: expect.any(String),
+        }),
       }),
     );
 
@@ -197,11 +202,12 @@ describe("WmsApiClient (@wms/mobile)", () => {
       "http://localhost:3001/api/v1/tasks/task-1/steps/step-1/confirm",
       expect.objectContaining({
         method: "POST",
-        headers: {
+        headers: expect.objectContaining({
           Accept: "application/json",
           "Content-Type": "application/json",
           "x-api-key": "demo-api-key-12345",
-        },
+          [CORRELATION_ID_HEADER]: expect.any(String),
+        }),
         body: JSON.stringify({ scannedCode: "A-01-01", quantity: 5 }),
       }),
     );
@@ -361,5 +367,74 @@ describe("WmsApiClient (@wms/mobile)", () => {
       expect(wmsErr.code).toBe("INVALID_RESPONSE");
       expect(wmsErr.statusCode).toBe(502);
     }
+  });
+
+  it("propagates x-correlation-id and exposes correlationId on WmsApiClientError from server body or header", async () => {
+    const mockFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        headers: {
+          get: (name: string) =>
+            name === CORRELATION_ID_HEADER ? "mobile-header-corr-1" : null,
+        },
+        json: vi.fn().mockResolvedValue({
+          success: false,
+          error: {
+            code: "INVALID_SCAN",
+            message: "Barcode mismatch",
+            correlationId: "mobile-body-corr-1",
+          },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: {
+          get: (name: string) =>
+            name === CORRELATION_ID_HEADER ? "mobile-header-fallback-2" : null,
+        },
+        json: vi.fn().mockResolvedValue({
+          success: false,
+          error: {
+            code: "INTERNAL_ERROR",
+            message: "Server error without body correlationId",
+          },
+        }),
+      } as unknown as Response);
+
+    const client = createWmsClient({
+      baseUrl: "http://localhost:3001",
+      apiKey: "demo-api-key-12345",
+      fetchImpl: mockFetch,
+      correlationIdGenerator: () => "mobile-req-corr-1",
+    });
+
+    await expect(
+      client.confirmTaskStep("task-1", "step-1", { scannedCode: "BAD" }),
+    ).rejects.toMatchObject({
+      name: "WmsApiClientError",
+      code: "INVALID_SCAN",
+      statusCode: 422,
+      correlationId: "mobile-body-corr-1",
+    });
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:3001/api/v1/tasks/task-1/steps/step-1/confirm",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          [CORRELATION_ID_HEADER]: "mobile-req-corr-1",
+        }),
+      }),
+    );
+
+    await expect(client.listTasks()).rejects.toMatchObject({
+      name: "WmsApiClientError",
+      code: "INTERNAL_ERROR",
+      statusCode: 500,
+      correlationId: "mobile-header-fallback-2",
+    });
   });
 });

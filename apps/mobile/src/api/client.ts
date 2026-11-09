@@ -2,24 +2,28 @@
 // Cliente HTTP tipado para consumir la API REST de @wms/api desde la app móvil de operarios.
 // Respeta las fronteras del monorepo: importa únicamente desde @wms/shared-types.
 
-import type {
-  ApiError,
-  ApiResponse,
-  ConfirmScanInput,
-  InventoryBalanceDTO,
-  OrderStatus,
-  StepStatus,
-  TaskStatus,
-  TaskType,
-  WarehouseTaskDTO,
-  WmsErrorCode,
+import {
+  CORRELATION_ID_HEADER,
+  type ApiError,
+  type ApiResponse,
+  type ConfirmScanInput,
+  type InventoryBalanceDTO,
+  type OrderStatus,
+  type StepStatus,
+  type TaskStatus,
+  type TaskType,
+  type WarehouseTaskDTO,
+  type WmsErrorCode,
 } from "@wms/shared-types";
+
+export { CORRELATION_ID_HEADER };
 
 export interface WmsClientConfig {
   baseUrl?: string;
   apiKey?: string | undefined;
   bearerToken?: string | undefined;
   fetchImpl?: typeof fetch | undefined;
+  correlationIdGenerator?: (() => string) | undefined;
 }
 
 export interface HealthCheckResponse {
@@ -92,28 +96,54 @@ export interface GetInventoryBalancesFilters {
 
 /**
  * Error tipado del cliente móvil que preserva el código de negocio (`WmsErrorCode`),
- * el código de estado HTTP y los detalles adicionales devueltos por `@wms/api`.
+ * el código de estado HTTP, el `correlationId` y los detalles adicionales devueltos por `@wms/api`.
  */
 export class WmsApiClientError extends Error {
   public readonly code: WmsErrorCode | string;
   public readonly statusCode: number;
   public readonly details?: unknown;
+  public readonly correlationId?: string | undefined;
 
   constructor(
     code: WmsErrorCode | string,
     message: string,
     statusCode: number,
     details?: unknown,
+    correlationId?: string,
   ) {
     super(message);
     this.name = "WmsApiClientError";
     this.code = code;
     this.statusCode = statusCode;
     this.details = details;
+    this.correlationId = correlationId;
   }
 }
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
+
+function generateCorrelationId(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `corr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function extractResponseHeaderCorrelationId(
+  response: Response,
+): string | undefined {
+  const headersObj = (response as { headers?: { get?: (name: string) => string | null } }).headers;
+  if (headersObj && typeof headersObj.get === "function") {
+    const val = headersObj.get(CORRELATION_ID_HEADER);
+    if (typeof val === "string" && val.trim().length > 0) {
+      return val.trim();
+    }
+  }
+  return undefined;
+}
 
 function normalizeBaseUrl(url: string): string {
   const trimmed = url.trim();
@@ -152,12 +182,15 @@ export class WmsApiClient {
   private apiKey: string | undefined;
   private bearerToken: string | undefined;
   private readonly fetchImpl: typeof fetch;
+  private readonly correlationIdGenerator: () => string;
 
   constructor(config: WmsClientConfig = {}) {
     this.baseUrl = normalizeBaseUrl(config.baseUrl ?? DEFAULT_BASE_URL);
     this.apiKey = config.apiKey;
     this.bearerToken = config.bearerToken;
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.correlationIdGenerator =
+      config.correlationIdGenerator ?? generateCorrelationId;
   }
 
   public getConfig(): {
@@ -184,9 +217,13 @@ export class WmsApiClient {
     }
   }
 
-  private buildHeaders(hasBody: boolean): Record<string, string> {
+  private buildHeaders(
+    hasBody: boolean,
+    correlationId: string,
+  ): Record<string, string> {
     const headers: Record<string, string> = {
       Accept: "application/json",
+      [CORRELATION_ID_HEADER]: correlationId,
     };
 
     if (hasBody) {
@@ -231,11 +268,16 @@ export class WmsApiClient {
     options?: {
       query?: Record<string, string | undefined> | undefined;
       body?: unknown;
+      correlationId?: string | undefined;
     },
   ): Promise<T> {
     const hasBody = options?.body !== undefined;
     const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(hasBody);
+    const requestCorrelationId =
+      options?.correlationId && options.correlationId.trim().length > 0
+        ? options.correlationId.trim()
+        : this.correlationIdGenerator();
+    const headers = this.buildHeaders(hasBody, requestCorrelationId);
 
     let response: Response;
     try {
@@ -247,8 +289,17 @@ export class WmsApiClient {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Network request failed";
-      throw new WmsApiClientError("NETWORK_ERROR", message, 0, err);
+      throw new WmsApiClientError(
+        "NETWORK_ERROR",
+        message,
+        0,
+        err,
+        requestCorrelationId,
+      );
     }
+
+    const responseHeaderCorrelationId =
+      extractResponseHeaderCorrelationId(response);
 
     let payload: unknown;
     try {
@@ -258,15 +309,22 @@ export class WmsApiClient {
         "INVALID_RESPONSE",
         `Failed to parse JSON response from ${method} ${path} (HTTP ${response.status})`,
         response.status,
+        undefined,
+        responseHeaderCorrelationId ?? requestCorrelationId,
       );
     }
 
     if (isApiErrorPayload(payload)) {
+      const resolvedCorrelationId =
+        payload.error.correlationId ??
+        responseHeaderCorrelationId ??
+        requestCorrelationId;
       throw new WmsApiClientError(
         payload.error.code,
         payload.error.message,
         response.status,
         payload.error.details,
+        resolvedCorrelationId,
       );
     }
 
@@ -276,6 +334,7 @@ export class WmsApiClient {
         `Request ${method} ${path} failed with status ${response.status}`,
         response.status,
         payload,
+        responseHeaderCorrelationId ?? requestCorrelationId,
       );
     }
 
@@ -288,6 +347,7 @@ export class WmsApiClient {
       `Unexpected envelope format from ${method} ${path}`,
       response.status,
       payload,
+      responseHeaderCorrelationId ?? requestCorrelationId,
     );
   }
 
@@ -296,7 +356,8 @@ export class WmsApiClient {
    */
   public async checkHealth(): Promise<HealthCheckResponse> {
     const url = this.buildUrl("/health");
-    const headers = this.buildHeaders(false);
+    const requestCorrelationId = this.correlationIdGenerator();
+    const headers = this.buildHeaders(false, requestCorrelationId);
 
     let response: Response;
     try {
@@ -307,8 +368,17 @@ export class WmsApiClient {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Network request failed";
-      throw new WmsApiClientError("NETWORK_ERROR", message, 0, err);
+      throw new WmsApiClientError(
+        "NETWORK_ERROR",
+        message,
+        0,
+        err,
+        requestCorrelationId,
+      );
     }
+
+    const responseHeaderCorrelationId =
+      extractResponseHeaderCorrelationId(response);
 
     let payload: unknown;
     try {
@@ -318,15 +388,22 @@ export class WmsApiClient {
         "INVALID_RESPONSE",
         `Invalid JSON from /health (HTTP ${response.status})`,
         response.status,
+        undefined,
+        responseHeaderCorrelationId ?? requestCorrelationId,
       );
     }
 
     if (isApiErrorPayload(payload)) {
+      const resolvedCorrelationId =
+        payload.error.correlationId ??
+        responseHeaderCorrelationId ??
+        requestCorrelationId;
       throw new WmsApiClientError(
         payload.error.code,
         payload.error.message,
         response.status,
         payload.error.details,
+        resolvedCorrelationId,
       );
     }
 
@@ -336,6 +413,7 @@ export class WmsApiClient {
         `Health check failed with status ${response.status}`,
         response.status,
         payload,
+        responseHeaderCorrelationId ?? requestCorrelationId,
       );
     }
 

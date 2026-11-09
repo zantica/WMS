@@ -2,31 +2,37 @@
 // Cliente HTTP tipado para el Dashboard de Supervisores (@wms/web).
 // Respeta estrictamente las fronteras del monorepo: importa únicamente de @wms/shared-types.
 
-import type {
-  AdjustmentInput,
-  ApiError,
-  ApiResponse,
-  CreateLocationInput,
-  CreateOrderInput,
-  CreateProductInput,
-  InventoryBalanceDTO,
-  LocationDTO,
-  LocationType,
-  OrderStatus,
-  ProductDTO,
-  SalesOrderDTO,
-  TaskStatus,
-  TaskType,
-  TxReason,
-  WarehouseTaskDTO,
-  WmsErrorCode,
+import {
+  CORRELATION_ID_HEADER,
+  type AdjustmentInput,
+  type ApiError,
+  type ApiResponse,
+  type CreateLocationInput,
+  type CreateOrderInput,
+  type CreateProductInput,
+  type DiagnosticErrorRecord,
+  type InventoryBalanceDTO,
+  type ListDiagnosticErrorsFilters,
+  type LocationDTO,
+  type LocationType,
+  type OrderStatus,
+  type ProductDTO,
+  type SalesOrderDTO,
+  type TaskStatus,
+  type TaskType,
+  type TxReason,
+  type WarehouseTaskDTO,
+  type WmsErrorCode,
 } from "@wms/shared-types";
+
+export { CORRELATION_ID_HEADER };
 
 export interface WmsWebClientConfig {
   baseUrl?: string | undefined;
   apiKey?: string | undefined;
   bearerToken?: string | undefined;
   fetchImpl?: typeof fetch | undefined;
+  correlationIdGenerator?: (() => string) | undefined;
 }
 
 export interface HealthCheckResponse {
@@ -112,28 +118,54 @@ export interface ListTasksFilters {
 
 /**
  * Error tipado del cliente web que preserva el código de dominio (`WmsErrorCode`),
- * el código de estado HTTP y los detalles adicionales devueltos por `@wms/api`.
+ * el código de estado HTTP, el `correlationId` y los detalles adicionales devueltos por `@wms/api`.
  */
 export class WmsWebApiError extends Error {
   public readonly code: WmsErrorCode | string;
   public readonly statusCode: number;
   public readonly details?: unknown;
+  public readonly correlationId?: string | undefined;
 
   constructor(
     code: WmsErrorCode | string,
     message: string,
     statusCode: number,
     details?: unknown,
+    correlationId?: string,
   ) {
     super(message);
     this.name = "WmsWebApiError";
     this.code = code;
     this.statusCode = statusCode;
     this.details = details;
+    this.correlationId = correlationId;
   }
 }
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
+
+function generateCorrelationId(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `corr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function extractResponseHeaderCorrelationId(
+  response: Response,
+): string | undefined {
+  const headersObj = (response as { headers?: { get?: (name: string) => string | null } }).headers;
+  if (headersObj && typeof headersObj.get === "function") {
+    const val = headersObj.get(CORRELATION_ID_HEADER);
+    if (typeof val === "string" && val.trim().length > 0) {
+      return val.trim();
+    }
+  }
+  return undefined;
+}
 
 function normalizeBaseUrl(url: string): string {
   const trimmed = url.trim();
@@ -172,12 +204,15 @@ export class WmsWebApiClient {
   private apiKey: string | undefined;
   private bearerToken: string | undefined;
   private readonly fetchImpl: typeof fetch;
+  private readonly correlationIdGenerator: () => string;
 
   constructor(config: WmsWebClientConfig = {}) {
     this.baseUrl = normalizeBaseUrl(config.baseUrl ?? DEFAULT_BASE_URL);
     this.apiKey = config.apiKey;
     this.bearerToken = config.bearerToken;
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.correlationIdGenerator =
+      config.correlationIdGenerator ?? generateCorrelationId;
   }
 
   public getConfig(): {
@@ -204,9 +239,13 @@ export class WmsWebApiClient {
     }
   }
 
-  private buildHeaders(hasBody: boolean): Record<string, string> {
+  private buildHeaders(
+    hasBody: boolean,
+    correlationId: string,
+  ): Record<string, string> {
     const headers: Record<string, string> = {
       Accept: "application/json",
+      [CORRELATION_ID_HEADER]: correlationId,
     };
 
     if (hasBody) {
@@ -251,11 +290,21 @@ export class WmsWebApiClient {
     options?: {
       query?: Record<string, string | undefined> | undefined;
       body?: unknown;
+      correlationId?: string | undefined;
     },
-  ): Promise<{ status: number; ok: boolean; payload: unknown }> {
+  ): Promise<{
+    status: number;
+    ok: boolean;
+    payload: unknown;
+    correlationId: string;
+  }> {
     const hasBody = options?.body !== undefined;
     const url = this.buildUrl(path, options?.query);
-    const headers = this.buildHeaders(hasBody);
+    const requestCorrelationId =
+      options?.correlationId && options.correlationId.trim().length > 0
+        ? options.correlationId.trim()
+        : this.correlationIdGenerator();
+    const headers = this.buildHeaders(hasBody, requestCorrelationId);
 
     let response: Response;
     try {
@@ -267,8 +316,17 @@ export class WmsWebApiClient {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Network request failed";
-      throw new WmsWebApiError("NETWORK_ERROR", message, 0, err);
+      throw new WmsWebApiError(
+        "NETWORK_ERROR",
+        message,
+        0,
+        err,
+        requestCorrelationId,
+      );
     }
+
+    const responseHeaderCorrelationId =
+      extractResponseHeaderCorrelationId(response);
 
     let payload: unknown;
     try {
@@ -278,15 +336,22 @@ export class WmsWebApiClient {
         "INVALID_RESPONSE",
         `Failed to parse JSON response from ${method} ${path} (HTTP ${response.status})`,
         response.status,
+        undefined,
+        responseHeaderCorrelationId ?? requestCorrelationId,
       );
     }
 
     if (isApiErrorPayload(payload)) {
+      const resolvedCorrelationId =
+        payload.error.correlationId ??
+        responseHeaderCorrelationId ??
+        requestCorrelationId;
       throw new WmsWebApiError(
         payload.error.code,
         payload.error.message,
         response.status,
         payload.error.details,
+        resolvedCorrelationId,
       );
     }
 
@@ -296,10 +361,16 @@ export class WmsWebApiClient {
         `Request ${method} ${path} failed with status ${response.status}`,
         response.status,
         payload,
+        responseHeaderCorrelationId ?? requestCorrelationId,
       );
     }
 
-    return { status: response.status, ok: response.ok, payload };
+    return {
+      status: response.status,
+      ok: response.ok,
+      payload,
+      correlationId: responseHeaderCorrelationId ?? requestCorrelationId,
+    };
   }
 
   private async requestEnvelope<T>(
@@ -308,9 +379,14 @@ export class WmsWebApiClient {
     options?: {
       query?: Record<string, string | undefined> | undefined;
       body?: unknown;
+      correlationId?: string | undefined;
     },
   ): Promise<T> {
-    const { status, payload } = await this.requestRaw(method, path, options);
+    const { status, payload, correlationId } = await this.requestRaw(
+      method,
+      path,
+      options,
+    );
 
     if (isApiSuccessPayload<T>(payload)) {
       return payload.data;
@@ -321,6 +397,7 @@ export class WmsWebApiClient {
       `Unexpected envelope format from ${method} ${path}`,
       status,
       payload,
+      correlationId,
     );
   }
 
@@ -400,7 +477,7 @@ export class WmsWebApiClient {
   public async listTransactions(
     filters?: ListTransactionsFilters,
   ): Promise<KardexTransactionsResponse> {
-    const { status, payload } = await this.requestRaw(
+    const { status, payload, correlationId } = await this.requestRaw(
       "GET",
       "/api/v1/inventory/transactions",
       {
@@ -420,6 +497,7 @@ export class WmsWebApiClient {
         "Unexpected envelope format from GET /api/v1/inventory/transactions",
         status,
         payload,
+        correlationId,
       );
     }
 
@@ -538,6 +616,26 @@ export class WmsWebApiClient {
         status: filters?.status,
       },
     });
+  }
+
+  /**
+   * GET /api/v1/diagnostics/errors — Consulta errores recientes de diagnóstico del tenant actual (ADMIN / SUPERVISOR).
+   */
+  public async listDiagnosticErrors(
+    filters?: ListDiagnosticErrorsFilters,
+  ): Promise<DiagnosticErrorRecord[]> {
+    return this.requestEnvelope<DiagnosticErrorRecord[]>(
+      "GET",
+      "/api/v1/diagnostics/errors",
+      {
+        query: {
+          limit:
+            filters?.limit !== undefined ? String(filters.limit) : undefined,
+          errorCode: filters?.errorCode,
+          correlationId: filters?.correlationId,
+        },
+      },
+    );
   }
 }
 

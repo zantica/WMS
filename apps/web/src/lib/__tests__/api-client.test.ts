@@ -3,13 +3,18 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type {
+  DiagnosticErrorRecord,
   InventoryBalanceDTO,
   LocationDTO,
   ProductDTO,
   SalesOrderDTO,
   WarehouseTaskDTO,
 } from "@wms/shared-types";
-import { WmsWebApiError, createWmsWebClient } from "../api-client.js";
+import {
+  CORRELATION_ID_HEADER,
+  WmsWebApiError,
+  createWmsWebClient,
+} from "../api-client.js";
 
 function createMockFetch(
   status: number,
@@ -50,11 +55,12 @@ describe("WmsWebApiClient (@wms/web)", () => {
       "http://localhost:3001/health",
       expect.objectContaining({
         method: "GET",
-        headers: {
+        headers: expect.objectContaining({
           Accept: "application/json",
           "x-api-key": "demo-api-key-12345",
           Authorization: "Bearer jwt-supervisor-token",
-        },
+          [CORRELATION_ID_HEADER]: expect.any(String),
+        }),
       }),
     );
 
@@ -388,5 +394,84 @@ describe("WmsWebApiClient (@wms/web)", () => {
     });
 
     await expect(client.listProducts()).rejects.toBeInstanceOf(WmsWebApiError);
+  });
+
+  it("propagates x-correlation-id on every request, exposes correlationId on WmsWebApiError, and queries /api/v1/diagnostics/errors", async () => {
+    const diagRecords: DiagnosticErrorRecord[] = [
+      {
+        id: "diag-1",
+        tenantId: "tenant-1",
+        correlationId: "web-corr-001",
+        errorCode: "INSUFFICIENT_STOCK",
+        message: "Insufficient ATP stock",
+        statusCode: 409,
+        method: "POST",
+        path: "/api/v1/orders/ord-1/allocate",
+        userId: "sup-1",
+        occurredAt: "2026-10-31T00:00:00.000Z",
+      },
+    ];
+
+    const mockFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) =>
+            name === CORRELATION_ID_HEADER ? "web-corr-001" : null,
+        },
+        json: vi
+          .fn()
+          .mockResolvedValue({ success: true, data: diagRecords }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        headers: {
+          get: (name: string) =>
+            name === CORRELATION_ID_HEADER ? "srv-header-corr-77" : null,
+        },
+        json: vi.fn().mockResolvedValue({
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Only ADMIN and SUPERVISOR can access diagnostic logs",
+            correlationId: "srv-body-corr-88",
+          },
+        }),
+      } as unknown as Response);
+
+    const client = createWmsWebClient({
+      baseUrl: "http://localhost:3001",
+      bearerToken: "jwt-token",
+      fetchImpl: mockFetch,
+      correlationIdGenerator: () => "web-corr-001",
+    });
+
+    const errors = await client.listDiagnosticErrors({
+      limit: 20,
+      errorCode: "INSUFFICIENT_STOCK",
+      correlationId: "web-corr-001",
+    });
+
+    expect(errors).toEqual(diagRecords);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:3001/api/v1/diagnostics/errors?limit=20&errorCode=INSUFFICIENT_STOCK&correlationId=web-corr-001",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          [CORRELATION_ID_HEADER]: "web-corr-001",
+        }),
+      }),
+    );
+
+    await expect(client.listDiagnosticErrors()).rejects.toMatchObject({
+      name: "WmsWebApiError",
+      code: "FORBIDDEN",
+      statusCode: 403,
+      correlationId: "srv-body-corr-88",
+    });
   });
 });
