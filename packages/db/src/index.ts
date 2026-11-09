@@ -21,3 +21,4 @@ if (process.env["NODE_ENV"] !== "production") {
 
 // Re-export all generated types so consumers import from "@wms/db" directly
 export * from "@prisma/client";
+export * from "./rls.js";
