@@ -57,8 +57,10 @@ curl http://localhost:3001/api/v1/products -H "x-api-key: demo-api-key-12345"
 
 - En `progress/impl_<feature_id>.md` (escrito por `implementer`):
   - Lista exacta de archivos creados/modificados.
-  - Salida resumida de `pnpm build` y `pnpm --filter @wms/api test:coverage`.
+  - Salida literal (no parafraseada) de `pnpm build` y `pnpm --filter @wms/api test:coverage`. Si no pudo ejecutarse, el estado es `BLOCKED`.
 - En `progress/review_<feature_id>.md` (escrito por `reviewer`):
   - Checklist de [`CHECKPOINTS.md`](../CHECKPOINTS.md) marcada ítem por ítem (`[x]` o `[ ]`).
   - Resultado de su propia ejecución de tests y compilación.
-  - Veredicto final: `STATUS: APPROVED` o `STATUS: CHANGES_REQUESTED`.
+  - Veredicto final: `VEREDICTO: APPROVED`, `VEREDICTO: CHANGES_REQUESTED` o `VEREDICTO: BLOCKED`.
+
+> ⚠️ **Regla de evidencia**: `APPROVED` exige la **salida literal** (resumen de Vitest + tabla de cobertura + código de salida) de una ejecución hecha por el propio `reviewer`. "Verificación estática", "pendiente de ejecución local" o resultados copiados del `impl_*.md` equivalen a `BLOCKED`. El `reviewer` nunca puede ser el `leader` ni el `implementer` (ver [`.claude/agents/leader.md`](../.claude/agents/leader.md)).

@@ -9,3 +9,7 @@ coverage/
 .next/
 .expo/
 *.tsbuildinfo
+
+# Solo pnpm: lockfiles de otros gestores prohibidos (ver KNOWLEDGE.md Bug #4 y CP-6)
+package-lock.json
+yarn.lock

@@ -1,0 +1,194 @@
+# .github/workflows/ci.yml
+# CI para el monorepo WMS (pnpm + Turborepo + Prisma + PostgreSQL 16 con RLS)
+#
+# 2 jobs paralelos:
+#   1. quality-and-unit      → build + typecheck + tests unitarios (cobertura ≥ 80%)
+#   2. integration-postgres  → migraciones + tests de integración contra PG real,
+#                              usando un rol NO-superusuario para que RLS se
+#                              valide de verdad (los superusuarios bypasean RLS).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancela runs obsoletos del mismo PR (en main nunca cancela)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────
+  # JOB 1 — Rápido: calidad, build y unitarios (~1 min)
+  # ─────────────────────────────────────────────────────────────────────
+  quality-and-unit:
+    name: Calidad + unitarios (build, typecheck, cobertura ≥80%)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        # Lee la versión del campo "packageManager" del package.json raíz (pnpm@9.12.0).
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Cachear Turborepo
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
+      - name: Cachear engines de Prisma
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/prisma
+          key: prisma-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Generar cliente Prisma
+        run: pnpm db:generate
+
+      - name: Build + typecheck del monorepo (shared-types → db → api → web)
+        run: pnpm build
+
+      - name: Suite de tests del monorepo (api, web, mobile)
+        run: pnpm test
+
+      - name: Tests unitarios API + umbral de cobertura ≥80%
+        run: pnpm --filter @wms/api test:coverage
+        # Falla (exit ≠ 0) si lines, functions o branches bajan de 80% en src/use-cases/**
+        # (configurado en apps/api/vitest.config.ts).
+
+      - name: Validar feature_list.json
+        run: node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8')); console.log('feature_list.json OK')"
+
+      - name: Subir reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: apps/api/coverage
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────
+  # JOB 2 — Integración: PostgreSQL 16 real + RLS (~1.5 min)
+  # ─────────────────────────────────────────────────────────────────────
+  integration-postgres:
+    name: Integración PostgreSQL 16 (RLS, locks FOR UPDATE, Ledger)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine        # misma imagen que docker-compose.yml
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wms_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Cachear Turborepo
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
+      - name: Cachear engines de Prisma
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/prisma
+          key: prisma-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Generar cliente Prisma
+        run: pnpm db:generate
+
+      - name: Build del monorepo (mismo orden que el job 1)
+        run: pnpm build
+
+      # migrate deploy (NUNCA db push en CI): valida los ficheros de migración
+      # reales sobre una base de datos fresca — exactamente lo que correrá
+      # en producción. Se aplica como propietario de la BD (postgres).
+      - name: Aplicar migraciones
+        run: pnpm --filter @wms/db migrate:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wms_test
+
+      # RLS: los superusuarios NO están sujetos a RLS (ni siquiera con FORCE
+      # ROW LEVEL SECURITY). Creamos un rol restringido y ejecutamos los tests
+      # con él, replicando el rol de la app en producción. Sin esto, los tests
+      # de aislamiento multi-tenant pasarían "de mentira".
+      - name: Crear rol no-superusuario para los tests de RLS
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql "postgresql://postgres:postgres@localhost:5432/wms_test" <<'SQL'
+            DO $$ BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_test') THEN
+                CREATE ROLE app_test LOGIN PASSWORD 'app_test' NOSUPERUSER NOBYPASSRLS NOINHERIT;
+              END IF;
+            END $$;
+            GRANT CONNECT ON DATABASE wms_test TO app_test;
+            GRANT USAGE ON SCHEMA public TO app_test;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_test;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_test;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_test;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public
+              GRANT USAGE, SELECT ON SEQUENCES TO app_test;
+          SQL
+
+      - name: Tests de integración contra PostgreSQL real (rol app_test)
+        run: pnpm --filter @wms/api test
+        env:
+          DATABASE_URL: postgresql://app_test:app_test@localhost:5432/wms_test

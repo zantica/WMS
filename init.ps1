@@ -25,6 +25,14 @@ $nodeVer = node -v
 $pnpmVer = pnpm -v
 Write-Host "[OK] Node: $nodeVer | pnpm: $pnpmVer" -ForegroundColor Green
 
+# 2b. Guarda anti-npm/yarn (KNOWLEDGE.md Bug #4): el unico lockfile valido es pnpm-lock.yaml
+foreach ($lock in @("package-lock.json", "yarn.lock")) {
+    if (Test-Path $lock) {
+        Write-Error "[ERROR] Se encontro '$lock' en la raiz. Este monorepo usa SOLO pnpm. Eliminalo (y node_modules si se instalo con npm/yarn) y ejecuta 'pnpm install'."
+        exit 1
+    }
+}
+
 # 3. Verificar node_modules
 if (-not (Test-Path "node_modules")) {
     Write-Host "[*] Instalando dependencias con pnpm install..." -ForegroundColor Yellow
