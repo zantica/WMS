@@ -1,23 +1,82 @@
-# WMS — Libro de Conocimiento del Proyecto
+# WMS — Libro de Conocimiento del Proyecto (Memoria Viva)
 
-> Este documento es la memoria viva del proyecto. Se actualiza al cierre de cada hito con
-> decisiones de diseño, patrones establecidos, errores encontrados y guías para el siguiente hito.
-> **Si tocas código de este proyecto, lee este archivo primero.**
+> Este documento contiene **solo conocimiento vigente**: filosofía, decisiones de diseño activas, bugs con su lección,
+> patrones obligatorios/prohibidos, convenciones y glosario. **Si tocas código de este proyecto, lee este archivo primero.**
+>
+> - Guías de hitos ya cerrados → [`docs/hitos/`](./docs/hitos/README.md) (no se cargan por defecto).
+> - Decisiones arquitectónicas formales → [`docs/adr/`](./docs/adr/README.md).
+> - **Mantenimiento**: al cerrar una feature, añade aquí los bugs/patrones nuevos; al cerrar un hito, archiva su guía en `docs/hitos/hito-N.md`.
 
 ---
 
 ## Índice
 
 - [Filosofía del proyecto](#filosofía-del-proyecto)
-- [Hito 1 — Lo que aprendimos](#hito-1--lo-que-aprendimos)
+- [Decisiones de diseño vigentes](#decisiones-de-diseño-vigentes)
 - [Bugs encontrados y corregidos](#bugs-encontrados-y-corregidos)
 - [Patrones establecidos (no romper)](#patrones-establecidos-no-romper)
-- [Guía para el Hito 2 — App Expo](#guía-para-el-hito-2--app-expo)
-- [Guía para el Hito 3 — Motor de Pedidos](#guía-para-el-hito-3--motor-de-pedidos)
-- [Guía para el Hito 4 — Panel Web + Integraciones](#guía-para-el-hito-4--panel-web--integraciones)
 - [Convenciones de código](#convenciones-de-código)
 - [Errores a no repetir](#errores-a-no-repetir)
 - [Glosario de dominio](#glosario-de-dominio)
+
+---
+
+## Filosofía del proyecto
+
+1. **El almacén es una cuenta bancaria.** El stock nunca se toca con un `UPDATE qty = qty - 1`. Cada movimiento es una transacción en el Ledger. Sin excepciones.
+2. **La app móvil es el producto real.** El panel web es para el jefe. La app es para las personas que trabajan de pie 8 horas. Cada pantalla debe funcionar con una sola mano, sin necesidad de leer texto largo.
+3. **Seguridad primero, velocidad después.** Un error de stock (doble reserva, saldo negativo) cuesta dinero y rompe la confianza del cliente. Una respuesta lenta de 200ms extra no.
+4. **Multi-tenant desde el día 0.** Cada tabla tiene `tenantId`. Cada query lo filtra. No hay excepciones.
+
+---
+
+## Decisiones de diseño vigentes
+
+> Establecidas en el Hito 1 y aún en vigor. Contexto histórico completo en [`docs/hitos/hito-1.md`](./docs/hitos/hito-1.md).
+
+### 1. Inventario tipo Ledger (inmutable) + Snapshot (proyección)
+
+**Decisión**: Dos tablas — `InventoryTransaction` (nunca se modifica) e `InventoryBalance` (se actualiza en la misma TX).
+
+**Por qué**: Si solo tienes el Snapshot, cuando algo falla no sabes *qué pasó*. Si solo tienes el Ledger, cada consulta de "cuánto stock hay" requiere sumar miles de filas. Juntos son perfectos: el Snapshot da velocidad, el Ledger da auditoría total.
+
+**Consecuencia**: En Fase 2, si necesitas reconstruir el Snapshot desde cero (por un bug), puedes hacerlo reproduciendo todas las `InventoryTransaction` en orden. Eso es imposible con un sistema de `UPDATE qty`.
+
+### 2. `SELECT FOR UPDATE` (bloqueo pesimista) en lugar de Optimistic Locking
+
+**Decisión**: Usar `SELECT FOR UPDATE` en las filas de `InventoryBalance` durante allocation y picking.
+
+**Por qué**: En un almacén pequeño/mediano, las reservas concurrentes sobre el mismo SKU son poco frecuentes pero altamente destructivas si fallan. Con Optimistic Locking tendrías que manejar retries en el cliente. Con pesimista, el segundo request simplemente espera (milisegundos) y lee el estado correcto.
+
+**Cuándo reconsiderar**: Si tienes >100 operarios simultáneos reservando el mismo SKU (problema de Fase 3+), entonces el pesimista crea colas. Hasta entonces, no optimizar prematuramente.
+
+### 3. `isolationLevel: Serializable` en las transacciones críticas
+
+**Decisión**: Las transacciones de `moveStock` y `allocateOrder` corren en nivel `Serializable`.
+
+**Por qué**: `READ COMMITTED` (default de PG) no protege contra phantom reads. Si dos transacciones leen ATP simultáneamente antes de reservar, ambas ven el mismo stock disponible y ambas reservan. Serializable previene esto sin necesidad de `FOR UPDATE` en todos los casos, pero lo combinamos con `FOR UPDATE` por seguridad adicional.
+
+### 4. `quantity` siempre positiva en el Ledger
+
+**Decisión**: El campo `quantity` en `InventoryTransaction` siempre es positivo. La dirección del movimiento la determinan `fromLocationId` y `toLocationId`.
+
+**Por qué**: Hace las sumas de auditoría triviales y evita bugs de sign-flip. Para saber cuánto salió de una ubicación: `SUM(quantity) WHERE fromLocationId = X`. Para cuánto entró: `SUM(quantity) WHERE toLocationId = X`.
+
+### 5. Códigos de ubicación como strings ordenables lexicográficamente
+
+**Decisión**: Los códigos de ubicación siguen el formato `PASILLO-ESTANTERIA-NIVEL` (ej. `A-01-02`). La ruta de picking se genera simplemente con `ORDER BY location.code ASC`.
+
+**Por qué**: Un algoritmo TSP (Travelling Salesman Problem) es overkill para almacenes de <500 ubicaciones. El orden alfabético de los códigos, bien diseñados, ya produce un recorrido eficiente en S (primero toda la columna A de arriba a abajo, luego B, etc.). El jefe de almacén controla la eficiencia del picking simplemente nombrando bien sus ubicaciones.
+
+**Regla para el cliente**: Cuando configures las ubicaciones de un cliente nuevo, usa siempre el formato `[PASILLO]-[ESTANTERIA_2DIGITOS]-[NIVEL_2DIGITOS]`. Ej: `A-01-01`, `A-01-02`, `A-02-01`. Nunca `A1`, `Estantería 1`, ni nombres con tildes.
+
+### 6. Auth dual: API Key para máquinas, JWT para humanos
+
+**Decisión**: Header `x-api-key` para integraciones (Shopify, etc.), `Authorization: Bearer <JWT>` para usuarios humanos (Clerk).
+
+**Por qué**: Las integraciones no pueden hacer OAuth cada vez. Las API Keys son simples, revocables y auditables. Los humanos necesitan sesiones con roles.
+
+**En desarrollo**: El header `x-dev-tenant-id` actúa como bypass para no necesitar Clerk configurado. **Nunca llegará a producción** — hay un chequeo `process.env.NODE_ENV !== 'production'`.
 
 ---
 
@@ -61,85 +120,12 @@
 
 ---
 
+### Bug #5 — Self-review del leader cerró F4.2 sin tests ejecutados (Harness, Hito 4)
 
----
-
-## Filosofía del proyecto
-
-1. **El almacén es una cuenta bancaria.** El stock nunca se toca con un `UPDATE qty = qty - 1`. Cada movimiento es una transacción en el Ledger. Sin excepciones.
-2. **La app móvil es el producto real.** El panel web es para el jefe. La app es para las personas que trabajan de pie 8 horas. Cada pantalla debe funcionar con una sola mano, sin necesidad de leer texto largo.
-3. **Seguridad primero, velocidad después.** Un error de stock (doble reserva, saldo negativo) cuesta dinero y rompe la confianza del cliente. Una respuesta lenta de 200ms extra no.
-4. **Multi-tenant desde el día 0.** Cada tabla tiene `tenantId`. Cada query lo filtra. No hay excepciones.
-
----
-
-## Hito 1 — Lo que aprendimos
-
-### ✅ Lo que se construyó
-
-| Componente | Archivo(s) | Descripción |
-|---|---|---|
-| Monorepo | `turbo.json`, `pnpm-workspace.yaml` | Turborepo con 2 packages + 1 app |
-| Schema DB | `packages/db/prisma/schema.prisma` | Modelo completo: Tenant, Location, Product, InventoryTransaction, InventoryBalance, SalesOrder, WarehouseTask, TaskStep |
-| Ledger core | `apps/api/src/use-cases/inventory/move-stock.ts` | El movimiento atómico de stock |
-| Allocator | `apps/api/src/use-cases/inventory/allocate-order.ts` | Reserva con `SELECT FOR UPDATE` |
-| API Fastify | `apps/api/src/server.ts` + 6 archivos de rutas | REST completo para Hito 1 |
-| Tests | `__tests__/move-stock.test.ts` + `allocate-order.test.ts` | 12 tests de las garantías críticas |
-| Seed | `packages/db/src/seed.ts` | Tenant demo + 12 ubicaciones + 5 productos |
-
-### 🧠 Decisiones de diseño tomadas y por qué
-
-#### 1. Inventario tipo Ledger (inmutable) + Snapshot (proyección)
-
-**Decisión**: Dos tablas — `InventoryTransaction` (nunca se modifica) e `InventoryBalance` (se actualiza en la misma TX).
-
-**Por qué**: Si solo tienes el Snapshot, cuando algo falla no sabes *qué pasó*. Si solo tienes el Ledger, cada consulta de "cuánto stock hay" requiere sumar miles de filas. Juntos son perfectos: el Snapshot da velocidad, el Ledger da auditoría total.
-
-**Consecuencia**: En Fase 2, si necesitas reconstruir el Snapshot desde cero (por un bug), puedes hacerlo reproduciendo todas las `InventoryTransaction` en orden. Eso es imposible con un sistema de `UPDATE qty`.
-
-#### 2. `SELECT FOR UPDATE` (bloqueo pesimista) en lugar de Optimistic Locking
-
-**Decisión**: Usar `SELECT FOR UPDATE` en las filas de `InventoryBalance` durante allocation y picking.
-
-**Por qué**: En un almacén pequeño/mediano, las reservas concurrentes sobre el mismo SKU son poco frecuentes pero altamente destructivas si fallan. Con Optimistic Locking tendrías que manejar retries en el cliente. Con pesimista, el segundo request simplemente espera (milisegundos) y lee el estado correcto.
-
-**Cuándo reconsiderar**: Si tienes >100 operarios simultáneos reservando el mismo SKU (problema de Fase 3+), entonces el pesimista crea colas. Hasta entonces, no optimizar prematuramente.
-
-#### 3. `isolationLevel: Serializable` en las transacciones críticas
-
-**Decisión**: Las transacciones de `moveStock` y `allocateOrder` corren en nivel `Serializable`.
-
-**Por qué**: `READ COMMITTED` (default de PG) no protege contra phantom reads. Si dos transacciones leen ATP simultáneamente antes de reservar, ambas ven el mismo stock disponible y ambas reservan. Serializable previene esto sin necesidad de `FOR UPDATE` en todos los casos, pero lo combinamos con `FOR UPDATE` por seguridad adicional.
-
-#### 4. `quantity` siempre positiva en el Ledger
-
-**Decisión**: El campo `quantity` en `InventoryTransaction` siempre es positivo. La dirección del movimiento la determinan `fromLocationId` y `toLocationId`.
-
-**Por qué**: Hace las sumas de auditoría triviales y evita bugs de sign-flip. Para saber cuánto salió de una ubicación: `SUM(quantity) WHERE fromLocationId = X`. Para cuánto entró: `SUM(quantity) WHERE toLocationId = X`.
-
-#### 5. Códigos de ubicación como strings ordenables lexicográficamente
-
-**Decisión**: Los códigos de ubicación siguen el formato `PASILLO-ESTANTERIA-NIVEL` (ej. `A-01-02`). La ruta de picking se genera simplemente con `ORDER BY location.code ASC`.
-
-**Por qué**: Un algoritmo TSP (Travelling Salesman Problem) es overkill para almacenes de <500 ubicaciones. El orden alfabético de los códigos, bien diseñados, ya produce un recorrido eficiente en S (primero toda la columna A de arriba a abajo, luego B, etc.). El jefe de almacén controla la eficiencia del picking simplemente nombrando bien sus ubicaciones.
-
-**Regla para el cliente**: Cuando configures las ubicaciones de un cliente nuevo, usa siempre el formato `[PASILLO]-[ESTANTERIA_2DIGITOS]-[NIVEL_2DIGITOS]`. Ej: `A-01-01`, `A-01-02`, `A-02-01`. Nunca `A1`, `Estantería 1`, ni nombres con tildes.
-
-#### 6. Auth dual: API Key para máquinas, JWT para humanos
-
-**Decisión**: Header `x-api-key` para integraciones (Shopify, etc.), `Authorization: Bearer <JWT>` para usuarios humanos (Clerk).
-
-**Por qué**: Las integraciones no pueden hacer OAuth cada vez. Las API Keys son simples, revocables y auditables. Los humanos necesitan sesiones con roles.
-
-**En desarrollo**: El header `x-dev-tenant-id` actúa como bypass para no necesitar Clerk configurado. **Nunca llegará a producción** — hay un chequeo `process.env.NODE_ENV !== 'production'`.
-
-#### 7. Estructura de rutas: el `orderId` en `WarehouseTask` de recepción
-
-**Problema encontrado**: El modelo `WarehouseTask` tiene un campo `orderId` obligatorio (FK hacia `SalesOrder`). Pero las tareas de recepción (inbound) no tienen pedido de venta — son entradas de proveedor.
-
-**Solución temporal**: En `receipts.ts` se usa `orderId: "receipt-placeholder"`. Esto rompe la FK.
-
-**Solución correcta para Fase 2**: Crear un modelo `InboundReceipt` separado, y hacer `orderId` opcional en `WarehouseTask` (o añadir un campo `referenceType: "ORDER" | "RECEIPT"`). **No olvidar esto al hacer la migración de Hito 2**.
+**Síntoma**: `review_F4.2.md` marcó CP-4 como "en verde" con veredicto `APPROVED`, mientras `impl_F4.2.md` admitía "No se pudo ejecutar `pnpm test`… pendiente de ejecución local".  
+**Causa**: El `implementer` fue cancelado y, por falta de cuota, el `leader` completó los tests **y** firmó la revisión ("fallback por cuota de subagente"). Sin reviewer independiente, CP-4 se convirtió en autofelicitación.  
+**Fix**: (1) `reviewer.md`: `APPROVED` exige pegar la salida literal de `pnpm --filter @wms/api test:coverage`; sin evidencia solo cabe `BLOCKED`. (2) `leader.md`: prohibido el self-review y cualquier fallback por cuota — la feature queda `in_progress` y se reporta al usuario. (3) F4.2 sometida a re-auditoría independiente (`progress/review_F4.2_reaudit.md`).  
+**Lección**: Un sistema de verificación solo vale lo que vale bajo presión. "Verificación estática" o "pendiente de ejecución" **no** es verde; quien implementa nunca revisa.
 
 ---
 
@@ -204,132 +190,6 @@ throw new WmsError('INSUFFICIENT_STOCK', 'Not enough stock', 409, { missing: 3 }
 const body = CreateOrderSchema.parse(request.body);
 // Si falla, el error-handler lo convierte en ApiError { code: 'VALIDATION_ERROR' }
 ```
-
----
-
-## Guía para el Hito 2 — App Expo
-
-### Qué construir
-
-La app móvil con 4 pantallas y el componente de escaneo.
-
-### Decisiones ya tomadas que la app debe respetar
-
-1. **Autenticación**: La app usará JWT de Clerk. El token se guarda en `expo-secure-store` (nunca en AsyncStorage — no es seguro).
-
-2. **Base URL de la API**: Configurar como variable de entorno de Expo (`app.config.js` o `.env` con `EXPO_PUBLIC_API_URL`).
-
-3. **Manejo de escaneo dual (cámara + HID Bluetooth)**:
-   El lector Bluetooth HID simula un teclado físico — envía los caracteres del código de barras seguidos de un `Enter`. La cámara de Expo devuelve el string directamente.
-   
-   ```typescript
-   // El handler onScan debe ser el mismo para ambas fuentes
-   function onScan(scannedCode: string) {
-     // Aquí NO distinguimos si vino de cámara o HID
-     confirmStep({ scannedCode });
-   }
-   
-   // Para HID: usar un TextInput oculto siempre enfocado que captura el "teclado" del lector
-   // Para cámara: expo-camera con onBarcodeScanned
-   ```
-
-4. **Sonido y vibración obligatorios**: Cada escaneo correcto → vibración corta + sonido de "beep". Cada error → vibración larga + sonido de error. El operario trabaja de pie y no mira la pantalla constantemente.
-   ```typescript
-   import * as Haptics from 'expo-haptics';
-   // Éxito:
-   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-   // Error:
-   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-   ```
-
-5. **Modo simulador para desarrollo**: La cámara no funciona en el simulador de iOS/Android. Crear un botón de "Simular escaneo" visible solo en `__DEV__` que permita introducir el código manualmente.
-
-### Pendiente técnico del Hito 1 que afecta al Hito 2
-
-- **Fix obligatorio**: Hacer `orderId` opcional en `WarehouseTask` para las tareas de recepción. Crear migración de Prisma.
-- **Fix obligatorio**: En `receipts.ts`, reemplazar `orderId: "receipt-placeholder"` con un modelo `InboundReceipt` propio, o al menos un campo `receiptId` separado.
-
-### Endpoint que la app usará más
-
-```
-GET  /api/v1/tasks?type=RECEIVING&status=PENDING  → lista de tareas al abrir la pantalla
-POST /api/v1/tasks/:id/start                      → el operario "toma" la tarea
-POST /api/v1/tasks/:id/steps/:stepId/confirm      → cada escaneo confirmado
-POST /api/v1/receipts/:taskId/confirm-line        → cada producto recibido
-```
-
----
-
-## Guía para el Hito 3 — Motor de Pedidos
-
-### Qué construir
-
-La pantalla de Picking guiado en Expo + el endpoint de despacho final + lógica de Webhook outbound.
-
-### Decisiones de diseño para este hito
-
-1. **El picking tiene DOS sub-pasos por step** (no uno):
-   - Sub-paso A: Operario llega a la ubicación → **escanea el QR de la estantería** (valida que está en el lugar correcto)
-   - Sub-paso B: Operario toma el producto → **escanea el barcode del producto** tantas veces como la `expectedQty`
-   
-   La app gestiona este estado localmente (sin llamar a la API en el sub-paso A). Solo llama a la API en el sub-paso B.
-
-2. **Webhook de despacho**: Cuando se ejecuta `POST /orders/:id/dispatch`, el sistema debe emitir un webhook `order.shipped` al e-commerce configurado del tenant. Guardar la URL de webhook y el secret en la tabla `Tenant` o en una tabla `TenantWebhook` separada. El cuerpo del webhook debe incluir `orderId`, `externalId`, `shippedAt` y un HMAC-SHA256 para que el receptor pueda verificar la autenticidad.
-
-3. **El botón "No encuentro el producto"** en la app debe:
-   - Llamar a `POST /tasks/:id/steps/:stepId/confirm` con `exceptionNote: "Producto no encontrado en ubicación"`
-   - El step queda en estado `EXCEPTION` y el operario puede continuar con el siguiente step
-   - El supervisor ve en el dashboard que hay excepciones pendientes de resolver
-
-4. **Finalización del picking → estado PACKED**: Cuando todos los steps de una tarea PICKING están en COMPLETED o EXCEPTION, el sistema automáticamente mueve el pedido a `PACKED`. Esto ya está implementado en `tasks.ts` — no duplicar la lógica.
-
-### Endpoint crítico a implementar en este hito
-
-```
-POST /api/v1/orders/:id/dispatch
-```
-
-Este endpoint ya existe en `orders.ts` pero falta el Webhook outbound. Completarlo en Hito 3.
-
----
-
-## Guía para el Hito 4 — Panel Web + Integraciones
-
-### Qué construir
-
-Dashboard Next.js 14 (App Router) + generador de PDF de QRs + endpoint público para Shopify/WooCommerce.
-
-### Decisiones de diseño
-
-1. **Generador de QR PDF**: Usar `@react-pdf/renderer` + `qrcode` (npm). Cada página del PDF contiene una cuadrícula de QRs, uno por ubicación, con el código impreso debajo. El operario recorta y pega en la estantería. Tamaño recomendado: 5x5 cm.
-
-2. **Autenticación del panel web**: Clerk con `<ClerkProvider>` en el layout raíz de Next.js. El panel web y la API comparten el mismo `CLERK_PUBLISHABLE_KEY`.
-
-3. **Inbound Adapter para Shopify**:
-   El endpoint `POST /api/v1/orders` ya existe y acepta `externalId` y `externalRef`. Para conectar Shopify:
-   - Configurar un Webhook en Shopify `orders/create` → `POST /api/v1/webhooks/shopify`
-   - Verificar la firma HMAC de Shopify antes de procesar
-   - Mapear el formato de Shopify al `CreateOrderInput` y llamar internamente al use case
-   - Crear `apps/api/src/routes/webhooks/shopify.ts` para esto (no mezclar con `orders.ts`)
-
-4. **Vista de Auditoría (Kardex)**:
-   Ya existe `GET /api/v1/inventory/transactions`. El panel solo necesita mostrarlas en una tabla con filtros por producto, fecha y razón. No hay trabajo de backend adicional.
-
-5. **Stack del panel web**:
-   ```
-   apps/web/
-   ├── app/
-   │   ├── layout.tsx       ← ClerkProvider + nav
-   │   ├── page.tsx         ← Dashboard KPIs
-   │   ├── products/        ← CRUD catálogo
-   │   ├── inventory/       ← Stock en vivo
-   │   ├── orders/          ← Monitor de pedidos (Kanban)
-   │   ├── locations/       ← CRUD + Imprimir QR
-   │   └── ledger/          ← Auditoría
-   └── components/
-       ├── QrPdfButton.tsx  ← Genera PDF en el cliente
-       └── KanbanBoard.tsx  ← Pedidos por estado
-   ```
 
 ---
 
