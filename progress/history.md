@@ -157,3 +157,18 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Migración SQL `packages/db/prisma/migrations/20261031010000_tenant_rls/migration.sql` y módulo `@wms/db/rls` habilitando `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` con predicados `USING` y `WITH CHECK` (denegación por defecto ante contexto vacío/nulo) sobre las 10 tablas multi-tenant y resolución controlada de auth (`app.auth_clerk_id`).
   - Puerto hexagonal `TenantContextPort` (`apps/api/src/ports/tenant-context.ts`), caso de uso `executeInTenantContext` (`apps/api/src/use-cases/security/tenant-context.ts`) y adaptador `PrismaTenantContextAdapter` (`withTenantContext` con `SET LOCAL` vía `set_config('app.current_tenant_id', tenantId, true)` compatible con `IsolationLevel.Serializable`, `SELECT ... FOR UPDATE` y reutilización de `TransactionClient` en los casos de uso del Ledger).
   - 171 tests pasando en el monorepo (137 en `@wms/api`) y cobertura de `99.20%` en `use-cases` (`100%` en `security/tenant-context.ts`).
+
+---
+
+## [2026-11-09] Endurecimiento del Sistema Harness (post-análisis)
+- **Motivo**: análisis externo detectó que `F4.2` se cerró con self-review del leader y CP-4 sin tests ejecutados (ver `KNOWLEDGE.md` → Bug #5).
+- **Cambios**:
+  - `.claude/agents/leader.md` pasa a ser la **fuente única** del protocolo; `CLAUDE.md` y `.agents/skills/harness-orchestrator/SKILL.md` solo apuntan a él.
+  - Prohibido el self-review y el fallback por cuota: sin reviewer independiente la feature queda `in_progress`.
+  - `reviewer.md`: `APPROVED` exige salida literal de `pnpm --filter @wms/api test:coverage`; nuevo veredicto `BLOCKED`.
+  - `CHECKPOINTS.md`: CP-4 con evidencia obligatoria; nuevo **CP-6** (higiene: sin duplicados, re-exports huérfanos ni lockfiles ajenos).
+  - `docs/adr/000-template.md` + `docs/adr/README.md` (índice).
+  - `KNOWLEDGE.md` depurado (22 KB → ~15 KB); guías de Hitos 1–4 archivadas en `docs/hitos/`.
+  - Eliminados `package-lock.json` (+ `.gitignore` + guarda en `init.ps1`/`init.sh`), `apps/mobile/src/components/BarcodeScannerView.tsx` y `apps/mobile/src/context/session-context.tsx` (re-exports sin consumidores).
+  - Re-auditoría independiente de `F4.2` → [`progress/review_F4.2_reaudit.md`](./review_F4.2_reaudit.md) con veredicto **`CHANGES_REQUESTED`** (15 hallazgos de seguridad JWT/Clerk, idempotencia concurrente y cobertura). `F4.2` se revierte a `"in_progress"` en `feature_list.json`.
+  - Remediación por el subagente `implementer` ([`progress/impl_F4.2.md`](./impl_F4.2.md)) y re-evaluación por `reviewer` independiente ([`progress/review_F4.2.md`](./review_F4.2.md)) con veredicto **`APPROVED`** (157 tests en `@wms/api`, 0 fallos, 90.54% branches en `integrations`, ADR 003 y migración `@@unique([tenantId, externalId])`). `F4.2` queda formalmente cerrada en `"done"`.
