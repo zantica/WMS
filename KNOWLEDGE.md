@@ -129,6 +129,15 @@
 
 ---
 
+### Bug #6 — Crash silencioso de `turbo@2.11.9` en terminales interactivas de Windows (`STATUS_STACK_BUFFER_OVERRUN`)
+
+**Síntoma**: Al ejecutar `.\init.ps1`, `pnpm test` o `pnpm dev` en una consola interactiva de Windows PowerShell, `turbo` muestra únicamente el aviso de actualización (`v2.11.9 ≫ v2.11.10`) y aborta inmediatamente con `ELIFECYCLE Test failed` (código `-1073740791` / `0xC0000409`). En shells no interactivas (`stdin.isTTY === false`) pasaba sin fallar.  
+**Causa**: En `turbo@2.11.9`, el wrapper JS (`node_modules/turbo/bin/turbo`) inyecta `__TURBO_WINDOWS_CTRL_C_FD=3` cuando `stdin.isTTY` es `true`, pero el binario nativo `turbo.exe` re-ejecuta el binario local sin heredar el descriptor de archivo `3`, provocando un aborto del CRT de Windows al invocar `_get_osfhandle(3)`.  
+**Fix**: Actualizado `turbo` a `^2.11.10` en [`package.json`](./package.json) y [`pnpm-lock.yaml`](./pnpm-lock.yaml).  
+**Lección**: No fijar ni degradar `turbo` a `2.11.9` en entornos Windows.
+
+---
+
 ## Patrones establecidos (no romper)
 
 ### ❌ Nunca hacer esto

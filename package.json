@@ -21,11 +21,11 @@
     "db:seed": "pnpm --filter @wms/db seed"
   },
   "devDependencies": {
-    "turbo": "^2.3.0",
-    "typescript": "^5.6.0",
     "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
     "prettier": "^3.3.0",
-    "eslint": "^9.0.0"
+    "turbo": "^2.11.10",
+    "typescript": "^5.6.0"
   },
   "engines": {
     "node": ">=20.0.0",
