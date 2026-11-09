@@ -10,6 +10,7 @@
 
 import { prisma, type Prisma, type TxReason } from "@wms/db";
 import { WmsError } from "../../plugins/error-handler.js";
+import { getAmbientTenantScope } from "../security/tenant-context.js";
 
 export interface MoveStockParams {
   tenantId: string;
@@ -21,6 +22,7 @@ export interface MoveStockParams {
   referenceId?: string;
   userId?: string;
   notes?: string;
+  tx?: Prisma.TransactionClient | undefined;
 }
 
 /**
@@ -47,89 +49,103 @@ export async function moveStock(params: MoveStockParams): Promise<void> {
     throw new WmsError("VALIDATION_ERROR", "Quantity must be positive", 422);
   }
 
-  await prisma.$transaction(
-    async (tx) => {
-      // ── 1. Descontar de origen (si tiene ubicación de origen) ───────────
-      if (fromLocationId) {
-        // SELECT FOR UPDATE — bloquea la fila para evitar doble gasto concurrente
-        const fromBalance = await tx.$queryRaw<
-          Array<{ id: string; on_hand_qty: number; allocated_qty: number }>
-        >`
-          SELECT id, "onHandQty" as on_hand_qty, "allocatedQty" as allocated_qty
-          FROM inventory_balances
-          WHERE "locationId" = ${fromLocationId}
-            AND "productId" = ${productId}
-            AND "tenantId" = ${tenantId}
-          FOR UPDATE
-        `;
+  const executeMoveStock = async (tx: Prisma.TransactionClient) => {
+    // ── 1. Descontar de origen (si tiene ubicación de origen) ───────────
+    if (fromLocationId) {
+      // SELECT FOR UPDATE — bloquea la fila para evitar doble gasto concurrente
+      const fromBalance = await tx.$queryRaw<
+        Array<{ id: string; on_hand_qty: number; allocated_qty: number }>
+      >`
+        SELECT id, "onHandQty" as on_hand_qty, "allocatedQty" as allocated_qty
+        FROM inventory_balances
+        WHERE "locationId" = ${fromLocationId}
+          AND "productId" = ${productId}
+          AND "tenantId" = ${tenantId}
+        FOR UPDATE
+      `;
 
-        const balance = fromBalance[0];
-        if (!balance) {
-          throw new WmsError(
-            "INSUFFICIENT_STOCK",
-            `No stock found for product ${productId} in location ${fromLocationId}`,
-            409,
-          );
-        }
-
-        const currentQty = Number(balance.on_hand_qty);
-        if (currentQty < quantity) {
-          throw new WmsError(
-            "INSUFFICIENT_STOCK",
-            `Insufficient stock: available ${currentQty}, requested ${quantity}`,
-            409,
-          );
-        }
-
-        await tx.inventoryBalance.update({
-          where: { id: balance.id },
-          data: { onHandQty: { decrement: quantity } },
-        });
+      const balance = fromBalance[0];
+      if (!balance) {
+        throw new WmsError(
+          "INSUFFICIENT_STOCK",
+          `No stock found for product ${productId} in location ${fromLocationId}`,
+          409,
+        );
       }
 
-      // ── 2. Añadir a destino (si tiene ubicación de destino) ─────────────
-      if (toLocationId) {
-        await tx.inventoryBalance.upsert({
-          where: {
-            locationId_productId: {
-              locationId: toLocationId,
-              productId,
-            },
-          },
-          update: {
-            onHandQty: { increment: quantity },
-          },
-          create: {
-            tenantId,
+      const currentQty = Number(balance.on_hand_qty);
+      if (currentQty < quantity) {
+        throw new WmsError(
+          "INSUFFICIENT_STOCK",
+          `Insufficient stock: available ${currentQty}, requested ${quantity}`,
+          409,
+        );
+      }
+
+      await tx.inventoryBalance.update({
+        where: { id: balance.id },
+        data: { onHandQty: { decrement: quantity } },
+      });
+    }
+
+    // ── 2. Añadir a destino (si tiene ubicación de destino) ─────────────
+    if (toLocationId) {
+      await tx.inventoryBalance.upsert({
+        where: {
+          locationId_productId: {
             locationId: toLocationId,
             productId,
-            onHandQty: quantity,
-            allocatedQty: 0,
           },
-        });
-      }
-
-      // ── 3. Registrar en el Ledger (inmutable) ───────────────────────────
-      await tx.inventoryTransaction.create({
-        data: {
+        },
+        update: {
+          onHandQty: { increment: quantity },
+        },
+        create: {
           tenantId,
+          locationId: toLocationId,
           productId,
-          fromLocationId,
-          toLocationId,
-          quantity,
-          reason,
-          referenceId,
-          userId,
-          notes,
+          onHandQty: quantity,
+          allocatedQty: 0,
         },
       });
-    },
-    {
-      // Timeout generoso para operaciones con múltiples pasos
-      timeout: 10_000,
-      // Isolation level por defecto en PostgreSQL es READ COMMITTED
-      // El FOR UPDATE eleva al nivel necesario por fila
-      isolationLevel: "Serializable" as Prisma.TransactionIsolationLevel,
-    },
-  );
+    }
+
+    // ── 3. Registrar en el Ledger (inmutable) ───────────────────────────
+    await tx.inventoryTransaction.create({
+      data: {
+        tenantId,
+        productId,
+        fromLocationId,
+        toLocationId,
+        quantity,
+        reason,
+        referenceId,
+        userId,
+        notes,
+      },
+    });
+  };
+
+  const ambientStore = getAmbientTenantScope<Prisma.TransactionClient>();
+  if (ambientStore && ambientStore.tenantId !== tenantId) {
+    throw new WmsError(
+      "TENANT_MISMATCH",
+      `Active tenant context "${ambientStore.tenantId}" does not match moveStock tenantId "${tenantId}"`,
+      403,
+    );
+  }
+
+  const reusableTx = params.tx ?? ambientStore?.scope;
+  if (reusableTx) {
+    await executeMoveStock(reusableTx);
+    return;
+  }
+
+  await prisma.$transaction(executeMoveStock, {
+    // Timeout generoso para operaciones con múltiples pasos
+    timeout: 10_000,
+    // Isolation level por defecto en PostgreSQL es READ COMMITTED
+    // El FOR UPDATE eleva al nivel necesario por fila
+    isolationLevel: "Serializable" as Prisma.TransactionIsolationLevel,
+  });
 }

@@ -10,12 +10,14 @@
 
 import { prisma, type Prisma } from "@wms/db";
 import { WmsError } from "../../plugins/error-handler.js";
+import { getAmbientTenantScope } from "../security/tenant-context.js";
 
 export interface CancelOrderParams {
   orderId: string;
   tenantId: string;
   userId?: string | undefined;
   reason?: string | undefined;
+  tx?: Prisma.TransactionClient | undefined;
 }
 
 export interface ReleasedAllocation {
@@ -47,158 +49,173 @@ export async function cancelOrder(
 ): Promise<CancelOrderResult> {
   const { orderId, tenantId, userId, reason } = params;
 
-  return await prisma.$transaction(
-    async (tx) => {
-      // ── 1. Cargar pedido y tareas PICKING activas filtrando por tenantId ───
-      const order = await tx.salesOrder.findFirst({
-        where: { id: orderId, tenantId },
-        include: {
-          tasks: {
-            where: {
-              tenantId,
-              type: "PICKING",
-              status: { in: ["PENDING", "IN_PROGRESS", "EXCEPTION"] },
-            },
-            include: {
-              steps: {
-                orderBy: { sequence: "asc" },
-              },
+  const executeCancel = async (
+    tx: Prisma.TransactionClient,
+  ): Promise<CancelOrderResult> => {
+    // ── 1. Cargar pedido y tareas PICKING activas filtrando por tenantId ───
+    const order = await tx.salesOrder.findFirst({
+      where: { id: orderId, tenantId },
+      include: {
+        tasks: {
+          where: {
+            tenantId,
+            type: "PICKING",
+            status: { in: ["PENDING", "IN_PROGRESS", "EXCEPTION"] },
+          },
+          include: {
+            steps: {
+              orderBy: { sequence: "asc" },
             },
           },
         },
-      });
+      },
+    });
 
-      if (!order || order.tenantId !== tenantId) {
-        throw new WmsError(
-          "ORDER_NOT_FOUND",
-          `Order ${orderId} not found`,
-          404,
-        );
-      }
+    if (!order || order.tenantId !== tenantId) {
+      throw new WmsError(
+        "ORDER_NOT_FOUND",
+        `Order ${orderId} not found`,
+        404,
+      );
+    }
 
-      if (!CANCELLABLE_ORDER_STATUSES.has(order.status)) {
-        throw new WmsError(
-          "VALIDATION_ERROR",
-          `Cannot cancel order ${orderId} in status ${order.status}`,
-          409,
-          { orderId, currentStatus: order.status },
-        );
-      }
+    if (!CANCELLABLE_ORDER_STATUSES.has(order.status)) {
+      throw new WmsError(
+        "VALIDATION_ERROR",
+        `Cannot cancel order ${orderId} in status ${order.status}`,
+        409,
+        { orderId, currentStatus: order.status },
+      );
+    }
 
-      const cancelledTaskIds: string[] = [];
-      const releasedAllocations: ReleasedAllocation[] = [];
+    const cancelledTaskIds: string[] = [];
+    const releasedAllocations: ReleasedAllocation[] = [];
 
-      // ── 2. Liberar reservas pendientes de las tareas de PICKING activas ───
-      for (const task of order.tasks) {
-        for (const step of task.steps) {
-          if (step.status === "COMPLETED" || step.status === "SKIPPED") {
-            continue;
-          }
-
-          const remainingToRelease = Math.max(
-            0,
-            Number(step.expectedQty) - Number(step.scannedQty),
-          );
-
-          if (remainingToRelease > 0) {
-            // Bloquear fila de balance con SELECT ... FOR UPDATE acotado por tenant_id
-            const lockedBalances = await tx.$queryRaw<
-              Array<{
-                id: string;
-                on_hand_qty: number;
-                allocated_qty: number;
-              }>
-            >`
-              SELECT id, "onHandQty" as on_hand_qty, "allocatedQty" as allocated_qty
-              FROM inventory_balances
-              WHERE "tenantId" = ${tenantId}
-                AND "locationId" = ${step.locationId}
-                AND "productId" = ${step.productId}
-              FOR UPDATE
-            `;
-
-            const balance = lockedBalances[0];
-            if (balance) {
-              const currentAllocated = Math.max(
-                0,
-                Number(balance.allocated_qty),
-              );
-              const toRelease = Math.min(currentAllocated, remainingToRelease);
-
-              if (toRelease > 0) {
-                await tx.inventoryBalance.update({
-                  where: { id: balance.id },
-                  data: {
-                    allocatedQty: { decrement: toRelease },
-                  },
-                });
-
-                await tx.inventoryTransaction.create({
-                  data: {
-                    tenantId,
-                    productId: step.productId,
-                    fromLocationId: step.locationId,
-                    quantity: toRelease,
-                    reason: "ALLOCATION_CANCEL",
-                    referenceId: order.id,
-                    userId: userId ?? null,
-                    notes: reason
-                      ? `Order cancelled (${order.externalRef ?? order.id}): ${reason}`
-                      : `Allocation cancelled for order ${order.externalRef ?? order.id}`,
-                  },
-                });
-
-                releasedAllocations.push({
-                  productId: step.productId,
-                  locationId: step.locationId,
-                  quantity: toRelease,
-                });
-              }
-            }
-          }
-
-          await tx.taskStep.update({
-            where: { id: step.id },
-            data: { status: "SKIPPED" },
-          });
+    // ── 2. Liberar reservas pendientes de las tareas de PICKING activas ───
+    for (const task of order.tasks) {
+      for (const step of task.steps) {
+        if (step.status === "COMPLETED" || step.status === "SKIPPED") {
+          continue;
         }
 
-        await tx.warehouseTask.update({
-          where: { id: task.id },
-          data: {
-            status: "CANCELLED",
-            completedAt: new Date(),
-          },
-        });
+        const remainingToRelease = Math.max(
+          0,
+          Number(step.expectedQty) - Number(step.scannedQty),
+        );
 
-        cancelledTaskIds.push(task.id);
+        if (remainingToRelease > 0) {
+          // Bloquear fila de balance con SELECT ... FOR UPDATE acotado por tenant_id
+          const lockedBalances = await tx.$queryRaw<
+            Array<{
+              id: string;
+              on_hand_qty: number;
+              allocated_qty: number;
+            }>
+          >`
+            SELECT id, "onHandQty" as on_hand_qty, "allocatedQty" as allocated_qty
+            FROM inventory_balances
+            WHERE "tenantId" = ${tenantId}
+              AND "locationId" = ${step.locationId}
+              AND "productId" = ${step.productId}
+            FOR UPDATE
+          `;
+
+          const balance = lockedBalances[0];
+          if (balance) {
+            const currentAllocated = Math.max(
+              0,
+              Number(balance.allocated_qty),
+            );
+            const toRelease = Math.min(currentAllocated, remainingToRelease);
+
+            if (toRelease > 0) {
+              await tx.inventoryBalance.update({
+                where: { id: balance.id },
+                data: {
+                  allocatedQty: { decrement: toRelease },
+                },
+              });
+
+              await tx.inventoryTransaction.create({
+                data: {
+                  tenantId,
+                  productId: step.productId,
+                  fromLocationId: step.locationId,
+                  quantity: toRelease,
+                  reason: "ALLOCATION_CANCEL",
+                  referenceId: order.id,
+                  userId: userId ?? null,
+                  notes: reason
+                    ? `Order cancelled (${order.externalRef ?? order.id}): ${reason}`
+                    : `Allocation cancelled for order ${order.externalRef ?? order.id}`,
+                },
+              });
+
+              releasedAllocations.push({
+                productId: step.productId,
+                locationId: step.locationId,
+                quantity: toRelease,
+              });
+            }
+          }
+        }
+
+        await tx.taskStep.update({
+          where: { id: step.id },
+          data: { status: "SKIPPED" },
+        });
       }
 
-      // ── 3. Actualizar estado del pedido a CANCELLED ───────────────────────
-      const updatedNotes = reason
-        ? order.notes
-          ? `${order.notes} | Cancelled: ${reason}`
-          : `Cancelled: ${reason}`
-        : (order.notes ?? null);
-
-      await tx.salesOrder.update({
-        where: { id: order.id },
+      await tx.warehouseTask.update({
+        where: { id: task.id },
         data: {
           status: "CANCELLED",
-          notes: updatedNotes,
+          completedAt: new Date(),
         },
       });
 
-      return {
-        orderId: order.id,
+      cancelledTaskIds.push(task.id);
+    }
+
+    // ── 3. Actualizar estado del pedido a CANCELLED ───────────────────────
+    const updatedNotes = reason
+      ? order.notes
+        ? `${order.notes} | Cancelled: ${reason}`
+        : `Cancelled: ${reason}`
+      : (order.notes ?? null);
+
+    await tx.salesOrder.update({
+      where: { id: order.id },
+      data: {
         status: "CANCELLED",
-        cancelledTaskIds,
-        releasedAllocations,
-      };
-    },
-    {
-      timeout: 15_000,
-      isolationLevel: "Serializable" as Prisma.TransactionIsolationLevel,
-    },
-  );
+        notes: updatedNotes,
+      },
+    });
+
+    return {
+      orderId: order.id,
+      status: "CANCELLED",
+      cancelledTaskIds,
+      releasedAllocations,
+    };
+  };
+
+  const ambientStore = getAmbientTenantScope<Prisma.TransactionClient>();
+  if (ambientStore && ambientStore.tenantId !== tenantId) {
+    throw new WmsError(
+      "TENANT_MISMATCH",
+      `Active tenant context "${ambientStore.tenantId}" does not match cancelOrder tenantId "${tenantId}"`,
+      403,
+    );
+  }
+
+  const reusableTx = params.tx ?? ambientStore?.scope;
+  if (reusableTx) {
+    return await executeCancel(reusableTx);
+  }
+
+  return await prisma.$transaction(executeCancel, {
+    timeout: 15_000,
+    isolationLevel: "Serializable" as Prisma.TransactionIsolationLevel,
+  });
 }

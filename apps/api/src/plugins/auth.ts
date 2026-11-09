@@ -6,8 +6,68 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { prisma } from "@wms/db";
-import type { UserRole } from "@wms/shared-types";
+import { AUTH_CLERK_LOOKUP_GUC, type UserRole } from "@wms/shared-types";
 import { WmsError } from "./error-handler.js";
+
+/**
+ * Resuelve de forma controlada un usuario por `clerkId` durante el handshake inicial de autenticación.
+ * Cuando `prisma.$transaction` y `$queryRaw` están disponibles (ejecución contra PostgreSQL con FORCE RLS),
+ * fija `SET LOCAL app.auth_clerk_id = <clerkId>` dentro de una transacción acotada para que la política RLS
+ * de `users` permita únicamente leer la fila cuyo `clerkId` coincide exactamente con el token verificado.
+ */
+export async function lookupUserByClerkIdForAuth(clerkId: string): Promise<{
+  id: string;
+  tenantId: string;
+  role: UserRole;
+  isActive: boolean;
+} | null> {
+  const client = prisma as unknown as {
+    $transaction?: <T>(
+      fn: (tx: {
+        $queryRaw?: (
+          strings: TemplateStringsArray,
+          ...values: unknown[]
+        ) => Promise<unknown>;
+        user?: {
+          findUnique: (args: {
+            where: { clerkId: string };
+          }) => Promise<{
+            id: string;
+            tenantId: string;
+            role: UserRole;
+            isActive: boolean;
+          } | null>;
+        };
+      }) => Promise<T>,
+    ) => Promise<T>;
+    user: {
+      findUnique: (args: {
+        where: { clerkId: string };
+      }) => Promise<{
+        id: string;
+        tenantId: string;
+        role: UserRole;
+        isActive: boolean;
+      } | null>;
+    };
+  };
+
+  if (typeof client.$transaction === "function") {
+    return await client.$transaction(async (tx) => {
+      if (typeof tx.$queryRaw === "function") {
+        await tx.$queryRaw`SELECT set_config(${AUTH_CLERK_LOOKUP_GUC}, ${clerkId}, true)`;
+      }
+      const userDelegate = tx.user ?? client.user;
+      return await userDelegate.findUnique({
+        where: { clerkId },
+      });
+    });
+  }
+
+  return await client.user.findUnique({
+    where: { clerkId },
+  });
+}
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -257,9 +317,7 @@ export const authPlugin = fp(async (app) => {
       const claims = verifyJwtToken(token);
 
       if (claims.sub) {
-        const user = await prisma.user.findUnique({
-          where: { clerkId: claims.sub },
-        });
+        const user = await lookupUserByClerkIdForAuth(claims.sub);
 
         if (user) {
           if (!user.isActive) {

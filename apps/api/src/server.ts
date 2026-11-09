@@ -11,6 +11,10 @@ import swaggerUi from "@fastify/swagger-ui";
 
 import { errorHandler } from "./plugins/error-handler.js";
 import { authPlugin } from "./plugins/auth.js";
+import { observabilityPlugin } from "./plugins/observability.js";
+import { PrismaTenantContextAdapter } from "./adapters/prisma-tenant-context.js";
+import type { DiagnosticsStore } from "./ports/diagnostics-store.js";
+import type { TenantContextPort } from "./ports/tenant-context.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { productRoutes } from "./routes/products.js";
 import { locationRoutes } from "./routes/locations.js";
@@ -18,21 +22,43 @@ import { orderRoutes } from "./routes/orders.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { receiptRoutes } from "./routes/receipts.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { diagnosticsRoutes } from "./routes/v1/diagnostics.js";
 import { healthRoute } from "./routes/health.js";
 
 const PORT = Number(process.env["PORT"] ?? 3001);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
 
-async function buildServer() {
+declare module "fastify" {
+  interface FastifyInstance {
+    tenantContext: TenantContextPort;
+  }
+}
+
+export interface BuildServerOptions {
+  diagnosticsStore?: DiagnosticsStore | undefined;
+  tenantContext?: TenantContextPort | undefined;
+  enableLogger?: boolean | undefined;
+}
+
+export async function buildServer(options: BuildServerOptions = {}) {
   const app = Fastify({
-    logger: {
-      level: process.env["NODE_ENV"] === "production" ? "info" : "debug",
-      transport:
-        process.env["NODE_ENV"] !== "production"
-          ? { target: "pino-pretty" }
-          : undefined,
-    },
+    logger:
+      options.enableLogger === false
+        ? false
+        : {
+            level: process.env["NODE_ENV"] === "production" ? "info" : "debug",
+            transport:
+              process.env["NODE_ENV"] !== "production" &&
+              process.env["NODE_ENV"] !== "test"
+                ? { target: "pino-pretty" }
+                : undefined,
+          },
   });
+
+  app.decorate(
+    "tenantContext",
+    options.tenantContext ?? new PrismaTenantContextAdapter(),
+  );
 
   // ── Seguridad ──────────────────────────────────────────────
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -63,6 +89,7 @@ async function buildServer() {
         { name: "Orders", description: "Pedidos de venta, asignación y despacho" },
         { name: "Receipts", description: "Recepción de mercancía de proveedores (Inbound)" },
         { name: "Tasks", description: "Tareas guiadas de almacén (Picking, Putaway)" },
+        { name: "Diagnostics", description: "Observabilidad, trazabilidad y diagnóstico de errores por tenant" },
         { name: "Health", description: "Estado y monitorización del servicio" },
       ],
       components: {
@@ -85,6 +112,9 @@ async function buildServer() {
   });
 
   // ── Plugins de aplicación ─────────────────────────────────
+  await app.register(observabilityPlugin, {
+    diagnosticsStore: options.diagnosticsStore,
+  });
   await app.register(errorHandler);
   await app.register(authPlugin);
 
@@ -97,6 +127,7 @@ async function buildServer() {
   await app.register(taskRoutes, { prefix: "/api/v1/tasks" });
   await app.register(receiptRoutes, { prefix: "/api/v1/receipts" });
   await app.register(webhookRoutes, { prefix: "/api/v1/webhooks" });
+  await app.register(diagnosticsRoutes, { prefix: "/api/v1/diagnostics" });
 
   return app;
 }
@@ -114,4 +145,6 @@ async function main() {
   }
 }
 
-main();
+if (process.env["NODE_ENV"] !== "test" && !process.env["VITEST"]) {
+  void main();
+}
