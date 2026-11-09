@@ -33,7 +33,30 @@ const IngestExternalOrderWebhookSchema = z.object({
   lines: z.array(WebhookOrderLineSchema).min(1),
 });
 
+declare module "fastify" {
+  interface FastifyRequest {
+    rawBody?: string | undefined;
+  }
+}
+
 export const webhookRoutes: FastifyPluginAsync = async (app) => {
+  // Captura el raw body como string antes de parsear JSON para verificación criptográfica HMAC estricta
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (req, body, done) => {
+      try {
+        const rawString =
+          typeof body === "string" ? body : body.toString("utf8");
+        req.rawBody = rawString;
+        const parsed = JSON.parse(rawString);
+        done(null, parsed);
+      } catch (err: unknown) {
+        done(err as Error, undefined);
+      }
+    },
+  );
+
   // POST /api/v1/webhooks/orders — Ingesta idempotente de pedidos desde E-commerce / ERP
   app.post(
     "/orders",
@@ -49,17 +72,44 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
       request,
       reply,
     ): Promise<ApiResponse<IngestExternalOrderResult>> => {
+      const isProduction = process.env["NODE_ENV"] === "production";
       const sharedSecret = process.env["WEBHOOK_SHARED_SECRET"];
-      if (sharedSecret) {
-        const signatureHeader = request.headers["x-webhook-signature"] as
-          | string
-          | undefined;
-        const rawBody =
-          typeof request.body === "string"
-            ? request.body
-            : JSON.stringify(request.body ?? {});
 
-        if (!verifyWebhookSignature(rawBody, signatureHeader, sharedSecret)) {
+      if (isProduction && (!sharedSecret || !sharedSecret.trim())) {
+        throw new WmsError(
+          "CONFIGURATION_ERROR",
+          "WEBHOOK_SHARED_SECRET environment variable is mandatory in production",
+          500,
+        );
+      }
+
+      if (sharedSecret) {
+        const signatureHeader =
+          (request.headers["x-webhook-signature"] as string | undefined) ??
+          (request.headers["x-wms-signature"] as string | undefined);
+
+        if (!signatureHeader) {
+          throw new WmsError(
+            "UNAUTHORIZED",
+            "Missing webhook signature header",
+            401,
+          );
+        }
+
+        const rawBody =
+          request.rawBody ??
+          (typeof request.body === "string"
+            ? request.body
+            : JSON.stringify(request.body ?? {}));
+
+        if (
+          !verifyWebhookSignature(
+            rawBody,
+            signatureHeader,
+            sharedSecret,
+            isProduction,
+          )
+        ) {
           throw new WmsError(
             "UNAUTHORIZED",
             "Invalid webhook signature",

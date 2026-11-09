@@ -12,8 +12,6 @@ import type {
   OrderShippedWebhookPayload,
 } from "@wms/shared-types";
 
-export type { OrderShippedWebhookLine, OrderShippedWebhookPayload };
-
 export interface NotifyOrderShippedLineInput {
   productId: string;
   sku?: string | undefined;
@@ -31,6 +29,7 @@ export interface NotifyOrderShippedParams {
   lines: NotifyOrderShippedLineInput[];
   webhookUrl?: string | undefined;
   secret?: string | undefined;
+  isProduction?: boolean | undefined;
   fetchImpl?: typeof fetch | undefined;
 }
 
@@ -43,19 +42,30 @@ export interface NotifyOrderShippedResult {
   error?: string | undefined;
 }
 
-function resolveWebhookSecret(explicitSecret?: string): string {
-  return (
-    explicitSecret ??
-    process.env["WEBHOOK_SHARED_SECRET"] ??
-    "wms-dev-webhook-secret"
-  );
+export function resolveWebhookSecret(
+  explicitSecret?: string,
+  isProduction?: boolean,
+): string {
+  if (explicitSecret && explicitSecret.trim().length > 0) {
+    return explicitSecret.trim();
+  }
+  if (isProduction) {
+    throw new Error(
+      "WEBHOOK_SHARED_SECRET environment variable is mandatory in production",
+    );
+  }
+  return "wms-dev-webhook-secret";
 }
 
 /**
  * Calcula la firma HMAC-SHA256 en formato `sha256=<hex>` sobre el cuerpo JSON serializado.
  */
-export function signWebhookPayload(rawBody: string, secret?: string): string {
-  const resolvedSecret = resolveWebhookSecret(secret);
+export function signWebhookPayload(
+  rawBody: string,
+  secret?: string,
+  isProduction?: boolean,
+): string {
+  const resolvedSecret = resolveWebhookSecret(secret, isProduction);
   const digest = createHmac("sha256", resolvedSecret)
     .update(rawBody, "utf8")
     .digest("hex");
@@ -69,12 +79,13 @@ export function verifyWebhookSignature(
   rawBody: string,
   signatureHeader: string | undefined,
   secret?: string,
+  isProduction?: boolean,
 ): boolean {
   if (!signatureHeader || !signatureHeader.trim()) {
     return false;
   }
 
-  const expected = signWebhookPayload(rawBody, secret);
+  const expected = signWebhookPayload(rawBody, secret, isProduction);
   const trimmed = signatureHeader.trim();
   const normalizedActual = trimmed.startsWith("sha256=")
     ? trimmed
@@ -100,7 +111,9 @@ export async function notifyOrderShipped(
   const shippedAtIso =
     params.shippedAt instanceof Date
       ? params.shippedAt.toISOString()
-      : (params.shippedAt ?? new Date().toISOString());
+      : typeof params.shippedAt === "string" && params.shippedAt.trim().length > 0
+        ? params.shippedAt
+        : new Date().toISOString();
 
   const payload: OrderShippedWebhookPayload = {
     event: "order.shipped",
@@ -119,9 +132,12 @@ export async function notifyOrderShipped(
   };
 
   const rawBody = JSON.stringify(payload);
-  const signature = signWebhookPayload(rawBody, params.secret);
-  const targetUrl =
-    params.webhookUrl ?? process.env["WEBHOOK_OUTBOUND_URL"] ?? "";
+  const signature = signWebhookPayload(
+    rawBody,
+    params.secret,
+    params.isProduction,
+  );
+  const targetUrl = params.webhookUrl ?? "";
 
   if (!targetUrl.trim()) {
     return {
@@ -136,6 +152,7 @@ export async function notifyOrderShipped(
   const fetchFn = params.fetchImpl ?? globalThis.fetch;
 
   try {
+    const signal = AbortSignal.timeout(5000);
     const response = await fetchFn(targetUrl, {
       method: "POST",
       headers: {
@@ -144,6 +161,7 @@ export async function notifyOrderShipped(
         "x-wms-signature": signature,
       },
       body: rawBody,
+      signal,
     });
 
     if (!response.ok) {

@@ -11,6 +11,10 @@ import { notifyOrderShipped } from "../use-cases/integrations/notify-order-shipp
 import { WmsError } from "../plugins/error-handler.js";
 import type { ApiResponse, SalesOrderDTO } from "@wms/shared-types";
 
+const OrderParamsSchema = z.object({
+  id: z.string().trim().min(1),
+});
+
 const CancelOrderSchema = z
   .object({
     reason: z.string().trim().min(1).optional(),
@@ -172,27 +176,38 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request) => {
-      const order = await prisma.salesOrder.findFirst({
-        where: { id: request.params.id, tenantId: request.tenantId },
-        include: { lines: true },
+      const { id } = OrderParamsSchema.parse(request.params);
+
+      // Transición atómica filtrando por id, tenantId y estado PACKED (evita race conditions)
+      const updateResult = await prisma.salesOrder.updateMany({
+        where: { id, tenantId: request.tenantId, status: "PACKED" },
+        data: { status: "SHIPPED" },
       });
 
-      if (!order) {
-        throw new WmsError("ORDER_NOT_FOUND", `Order ${request.params.id} not found`, 404);
-      }
+      if (updateResult.count === 0) {
+        const existing = await prisma.salesOrder.findFirst({
+          where: { id, tenantId: request.tenantId },
+        });
 
-      if (order.status !== "PACKED") {
+        if (!existing) {
+          throw new WmsError("ORDER_NOT_FOUND", `Order ${id} not found`, 404);
+        }
+
         throw new WmsError(
           "VALIDATION_ERROR",
-          `Only PACKED orders can be dispatched. Current status: ${order.status}`,
+          `Only PACKED orders can be dispatched. Current status: ${existing.status}`,
           409,
         );
       }
 
-      await prisma.salesOrder.update({
-        where: { id: order.id },
-        data: { status: "SHIPPED" },
+      const order = await prisma.salesOrder.findFirst({
+        where: { id, tenantId: request.tenantId },
+        include: { lines: true },
       });
+
+      if (!order) {
+        throw new WmsError("ORDER_NOT_FOUND", `Order ${id} not found`, 404);
+      }
 
       const webhookResult = await notifyOrderShipped({
         orderId: order.id,
@@ -200,6 +215,9 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
         warehouseId: order.warehouseId,
         externalId: order.externalId,
         externalRef: order.externalRef,
+        webhookUrl: process.env["WEBHOOK_OUTBOUND_URL"],
+        secret: process.env["WEBHOOK_SHARED_SECRET"],
+        isProduction: process.env["NODE_ENV"] === "production",
         lines: order.lines.map((line) => ({
           productId: line.productId,
           requestedQty: Number(line.requestedQty),

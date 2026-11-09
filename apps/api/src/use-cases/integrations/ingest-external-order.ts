@@ -11,25 +11,15 @@
 import { prisma } from "@wms/db";
 import type {
   ExternalOrderLineInput,
+  IngestExternalOrderInput,
   IngestExternalOrderResult,
   OrderStatus,
 } from "@wms/shared-types";
 import { WmsError } from "../../plugins/error-handler.js";
 import { allocateOrder } from "../inventory/allocate-order.js";
 
-export type { ExternalOrderLineInput, IngestExternalOrderResult };
-
-export interface IngestExternalOrderParams {
+export interface IngestExternalOrderParams extends IngestExternalOrderInput {
   tenantId: string;
-  warehouseId: string;
-  externalId: string;
-  externalRef?: string | undefined;
-  customerName?: string | undefined;
-  customerEmail?: string | undefined;
-  priority?: number | undefined;
-  notes?: string | undefined;
-  autoAllocate?: boolean | undefined;
-  lines: ExternalOrderLineInput[];
 }
 
 interface ResolvedOrderLine {
@@ -142,45 +132,82 @@ export async function ingestExternalOrder(
     });
   }
 
-  // ── 4. Crear el SalesOrder en estado PENDING ─────────────────────────────
-  const created = await prisma.salesOrder.create({
-    data: {
-      tenantId,
-      warehouseId,
-      externalId,
-      externalRef: params.externalRef ?? null,
-      customerName: params.customerName ?? null,
-      customerEmail: params.customerEmail ?? null,
-      priority: params.priority ?? 0,
-      notes: params.notes ?? null,
-      status: "PENDING",
-      lines: {
-        create: resolvedLines.map((line) => ({
-          productId: line.productId,
-          requestedQty: line.requestedQty,
-          ...(line.unitPrice !== undefined ? { unitPrice: line.unitPrice } : {}),
-        })),
+  // ── 4. Crear el SalesOrder en estado PENDING con captura de P2002 (concurrencia TOCTOU) ──
+  let created;
+  try {
+    created = await prisma.salesOrder.create({
+      data: {
+        tenantId,
+        warehouseId,
+        externalId,
+        externalRef: params.externalRef ?? null,
+        customerName: params.customerName ?? null,
+        customerEmail: params.customerEmail ?? null,
+        priority: params.priority ?? 0,
+        notes: params.notes ?? null,
+        status: "PENDING",
+        lines: {
+          create: resolvedLines.map((line) => ({
+            productId: line.productId,
+            requestedQty: line.requestedQty,
+            ...(line.unitPrice !== undefined ? { unitPrice: line.unitPrice } : {}),
+          })),
+        },
       },
-    },
-    include: {
-      lines: { include: { product: { select: { sku: true, name: true } } } },
-    },
-  });
+      include: {
+        lines: { include: { product: { select: { sku: true, name: true } } } },
+      },
+    });
+  } catch (error: unknown) {
+    // Si dos llamadas concurrentes intentaron registrar el mismo externalId simultáneamente
+    const prismaError = error as { code?: string };
+    if (prismaError?.code === "P2002") {
+      const existingAfterRace = await prisma.salesOrder.findFirst({
+        where: { tenantId, externalId },
+      });
+      if (existingAfterRace) {
+        return {
+          orderId: existingAfterRace.id,
+          externalId,
+          status: existingAfterRace.status as OrderStatus,
+          idempotentReplay: true,
+          allocatedTaskId: null,
+        };
+      }
+    }
+    throw error;
+  }
 
   // ── 5. Reserva automática opcional (autoAllocate) ────────────────────────
+  // Si la reserva falla (p.ej. stock insuficiente), el pedido se conserva en PENDING
+  // y se reporta `allocationError` para que el sistema externo o supervisor intervenga.
   if (params.autoAllocate === true) {
-    const allocatedTaskId = await allocateOrder({
-      orderId: created.id,
-      tenantId,
-    });
+    try {
+      const allocatedTaskId = await allocateOrder({
+        orderId: created.id,
+        tenantId,
+      });
 
-    return {
-      orderId: created.id,
-      externalId,
-      status: "ALLOCATED",
-      idempotentReplay: false,
-      allocatedTaskId,
-    };
+      return {
+        orderId: created.id,
+        externalId,
+        status: "ALLOCATED",
+        idempotentReplay: false,
+        allocatedTaskId,
+      };
+    } catch (allocError: unknown) {
+      const message =
+        allocError instanceof Error ? allocError.message : String(allocError);
+
+      return {
+        orderId: created.id,
+        externalId,
+        status: "PENDING",
+        idempotentReplay: false,
+        allocatedTaskId: null,
+        allocationError: message,
+      };
+    }
   }
 
   return {
