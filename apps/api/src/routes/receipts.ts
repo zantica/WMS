@@ -24,6 +24,7 @@ const ConfirmReceiptLineSchema = z.object({
   productId: z.string().min(1),
   scannedQty: z.number().positive(),
   barcode: z.string().optional(), // Para validación extra por cámara
+  idempotencyKey: z.string().optional(),
 });
 
 export const receiptRoutes: FastifyPluginAsync = async (app) => {
@@ -119,6 +120,10 @@ export const receiptRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const body = ConfirmReceiptLineSchema.parse(request.body);
       const { taskId } = request.params;
+      const idempotencyKey =
+        body.idempotencyKey ??
+        (request.headers["idempotency-key"] as string | undefined) ??
+        (request.headers["x-idempotency-key"] as string | undefined);
 
       const result = await confirmReceiptLine({
         taskId,
@@ -127,6 +132,7 @@ export const receiptRoutes: FastifyPluginAsync = async (app) => {
         scannedQty: body.scannedQty,
         barcode: body.barcode,
         userId: request.userId,
+        idempotencyKey,
       });
 
       return reply.send({

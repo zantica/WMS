@@ -9,6 +9,7 @@ import { WmsError } from "../../../plugins/error-handler.js";
 import { confirmReceiptLine } from "../confirm-receipt-line.js";
 import { moveStock } from "../../inventory/move-stock.js";
 import { createPutawayTask } from "../../inventory/create-putaway-task.js";
+import { InMemoryIdempotencyStore } from "../../../adapters/in-memory-idempotency-store.js";
 
 const mockPrisma = {
   warehouseTask: {
@@ -396,6 +397,55 @@ describe("confirmReceiptLine — Confirmación de línea de recepción (RECEIVIN
         putawayTaskId: "task-putaway-1",
         remainingQty: 0,
       });
+    });
+  });
+
+  // ── Hito 6 (F6.1): Idempotencia Transaccional ──────────────────────────────
+  describe("Idempotencia con IdempotencyStore (F6.1)", () => {
+    it("devuelve ALREADY_APPLIED sin duplicar moveStock en confirmación de recepción", async () => {
+      const store = new InMemoryIdempotencyStore();
+
+      mockPrisma.warehouseTask.findFirst.mockResolvedValueOnce({
+        ...BASE_RECEIVING_TASK,
+        steps: [
+          {
+            ...BASE_RECEIVING_TASK.steps[0]!,
+            scannedQty: 0,
+          },
+        ],
+      });
+
+      mockPrisma.taskStep.update.mockResolvedValueOnce({});
+
+      // Primera llamada: APPLIED
+      const firstResult = await confirmReceiptLine({
+        taskId: "task-rec-1",
+        tenantId: "tenant-1",
+        productId: "product-1",
+        scannedQty: 5,
+        idempotencyKey: "idemp-key-rec-001",
+        idempotencyStore: store,
+      });
+
+      expect(firstResult.idempotencyStatus).toBe("APPLIED");
+      expect(firstResult.scannedQty).toBe(5);
+      expect(moveStock).toHaveBeenCalledTimes(1);
+
+      // Segunda llamada con la misma clave: ALREADY_APPLIED
+      const secondResult = await confirmReceiptLine({
+        taskId: "task-rec-1",
+        tenantId: "tenant-1",
+        productId: "product-1",
+        scannedQty: 5,
+        idempotencyKey: "idemp-key-rec-001",
+        idempotencyStore: store,
+      });
+
+      expect(secondResult.idempotencyStatus).toBe("ALREADY_APPLIED");
+      expect(secondResult.scannedQty).toBe(5);
+
+      // moveStock no se ejecutó una segunda vez
+      expect(moveStock).toHaveBeenCalledTimes(1);
     });
   });
 });

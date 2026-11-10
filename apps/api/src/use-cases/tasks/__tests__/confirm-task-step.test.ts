@@ -10,6 +10,7 @@ import { WmsError } from "../../../plugins/error-handler.js";
 import { confirmTaskStep } from "../confirm-task-step.js";
 import { handlePickingException } from "../../inventory/handle-picking-exception.js";
 import { moveStock } from "../../inventory/move-stock.js";
+import { InMemoryIdempotencyStore } from "../../../adapters/in-memory-idempotency-store.js";
 
 const mockPrisma = {
   warehouseTask: {
@@ -685,6 +686,78 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
         taskStatus: "COMPLETED",
         taskComplete: true,
       });
+    });
+  });
+
+  // ── Hito 6 (F6.1): Idempotencia Transaccional ──────────────────────────────
+  describe("Idempotencia con IdempotencyStore (F6.1)", () => {
+    it("devuelve ALREADY_APPLIED sin re-ejecutar moveStock en llamadas duplicadas", async () => {
+      const store = new InMemoryIdempotencyStore();
+
+      mockPrisma.warehouseTask.findFirst.mockResolvedValueOnce({
+        id: "task-put-idemp",
+        tenantId: "tenant-1",
+        type: "PUTAWAY",
+        status: "IN_PROGRESS",
+        steps: [
+          {
+            id: "step-put-1",
+            taskId: "task-put-idemp",
+            locationId: "loc-storage-1",
+            productId: "prod-1",
+            expectedQty: 5,
+            scannedQty: 0,
+            status: "PENDING",
+            location: { code: "STORAGE-A1", warehouseId: "wh-1" },
+            product: { sku: "SKU-PUT", barcode: "BAR-PUT" },
+          },
+        ],
+      });
+
+      mockPrisma.location.findFirst.mockResolvedValueOnce({
+        id: "loc-rec-1",
+        code: "REC-01",
+        type: "RECEIVING",
+      });
+
+      mockPrisma.taskStep.update.mockResolvedValueOnce({});
+      mockPrisma.taskStep.findMany.mockResolvedValueOnce([
+        { id: "step-put-1", status: "COMPLETED" },
+      ]);
+      mockPrisma.warehouseTask.update.mockResolvedValueOnce({});
+
+      // Primera llamada: debe aplicar y guardar
+      const firstResult = await confirmTaskStep({
+        taskId: "task-put-idemp",
+        stepId: "step-put-1",
+        tenantId: "tenant-1",
+        scannedCode: "BAR-PUT",
+        quantity: 5,
+        idempotencyKey: "idemp-key-step-001",
+        idempotencyStore: store,
+      });
+
+      expect(firstResult.idempotencyStatus).toBe("APPLIED");
+      expect(firstResult.stepStatus).toBe("COMPLETED");
+      expect(moveStock).toHaveBeenCalledTimes(1);
+
+      // Segunda llamada con la misma clave: debe devolver ALREADY_APPLIED inmediatamente
+      const secondResult = await confirmTaskStep({
+        taskId: "task-put-idemp",
+        stepId: "step-put-1",
+        tenantId: "tenant-1",
+        scannedCode: "BAR-PUT",
+        quantity: 5,
+        idempotencyKey: "idemp-key-step-001",
+        idempotencyStore: store,
+      });
+
+      expect(secondResult.idempotencyStatus).toBe("ALREADY_APPLIED");
+      expect(secondResult.stepStatus).toBe("COMPLETED");
+      expect(secondResult.scannedQty).toBe(5);
+
+      // moveStock NO fue llamado una segunda vez
+      expect(moveStock).toHaveBeenCalledTimes(1);
     });
   });
 });

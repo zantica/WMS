@@ -6,14 +6,27 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { prisma } from "@wms/db";
 import { confirmTaskStep } from "../use-cases/tasks/confirm-task-step.js";
+import { syncTaskBatch } from "../use-cases/tasks/sync-task-batch.js";
 import { WmsError } from "../plugins/error-handler.js";
-import type { ApiResponse, WarehouseTaskDTO } from "@wms/shared-types";
+import type { ApiResponse, WarehouseTaskDTO, SyncTaskBatchResult } from "@wms/shared-types";
 
 const ConfirmStepSchema = z.object({
   scannedCode: z.string().min(1), // Código escaneado (barcode producto o code ubicación)
   quantity: z.number().positive().optional(),
   reportException: z.boolean().optional(),
   exceptionNote: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+});
+
+const SyncBatchItemSchema = z.object({
+  idempotencyKey: z.string().min(1),
+  action: z.enum(["CONFIRM_STEP", "CONFIRM_RECEIPT_LINE"]),
+  occurredAt: z.string().min(1),
+  payload: z.record(z.unknown()),
+});
+
+const SyncBatchSchema = z.object({
+  items: z.array(SyncBatchItemSchema).min(1).max(100),
 });
 
 export const taskRoutes: FastifyPluginAsync = async (app) => {
@@ -140,6 +153,10 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const body = ConfirmStepSchema.parse(request.body);
+      const idempotencyKey =
+        body.idempotencyKey ??
+        (request.headers["idempotency-key"] as string | undefined) ??
+        (request.headers["x-idempotency-key"] as string | undefined);
 
       const result = await confirmTaskStep({
         taskId: request.params.id,
@@ -150,6 +167,32 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
         reportException: body.reportException,
         exceptionNote: body.exceptionNote,
         userId: request.userId,
+        idempotencyKey,
+      });
+
+      return reply.send({
+        success: true,
+        data: result,
+      });
+    },
+  );
+
+  // POST /api/v1/tasks/sync-batch — Sincronización por lotes offline-first (F6.1)
+  app.post(
+    "/sync-batch",
+    {
+      schema: {
+        tags: ["Tasks"],
+        summary: "Sincronizar lote de mutaciones de tareas en orden FIFO (Offline-First)",
+      },
+    },
+    async (request, reply): Promise<ApiResponse<SyncTaskBatchResult>> => {
+      const body = SyncBatchSchema.parse(request.body);
+
+      const result = await syncTaskBatch({
+        tenantId: request.tenantId,
+        userId: request.userId,
+        items: body.items as never,
       });
 
       return reply.send({
