@@ -270,6 +270,81 @@ export interface RlsTablePolicySpec {
 }
 
 // ─────────────────────────────────────────────────────────────
+// OFFLINE-FIRST & IDEMPOTENCIA (Hito 6 — F6.1)
+// ─────────────────────────────────────────────────────────────
+
+export type SyncTaskActionType = "CONFIRM_STEP" | "CONFIRM_RECEIPT_LINE";
+
+export type SyncBatchItemStatus =
+  | "APPLIED"
+  | "ALREADY_APPLIED"
+  | "CONFLICT"
+  | "REJECTED";
+
+export interface ConfirmTaskStepPayload {
+  taskId: string;
+  stepId: string;
+  scannedCode: string;
+  quantity?: number | undefined;
+  reportException?: boolean | undefined;
+  exceptionNote?: string | undefined;
+}
+
+export interface ConfirmReceiptLinePayload {
+  taskId: string;
+  productId: string;
+  scannedQty: number;
+  barcode?: string | undefined;
+}
+
+export interface SyncTaskBatchItem {
+  idempotencyKey: string;
+  action: SyncTaskActionType;
+  occurredAt: string; // ISO 8601 cliente
+  payload: ConfirmTaskStepPayload | ConfirmReceiptLinePayload;
+}
+
+export interface SyncBatchItemResult {
+  idempotencyKey: string;
+  action: SyncTaskActionType;
+  status: SyncBatchItemStatus;
+  occurredAt: string;
+  receivedAt: string;
+  result?: unknown;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+}
+
+export interface SyncTaskBatchRequest {
+  items: SyncTaskBatchItem[];
+}
+
+export interface SyncTaskBatchResult {
+  total: number;
+  appliedCount: number;
+  alreadyAppliedCount: number;
+  conflictCount: number;
+  rejectedCount: number;
+  processedAt: string;
+  items: SyncBatchItemResult[];
+}
+
+export interface IdempotencyRecordDTO<T = unknown> {
+  id: string;
+  tenantId: string;
+  idempotencyKey: string;
+  action: string;
+  requestHash?: string | null;
+  responseStatus: number;
+  responseBody: T;
+  occurredAt?: string | null;
+  createdAt: string;
+}
+
+// ─────────────────────────────────────────────────────────────
 // RESPUESTAS ENVOLVENTES
 // ─────────────────────────────────────────────────────────────
 
@@ -302,7 +377,8 @@ export type WmsErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "VALIDATION_ERROR"
-  | "CONFIGURATION_ERROR";
+  | "CONFIGURATION_ERROR"
+  | "CONFLICT";
 
 // ─────────────────────────────────────────────────────────────
 // DESIGN SYSTEM COMPARTIDO (S5 dark-data-dense / P2 / T3)
