@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
 - **Última actualización**: 2026-11-10
-- **Estado General**: ✅ **Feature `F6.2` y Hito 6 (Modo Offline-First Completo: API + Móvil) completados y aprobados (`APPROVED`) — Listo para `F5.1`**
+- **Estado General**: ✅ **Remediación de código duplicado SonarCloud (FIX-SONAR-DUP) completada y publicada — Listo para F5.1**
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
@@ -14,8 +14,9 @@
   2. ✅ **`F7.2`** — PostgreSQL Row Level Security (RLS) con `FORCE RLS` y Puerto `TenantContext` (`done`)
   3. ✅ **`F6.1`** — Puerto `IdempotencyStore` y Endpoint `POST /api/v1/tasks/sync-batch` (`done`)
   4. ✅ **`F6.2`** — Motor `OfflineSyncQueue` Hexagonal, Caché Local de Tareas y Auto-Sync con Cuarentena (`done`)
-  5. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`)
-  6. ⏳ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`pending`)
+  5. ✅ **`FIX-SONAR-DUP`** — Remediación de duplicación SonarCloud: `.sonarcloud.properties` + refactorización DRY en tareas móviles (`done`)
+  6. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`)
+  7. ⏳ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`pending`)
 - **Siguiente Feature en Cola**: `F5.1` — *Carga masiva (Bulk Import) desacoplada con modo `dryRun`, normalización y estrategia `ColumnMapper`*
 
 ---
