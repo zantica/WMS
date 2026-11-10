@@ -90,7 +90,7 @@ export async function syncTaskBatch(
         422,
       );
     }
-    if (!item.occurredAt || isNaN(Date.parse(item.occurredAt))) {
+    if (!item.occurredAt || Number.isNaN(Date.parse(item.occurredAt))) {
       throw new WmsError(
         "VALIDATION_ERROR",
         `Item at index ${i} has invalid or missing occurredAt ISO timestamp`,
