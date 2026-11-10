@@ -58,7 +58,7 @@ Tu objetivo es llevar a cabo el desarrollo evolutivo de **WMS SaaS** manteniendo
 ### Paso 2: Delegación al `implementer`
 Invoca al subagente `implementer` ([`implementer.md`](./implementer.md)) pasándole:
 - El ID y criterios de aceptación de la feature.
-- Punteros a `progress/current.md`, `docs/architecture.md`, `docs/conventions.md`, `docs/verification.md` y `KNOWLEDGE.md`.
+- Punteros a `progress/current.md`, `docs/architecture.md`, `docs/conventions.md`, `docs/verification.md`, `KNOWLEDGE.md` (y `docs/design/SKILL.md` si involucra UI).
 - Instrucción estricta: *"Escribe tu reporte en `progress/impl_<feature_id>.md` y devuélveme únicamente la ruta del archivo y el estado final (`DONE` | `BLOCKED`)"*.
 
 ### Paso 3: Delegación al `reviewer`

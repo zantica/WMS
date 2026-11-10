@@ -228,6 +228,13 @@ const body = CreateOrderSchema.parse(request.body);
 - Un archivo de test por use case, en `__tests__/` junto al use case.
 - Los tests unitarios mockean Prisma completo.
 - Los tests de integración (Hito 2+) usarán una base de datos real de test.
+
+### UI/UX y Sistema de Diseño (React + Tailwind)
+- **Activación**: Toda modificación o creación de UI en `apps/web` o `apps/mobile` debe seguir [`docs/design/SKILL.md`](./docs/design/SKILL.md) (y la skill `.agents/skills/uiux-design-system/SKILL.md`).
+- **Plan de Tokens obligatorio**: Antes de escribir código visual, declarar el bloque `## Design tokens` (Estilo S1–S10, Paleta semántica P1–P15, Tipografía T1–T12, Elemento memorable).
+- **Prohibido hex crudo**: Cero clases con hex arbitrario (`bg-[#...]`) en producción; todo color se referencia vía tokens/variables CSS semánticas (`--bg`, `--surface`, `--accent`, `--border`, etc.).
+- **Estados completos obligatorios**: Ningún componente interactivo se entrega sin estados hover, focus-visible, disabled y error. Ninguna vista de datos sin skeleton de carga ni empty state guiado.
+- **Autocrítica con Checklist**: Validar contra [`docs/design/references/checklist.md`](./docs/design/references/checklist.md) en viewports 375 / 768 / 1440 antes de dar por cerrada una UI.
 - Nombrar los tests en español para que sirvan como documentación del comportamiento esperado.
 
 ### Respuestas de la API

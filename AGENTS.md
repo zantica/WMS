@@ -31,6 +31,7 @@ Antes de modificar cualquier archivo de código en `apps/` o `packages/`:
 | [`docs/verification.md`](./docs/verification.md) | Antes de dar por terminada una implementación o revisión | Comandos de test (`pnpm test`), umbrales de cobertura Vitest (≥80% en `use-cases`), chequeo de tipos y evidencia exigida en reportes. |
 | [`CHECKPOINTS.md`](./CHECKPOINTS.md) | Durante la fase de *Review*, *Quality Gate* o antes de marcar `"done"` | CP-1 a CP-7: Ledger, multi-tenant, contratos, tests con evidencia, hexagonal/ADR, higiene del código, SOLID y cero envars en código. |
 | [`docs/adr/`](./docs/adr/README.md) | Al introducir una decisión arquitectónica no obvias (CP-5) | Índice de ADRs y plantilla [`000-template.md`](./docs/adr/000-template.md) (Contexto / Decisión / Consecuencias). |
+| [`docs/design/SKILL.md`](./docs/design/SKILL.md) | Antes de diseñar, maquetar o modificar componentes UI (`apps/web`, `apps/mobile`) | Sistema UI/UX React + Tailwind: plan de tokens (S1–S10, P1–P15, T1–T12), anti-patrones y checklist. |
 | [`docs/hitos/`](./docs/hitos/README.md) | **Solo** si investigas el porqué histórico de un módulo | Guías archivadas de hitos cerrados (no se cargan por defecto). |
 
 ---

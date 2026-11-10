@@ -30,6 +30,9 @@
   - Corregido el aborto de transacción PostgreSQL (`25P02`) aislando el fallo esperado `WITH CHECK` en su propio `withTenantContext` y limpiando entidades hijas en `afterAll`.
   - Corregidos los 11 issues de SonarCloud (`githubactions:S7637`, `githubactions:S6505`, `shell:S7688`, `shell:S6505`, `typescript:S2245`, `typescript:S8786`).
   - Integrado el barrido obligatorio de reglas SonarCloud en `CHECKPOINTS.md` (CP-7), `.claude/agents/reviewer.md`, `.claude/agents/committer.md` y `.claude/agents/leader.md` al finalizar cada implementación futura.
+- ✅ **Integración del Design System (`uiux-design-system`) y Rediseño del Dashboard Web (`@wms/web`) (2026-11-10)**:
+  - Documentados los tokens canónicos (`S5 dark-data-dense`, paleta `P2 Refinada`, tipografía `T3 DM Sans + JetBrains Mono`) en `docs/design/project.md` y centralizados en `apps/web/src/app/globals.css`.
+  - Rediseñadas las 4 vistas operativas de `@wms/web` (`page.tsx`, `catalog/page.tsx`, `inventory/page.tsx`, `operations/page.tsx`) y `dashboard-shell.tsx` con HUD contable, cero hex crudos en TSX, números tabulares (`tabular-nums`), chips de filtros activos y accesibilidad completa (`skip-link`, `:focus-visible`, `prefers-reduced-motion`).
 
 ---
 

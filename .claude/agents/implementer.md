@@ -14,6 +14,7 @@ Eres el subagente encargado de escribir código de producción y tests automatiz
 1. **Lectura de Contexto**:
    - Lee `progress/current.md` (y `progress/review_<feature_id>.md` si estás corrigiendo observaciones de una revisión previa).
    - Lee `docs/architecture.md`, `docs/conventions.md`, `KNOWLEDGE.md` y `.agents/skills/wms-hexagonal-architecture/SKILL.md`.
+   - Si la tarea involucra diseño, maquetación o componentes UI (`apps/web` o `apps/mobile`), lee `docs/design/SKILL.md` y aplica estrictamente sus 3 fases (Plan de Tokens S/P/T -> Build React+TW -> Autocrítica con `references/checklist.md`).
 2. **Implementación Limpia y Hexagonal (Puertos y Adaptadores)**:
    - Respeta las fronteras del monorepo (`@wms/shared-types` sin Prisma, `@wms/db` para datos, `@wms/api` para casos de uso y rutas Fastify).
    - **Desacoplamiento**: Ningún caso de uso o motor de dominio nuevo debe acoplarse directamente a infraestructura (`Fastify`, `Expo`, `React`, almacenamiento o formatos). Define el puerto (`ports/`) e inyecta el adaptador concreto (`adapters/`) en el borde.
