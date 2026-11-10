@@ -24,6 +24,7 @@ model Tenant {
 
   warehouses Warehouse[]
   users      User[]
+  idempotencyRecords IdempotencyRecord[]
 
   @@map("tenants")
 }
@@ -313,4 +314,29 @@ enum StepStatus {
   COMPLETED
   EXCEPTION   // Operario reportó problema (dañado, no encontrado, etc.)
   SKIPPED
+}
+
+// ─────────────────────────────────────────────────────────────
+// BOUNDED CONTEXT D: OFFLINE-FIRST & IDEMPOTENCY (Hito 6 — F6.1)
+// ─────────────────────────────────────────────────────────────
+
+/// Registro inmutable de idempotencia por inquilino y clave.
+/// Garantiza atómicamente la ejecución única de operaciones críticas
+/// y permite devolver el resultado previo (ALREADY_APPLIED) en reintentos.
+model IdempotencyRecord {
+  id             String    @id @default(cuid())
+  tenantId       String
+  idempotencyKey String
+  action         String
+  requestHash    String?
+  responseStatus Int       @default(200)
+  responseBody   Json
+  occurredAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt])
+  @@map("idempotency_records")
 }

@@ -118,6 +118,14 @@ export const RLS_PROTECTED_TABLES: readonly RlsTableDefinition[] = [
     enableRls: true,
     forceRls: true,
   },
+  {
+    tableName: "idempotency_records",
+    policyName: "idempotency_records_tenant_isolation_policy",
+    kind: "direct_tenant_column",
+    tenantColumn: "tenantId",
+    enableRls: true,
+    forceRls: true,
+  },
 ] as const;
 
 /**
