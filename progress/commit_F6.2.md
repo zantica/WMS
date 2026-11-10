@@ -79,8 +79,8 @@ Exit code: 0
 - `6065107` `feat(mobile): implement hexagonal OfflineSyncQueue, LocalTaskCache and quarantine UI (F6.2)`
 - `0e62320` `docs(progress): record F6.2 implementation, review, ADR 005 and harness state`
 - `11b0569` `fix(api): propagate RLS transaction context in syncTaskBatch and PrismaIdempotencyStore`
-- `<docs-commit-hash>` `docs(progress): update F6.2 quality gate and publication report`
-- **Resultado de `git push`**: `Everything up-to-date` / Publicado en `main`.
+- `176b40f` `docs(progress): update F6.2 quality gate and publication report`
+- **Resultado de `git push`**: `eb25371..176b40f main -> main` (Publicado con éxito en remoto).
 
 ## 4. Motivo de Rechazo o Bloqueo (si ESTADO = REJECTED | BLOCKED)
 *N/A — Todos los criterios de calidad han sido satisfechos satisfactoriamente.*
