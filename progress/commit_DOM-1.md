@@ -108,5 +108,9 @@ All files          |     100 |    97.67 |     100 |     100 |
 ## 3. Commits Atómicos Creados y Push (si ESTADO = PUBLISHED)
 - `25c9f6d` `feat(domain): add @wms/domain package with DDD primitives and state machines (DOM-1)`
 - `08e9e87` `docs(domain): document shared domain package and record ADR 006 (DOM-1)`
-- `chore(harness): record DOM-1 reports and update progress to done`
-- **Resultado de `git push`**: `<pendiente de ejecucion>`
+- `91c4e66` `chore(harness): record DOM-1 reports and update progress to done`
+- **Resultado de `git push`**:
+```text
+To https://github.com/zantica/WMS.git
+   34486db..91c4e66  main -> main
+```
