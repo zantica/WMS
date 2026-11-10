@@ -71,6 +71,10 @@ Exit Code: 0
 - `3d1b53e` refactor(shared-types): centralize HTTP client helpers and type guards
 - `4b7f97d` refactor(mobile): extract shared task UI components and offline orchestration helpers
 - `b25fd7c` refactor(web): consume centralized HTTP helpers from shared-types
-- `<docs-commit>` docs(progress): record FIX-SONAR-DUP implementation, review and quality gate reports
+- `3785647` docs(progress): record FIX-SONAR-DUP implementation, review and quality gate reports
 
-- **Resultado de `git push`**: PENDIENTE DE EJECUCIÓN
+- **Resultado de `git push`**:
+```text
+To https://github.com/zantica/WMS.git
+   ca99460..3785647  main -> main
+```
