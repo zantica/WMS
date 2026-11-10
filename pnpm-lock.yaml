@@ -202,6 +202,21 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  packages/domain:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
+      '@vitest/coverage-v8':
+        specifier: ^2.1.0
+        version: 2.1.9(vitest@2.1.9(@types/node@22.20.5)(lightningcss@1.33.0)(terser@5.51.2))
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.5)(lightningcss@1.33.0)(terser@5.51.2)
+
   packages/shared-types:
     devDependencies:
       '@types/node':
