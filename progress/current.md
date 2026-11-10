@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
-- **Última actualización**: 2026-11-09
-- **Estado General**: ✅ **Hito 4 formalmente cerrado (`F4.2` `APPROVED` y en `done`) — Listo para Hito 6 (`F6.1`)**
+- **Última actualización**: 2026-11-10
+- **Estado General**: ✅ **Hito 4 y Hito 7 formalmente cerrados + remediación CI PostgreSQL (`25P02`) y SonarCloud (11 issues → 0) — Listo para Hito 6 (`F6.1`)**
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
@@ -26,6 +26,10 @@
 - `docs/adr/` con plantilla + índice; `KNOWLEDGE.md` depurado (guías de hitos cerrados → `docs/hitos/`).
 - Eliminados `package-lock.json` (guarda en `init.*`) y re-exports huérfanos de mobile.
 - ✅ **Re-auditoría y remediación completa de `F4.2`**: Subsanados los 15 hallazgos de seguridad JWT/Clerk, idempotencia estricta con `@@unique` + `P2002`, raw body en firmas HMAC, timeout de webhook, ADR 003 y 157 tests con cobertura >= 80% verificados independientemente en [`progress/review_F4.2.md`](./review_F4.2.md) (`APPROVED`).
+- ✅ **Remediación CI PostgreSQL (`tenant-rls.integration.test.ts`) y SonarCloud (`zantica_WMS`) (2026-11-10)**:
+  - Corregido el aborto de transacción PostgreSQL (`25P02`) aislando el fallo esperado `WITH CHECK` en su propio `withTenantContext` y limpiando entidades hijas en `afterAll`.
+  - Corregidos los 11 issues de SonarCloud (`githubactions:S7637`, `githubactions:S6505`, `shell:S7688`, `shell:S6505`, `typescript:S2245`, `typescript:S8786`).
+  - Integrado el barrido obligatorio de reglas SonarCloud en `CHECKPOINTS.md` (CP-7), `.claude/agents/reviewer.md`, `.claude/agents/committer.md` y `.claude/agents/leader.md` al finalizar cada implementación futura.
 
 ---
 
