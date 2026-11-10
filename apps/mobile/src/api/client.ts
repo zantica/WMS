@@ -121,6 +121,7 @@ export class WmsApiClientError extends Error {
 }
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
+let fallbackCorrelationSeq = 0;
 
 function generateCorrelationId(): string {
   if (
@@ -129,7 +130,8 @@ function generateCorrelationId(): string {
   ) {
     return globalThis.crypto.randomUUID();
   }
-  return `corr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  fallbackCorrelationSeq = (fallbackCorrelationSeq + 1) >>> 0;
+  return `corr-${Date.now().toString(36)}-${fallbackCorrelationSeq.toString(36)}`;
 }
 
 function extractResponseHeaderCorrelationId(
@@ -147,7 +149,11 @@ function extractResponseHeaderCorrelationId(
 
 function normalizeBaseUrl(url: string): string {
   const trimmed = url.trim();
-  return trimmed.replace(/\/+$/, "");
+  let end = trimmed.length;
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return trimmed.slice(0, end);
 }
 
 function isApiErrorPayload(value: unknown): value is ApiError {
