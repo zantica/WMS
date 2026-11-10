@@ -188,3 +188,18 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Puerto hexagonal `IdempotencyStore` (`apps/api/src/ports/idempotency-store.ts`) con adaptadores `InMemoryIdempotencyStore` y `PrismaIdempotencyStore` participando en la misma transacción `Serializable` del Ledger para `confirmTaskStep` y `confirmReceiptLine`.
   - Caso de uso `syncTaskBatch` (`apps/api/src/use-cases/tasks/sync-task-batch.ts`) y endpoint `POST /api/v1/tasks/sync-batch` con ordenación FIFO por `occurredAt`, registro de `receivedAt` y política Servidor-Gana (`CONFLICT` / `REJECTED`).
   - 180 tests unitarios pasando en `@wms/api` (cobertura de `93.32%` en `use-cases`) y 3 tests de integración en PostgreSQL 16 real (`idempotency.integration.test.ts`).
+
+
+---
+
+## [2026-11-10] Feature `F6.2` y Cierre del Hito 6 — Motor `OfflineSyncQueue` Hexagonal, Caché Local de Tareas y Auto-Sync con Cuarentena en `@wms/mobile`
+- **Estado**: `done` (`VEREDICTO: APPROVED`) — **Hito 6 100% Completado**
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F6.2.md`](./impl_F6.2.md)
+  - Revisión: [`progress/review_F6.2.md`](./review_F6.2.md)
+  - ADR: [`docs/adr/005-offline-sync-queue-and-local-cache.md`](../docs/adr/005-offline-sync-queue-and-local-cache.md)
+- **Cambios clave**:
+  - Motor de dominio puro `OfflineSyncQueue` (`apps/mobile/src/offline/sync-queue.ts`) y caché local de tareas `LocalTaskCache` (`apps/mobile/src/offline/local-task-cache.ts`), 100% desacoplados de React y Expo, con puertos hexagonales inyectados (`OfflineQueueStorage`, `SyncTransport`, `ConnectivityMonitor`) y 4 adaptadores (`InMemoryOfflineQueueStorage`, `SerializableStorageAdapter`, `HttpSyncTransport`, `EventConnectivityMonitor`).
+  - Generación criptográfica de `idempotencyKey` (`crypto.randomUUID()`) en el instante exacto del escaneo (`occurredAt`), ordenación FIFO, backoff exponencial con límite ante fallos de transporte y aislamiento en estado `QUARANTINED` para conflictos Servidor-Gana (`CONFLICT` / `REJECTED`).
+  - Componentes UI `OfflineSyncStatusBar` y `QuarantineModal` integrados en `@wms/mobile` bajo el Design System `S5 dark-data-dense` / `P2 Refinada` / `T3` (0 colores hex crudos, targets táctiles `>= 44px`, tipografía monoespaciada tabular).
+  - 56 tests unitarios y de fallo pasando en `@wms/mobile` (cobertura de `87.11%` en `src/offline/` y `89.77%` global en móvil) y 180 tests pasando en `@wms/api`.

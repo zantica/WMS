@@ -211,7 +211,7 @@
       "milestone": "Hito 6 — Modo Offline-First (Parte Móvil)",
       "title": "Motor OfflineSyncQueue Hexagonal, Caché Local de Tareas y Auto-Sync con Cuarentena en @wms/mobile",
       "boundedContext": "Mobile Operator App",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Motor OfflineSyncQueue puro (sin dependencia directa de React ni Expo) con puertos inyectados: OfflineQueueStorage (adaptador SQLite/persistente), SyncTransport y ConnectivityMonitor",
         "Generación de idempotencyKey en el instante del escaneo, caché local de pasos asignados para validación offline, backoff exponencial y estado de cuarentena para operaciones con conflicto permanente",
