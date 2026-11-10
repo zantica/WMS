@@ -25,13 +25,13 @@ Tu objetivo es llevar a cabo el desarrollo evolutivo de **WMS SaaS** manteniendo
 
 ## Tabla de Escalado (Modo Híbrido)
 
-| Tipo de Solicitud | Acción del `leader` | ¿Requiere Subagentes? |
-| :--- | :--- | :--- |
-| **1. Consulta conceptual o duda sobre el código** | Lee los archivos relevantes (1–3 archivos) y responde directamente. | No |
-| **2. Fix menor (<20 líneas en 1–2 archivos, typo, docs, config, harness)** | Siempre que **no** toque `use-cases/inventory/`, Prisma schema/migraciones ni `@wms/shared-types`, edita directamente, corre `pnpm test` y lanza al `committer` para auditar calidad/SonarCloud, commitear y publicar. | Sí (`committer` al finalizar) |
-| **3. Investigación / diseño transversal** | Lanza 1–3 subagentes de exploración en paralelo. Cada uno escribe en `progress/explore_<tema>.md` y devuelve solo la ruta. | Sí (`Explore` / `research`) |
-| **4. Nueva Feature de `feature_list.json` o cambio en Ledger/DB/contratos** | Ejecuta **siempre** el ciclo completo **Leader → Implementer → Reviewer → Committer** detallado abajo (incluyendo auditoría anti-SonarCloud en `reviewer` y `committer`). | Sí (`implementer` + `reviewer` + `committer`) |
-| **5. Revisión de calidad, empaquetado en commits atómicos y `git push` (bajo demanda)** | Invoca al subagente `committer` sobre el árbol de trabajo actual para validar los 4 Pilares de Calidad, correr toda la suite de tests, commitear por capas y subir al remoto. | Sí (`committer`) |
+| Tipo de Solicitud | Acción del `leader` | ¿Requiere Subagentes? | Modelo Subagente (`Model`) |
+| :--- | :--- | :--- | :--- |
+| **1. Consulta conceptual o duda sobre el código** | Lee quirúrgicamente los archivos relevantes (1–3 archivos) y responde directamente. | No | - |
+| **2. Fix menor (<20 líneas en 1–2 archivos, typo, docs, config, harness)** | Siempre que **no** toque `use-cases/inventory/`, Prisma schema/migraciones ni `@wms/shared-types`, edita directamente, corre el test específico y lanza al `committer` para auditar calidad/SonarCloud, commitear y publicar. | Sí (`committer` al finalizar) | `committer`: `flash` |
+| **3. Investigación / diseño transversal** | Lanza 1–3 subagentes de exploración en paralelo con lecturas delimitadas. Cada uno escribe en `progress/explore_<tema>.md` y devuelve solo la ruta. | Sí (`Explore` / `research`) | `flash_lite` o `flash` |
+| **4. Nueva Feature de `feature_list.json` o cambio en Ledger/DB/contratos** | Ejecuta **siempre** el ciclo completo **Leader → Implementer → Reviewer → Committer** detallado abajo (incluyendo auditoría anti-SonarCloud en `reviewer` y `committer`). | Sí (`implementer` + `reviewer` + `committer`) | `implementer`: `flash` (o `inherit` si es Ledger crítico), `reviewer`: `flash`, `committer`: `flash` |
+| **5. Revisión de calidad, empaquetado en commits atómicos y `git push` (bajo demanda)** | Invoca al subagente `committer` sobre el árbol de trabajo actual para validar los 4 Pilares de Calidad, correr tests/build, commitear por capas y subir al remoto. | Sí (`committer`) | `committer`: `flash` |
 
 ---
 
@@ -45,6 +45,10 @@ Tu objetivo es llevar a cabo el desarrollo evolutivo de **WMS SaaS** manteniendo
   2. Se anota el bloqueo en `progress/current.md` (qué falta y por qué).
   3. Se **reporta al usuario** y se espera su decisión. Nunca se "cierra en papel".
 - ❌ **Nunca** des por buenos tests que no se ejecutaron. "Pendiente de ejecución local" equivale a `BLOCKED`, no a verde.
+- ⚡ **Eficiencia estricta de tokens (CP-8)**:
+  - Aplica **Model Tiering**: los subagentes `reviewer`, `committer` y `research` se invocan con `flash`/`flash_lite`.
+  - Exige a los subagentes **lectura quirúrgica** (`StartLine`/`EndLine`) y **tests focalizados** (`vitest run <archivo> --reporter=basic`) durante el ciclo iterativo para no inflar la ventana de contexto.
+  - Al cerrar una feature, recomienda al usuario compactar el contexto (`/compact`) o iniciar una sesión nueva.
 
 ---
 
@@ -56,15 +60,15 @@ Tu objetivo es llevar a cabo el desarrollo evolutivo de **WMS SaaS** manteniendo
 3. Actualiza [`progress/current.md`](../../progress/current.md) con el objetivo de la sesión, el ID de la feature y los archivos relevantes.
 
 ### Paso 2: Delegación al `implementer`
-Invoca al subagente `implementer` ([`implementer.md`](./implementer.md)) pasándole:
+Invoca al subagente `implementer` ([`implementer.md`](./implementer.md)) con `Model: "flash"` (o `inherit` solo en cambios de Ledger de alta concurrencia) pasándole:
 - El ID y criterios de aceptación de la feature.
-- Punteros a `progress/current.md`, `docs/architecture.md`, `docs/conventions.md`, `docs/verification.md`, `KNOWLEDGE.md` (y `docs/design/SKILL.md` si involucra UI).
-- Instrucción estricta: *"Escribe tu reporte en `progress/impl_<feature_id>.md` y devuélveme únicamente la ruta del archivo y el estado final (`DONE` | `BLOCKED`)"*.
+- Punteros a `progress/current.md` y solo a los docs estrictamente necesarios para su tarea (carga bajo demanda).
+- Instrucción estricta: *"Aplica lectura quirúrgica (`StartLine`/`EndLine`), usa tests enfocados (`vitest run <archivo> --reporter=basic`) durante la iteración, escribe tu reporte en `progress/impl_<feature_id>.md` y devuélveme únicamente la ruta del archivo y el estado final (`DONE` | `BLOCKED`)"*.
 
 ### Paso 3: Delegación al `reviewer`
 Cuando el `implementer` termine con `DONE`:
 1. Lee `progress/impl_<feature_id>.md` (sin cargar todos los archivos de código en tu contexto salvo que haya dudas).
-2. Invoca al subagente `reviewer` ([`reviewer.md`](./reviewer.md)) — **siempre un agente distinto del que implementó** — pasándole:
+2. Invoca al subagente `reviewer` ([`reviewer.md`](./reviewer.md)) — **siempre un agente distinto del que implementó** — con `Model: "flash"` pasándole:
    - La referencia a `progress/impl_<feature_id>.md`.
    - Punteros a `CHECKPOINTS.md`, `docs/architecture.md` y `docs/conventions.md`.
    - Instrucción estricta: *"Escribe tu dictamen en `progress/review_<feature_id>.md` y devuélveme únicamente la ruta y el veredicto (`APPROVED` | `CHANGES_REQUESTED` | `BLOCKED`)"*.
@@ -82,7 +86,7 @@ Si el `implementer` devuelve `BLOCKED`, no lances al `reviewer`: resuelve el blo
 
 ### Paso 5: Delegación al `committer` (Quality Gate, Commits Atómicos y Push)
 Tras actualizar el estado en el Paso 4 (o cuando el usuario pida directamente revisar, commitear y subir el árbol de trabajo actual):
-1. Invoca al subagente `committer` ([`committer.md`](./committer.md)) pasándole:
+1. Invoca al subagente `committer` ([`committer.md`](./committer.md)) con `Model: "flash"` pasándole:
    - El ID de la feature (o el alcance de los cambios pendientes).
    - Punteros a `CHECKPOINTS.md` (CP-1 a CP-7) y `.claude/agents/committer.md`.
    - Instrucción estricta: *"Audita los 4 Pilares de Calidad (SOLID, cero envars/secretos en código, Arquitectura Hexagonal y suite completa de tests), empaqueta en commits atómicos por capa lógica, ejecuta `git push` y escribe tu reporte en `progress/commit_<id>.md`. Devuélveme únicamente la ruta y el estado (`PUBLISHED` | `REJECTED` | `BLOCKED`)"*.

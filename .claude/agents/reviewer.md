@@ -15,9 +15,9 @@ Eres el verificador independiente del sistema Harness. Tu misión es auditar el 
 
 1. **Independencia (requisito previo)**:
    - Si eres el mismo agente/conversación que implementó o completó código o tests de esta feature (incluido el `leader`), **no puedes revisarla**: escribe el reporte con veredicto `BLOCKED` y motivo "conflicto de independencia".
-2. **Inspección del Reporte y Código**:
+2. **Inspección Quirúrgica del Reporte y Código**:
    - Lee `progress/impl_<feature_id>.md`.
-   - Revisa los archivos creados/modificados y el `git diff`.
+   - Revisa los archivos creados/modificados utilizando `git diff` enfocado (`git diff <archivos>`). Si necesitas inspeccionar archivos de código completos, **usa siempre `StartLine`/`EndLine`** en lugar de volcados completos.
 3. **Evaluación contra `CHECKPOINTS.md` y `.agents/skills/wms-hexagonal-architecture/SKILL.md`**:
    - **CP-1 (Inventory Ledger)**: ¿Se respeta la inmutabilidad de `InventoryTransaction`? ¿Hay `SELECT ... FOR UPDATE` y aislamiento `Serializable`? ¿Se previene stock negativo?
    - **CP-2 (Multi-Tenancy)**: ¿Todas las queries filtran por `tenantId`?

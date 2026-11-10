@@ -47,3 +47,23 @@ Para evitar degradar la ventana de contexto (*context rot*) y prevenir el "telé
   - **Committer** ([`committer.md`](./.claude/agents/committer.md)): agente de Quality Gate final que verifica los 4 Pilares de Calidad (**SOLID**, **cero envars/secretos en el código**, **Arquitectura Hexagonal** y **suite completa de tests**), divide los cambios en **commits pequeños y atómicos por capa lógica**, ejecuta `git push` y escribe `progress/commit_<id>.md` (`PUBLISHED` | `REJECTED` | `BLOCKED`).
 - **Regla Anti-Teléfono-Descompuesto**:
   - Todo subagente (exploración, implementación, revisión o publicación) **escribe su resultado detallado en `progress/`** y devuelve al agente principal únicamente la ruta del archivo generado y un resumen ejecutivo de 3–5 líneas.
+
+---
+
+## 4. Política de Ahorro y Eficiencia de Tokens (Model Tiering y Contexto)
+
+Para evitar la inflación acelerada de tokens y costes en sesiones largas:
+
+1. **Model Tiering en Subagentes**:
+   - `leader`: modelo superior (`pro` / `Sonnet`) para diseño arquitectónico y coordinación global.
+   - `implementer`: `flash` (o `inherit` solo en cambios de concurrencia/Ledger de alta complejidad).
+   - `reviewer`: `flash` (auditoría contra checklist y ejecución de tests).
+   - `committer`: `flash` (Quality Gate, compilación y empaquetado git).
+   - `research` / `explore`: `flash_lite` o `flash`.
+2. **Tests Enfocados en TDD**:
+   - Durante la implementación activa, el `implementer` solo ejecuta el archivo de test específico con salida compacta (`pnpm vitest run <archivo.test.ts> --reporter=basic`). La suite global y el cálculo de cobertura (`--coverage`) se ejecutan una única vez al final para la validación de cierre.
+3. **Lectura Quirúrgica y Carga Perezosa**:
+   - Prohibido volcar toda la documentación de golpe en el arranque.
+   - En archivos de código de más de 80 líneas, usar delimitadores `StartLine` y `EndLine`.
+4. **Ciclo de Conversación**:
+   - Al cerrar una feature, compactar el contexto con `/compact` o abrir una nueva conversación para evitar la acumulación de historial en caché.
