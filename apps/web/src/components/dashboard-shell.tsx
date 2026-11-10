@@ -1,7 +1,7 @@
 "use client";
 
 // apps/web/src/components/dashboard-shell.tsx
-// Shell interactivo del Dashboard Web: barra lateral de navegación y panel superior de conexión multi-tenant.
+// Shell interactivo del Dashboard Web: navegación lateral industrial, telemetría de conexión y configuración multi-tenant.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,26 +11,26 @@ import { useSupervisorSession } from "../context/supervisor-session";
 const NAV_ITEMS = [
   {
     href: "/",
-    label: "Resumen Ejecutivo",
-    subtitle: "KPIs globales y alertas",
+    label: "Torre de control",
+    subtitle: "KPIs contables y alertas",
     badge: "LIVE",
   },
   {
     href: "/catalog",
-    label: "Catálogo & Ubicaciones",
-    subtitle: "Productos y Mapa de Zonas",
+    label: "Catálogo y ubicaciones",
+    subtitle: "Productos y mapa de zonas",
     badge: "A-Z",
   },
   {
     href: "/inventory",
-    label: "Inventario & Kardex",
-    subtitle: "OnHand / ATP y Ledger Inmutable",
+    label: "Inventario y kardex",
+    subtitle: "Saldos ATP y ledger inmutable",
     badge: "LEDGER",
   },
   {
     href: "/operations",
-    label: "Pedidos & Tareas",
-    subtitle: "Alocación, Picking y Despacho",
+    label: "Pedidos y tareas",
+    subtitle: "Reserva, picking y despacho",
     badge: "OPS",
   },
 ] as const;
@@ -51,12 +51,12 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
     setPingMessage(null);
     try {
       const res = await testConnection();
-      setPingMessage(`Conectado a ${res.service} (${res.status})`);
+      setPingMessage(`✓ ${res.service} (${res.status})`);
     } catch (err) {
       updateSession({ isConnected: false });
       const msg =
-        err instanceof Error ? err.message : "No se pudo conectar con @wms/api";
-      setPingMessage(`Error: ${msg}`);
+        err instanceof Error ? err.message : "Sin respuesta de @wms/api";
+      setPingMessage(`⚠ Error: ${msg}`);
     } finally {
       setIsPinging(false);
     }
@@ -64,18 +64,25 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
 
   return (
     <div className="wms-shell">
+      <a href="#wms-main-content" className="wms-skip-link">
+        Saltar al contenido principal
+      </a>
+
       <aside className="wms-sidebar">
         <div className="wms-brand">
-          <div className="wms-brand-badge">WMS</div>
+          <div className="wms-brand-badge" aria-hidden="true">
+            WMS
+          </div>
           <div>
             <div className="wms-brand-title">WMS Control Tower</div>
             <div className="wms-brand-subtitle">
-              Panel de Supervisores · Hito 4
+              Supervisión operativa · S5 Dark
             </div>
           </div>
         </div>
 
         <nav className="wms-nav" aria-label="Navegación principal">
+          <div className="wms-nav-section-label">Módulos operativos</div>
           {NAV_ITEMS.map((item) => {
             const isActive =
               item.href === "/"
@@ -85,6 +92,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 className={`wms-nav-link ${isActive ? "wms-nav-link-active" : ""}`}
               >
                 <div>
@@ -97,9 +105,9 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
           })}
         </nav>
 
-        <div className="wms-sidebar-footer">
+        <div className="wms-sidebar-footer" aria-label="Contexto de sesión">
           <div className="wms-footer-row">
-            <span className="wms-muted">Almacén Activo</span>
+            <span className="wms-muted">Almacén activo</span>
             <strong className="wms-mono">{session.warehouseId}</strong>
           </div>
           <div className="wms-footer-row">
@@ -107,59 +115,76 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
             <strong>{session.supervisorName}</strong>
           </div>
           <div className="wms-footer-row">
-            <span className="wms-muted">Aislamiento</span>
-            <span className="wms-tag wms-tag-emerald">Multi-Tenant Activo</span>
+            <span className="wms-muted">Aislamiento DB</span>
+            <span className="wms-tag wms-tag-emerald">● RLS Activo</span>
           </div>
         </div>
       </aside>
 
-      <div className="wms-Workspace">
+      <div className="wms-workspace">
         <header className="wms-topbar">
           <div className="wms-topbar-left">
-            <span
-              className={`wms-status-dot ${
-                session.isConnected ? "wms-status-online" : "wms-status-offline"
-              }`}
-            />
-            <span className="wms-topbar-url wms-mono">
+            <span className="wms-status-pill">
+              <span
+                className={`wms-status-dot ${
+                  session.isConnected
+                    ? "wms-status-online"
+                    : "wms-status-offline"
+                }`}
+                aria-hidden="true"
+              />
+              <span className="wms-mono">
+                {session.isConnected ? "API ONLINE" : "API OFFLINE"}
+              </span>
+            </span>
+
+            <span className="wms-topbar-url wms-mono" title="Endpoint de API activo">
               {session.apiBaseUrl}
             </span>
+
             <span className="wms-tag wms-tag-slate wms-mono">
               x-api-key: {session.apiKey.slice(0, 10)}…
             </span>
+
             {pingMessage ? (
-              <span className="wms-ping-msg">{pingMessage}</span>
+              <span className="wms-ping-msg" aria-live="polite">
+                {pingMessage}
+              </span>
             ) : null}
           </div>
 
           <div className="wms-topbar-actions">
             <button
               type="button"
-              className="wms-btn wms-btn-secondary"
+              className="wms-btn wms-btn-secondary wms-btn-sm"
               onClick={() => {
                 void handlePing();
               }}
               disabled={isPinging}
             >
-              {isPinging ? "Verificando…" : "Verificar API (/health)"}
+              {isPinging ? "Verificando…" : "Probar conexión (/health)"}
             </button>
             <button
               type="button"
-              className="wms-btn wms-btn-outline"
+              className="wms-btn wms-btn-outline wms-btn-sm"
+              aria-expanded={configOpen}
               onClick={() => setConfigOpen((prev) => !prev)}
             >
-              {configOpen ? "Cerrar Conexión" : "Configurar Tenant / API"}
+              {configOpen ? "Cerrar ajustes" : "Configurar tenant / API"}
             </button>
           </div>
         </header>
 
         {configOpen ? (
-          <section className="wms-connection-panel">
+          <section
+            className="wms-connection-panel"
+            aria-label="Parámetros de conexión multi-tenant"
+          >
             <div className="wms-grid-4">
               <label className="wms-field">
-                <span>URL Base de @wms/api</span>
+                <span>URL base de @wms/api</span>
                 <input
-                  type="text"
+                  type="url"
                   value={session.apiBaseUrl}
                   onChange={(e) =>
                     updateSession({ apiBaseUrl: e.target.value })
@@ -179,7 +204,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               </label>
 
               <label className="wms-field">
-                <span>Warehouse ID</span>
+                <span>Identificador de almacén</span>
                 <input
                   type="text"
                   value={session.warehouseId}
@@ -191,7 +216,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               </label>
 
               <label className="wms-field">
-                <span>JWT Bearer Token (Opcional F4.2)</span>
+                <span>JWT Bearer token (Opcional)</span>
                 <input
                   type="password"
                   value={session.bearerToken ?? ""}
@@ -210,7 +235,9 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
           </section>
         ) : null}
 
-        <main className="wms-main">{children}</main>
+        <main id="wms-main-content" className="wms-main">
+          {children}
+        </main>
       </div>
     </div>
   );

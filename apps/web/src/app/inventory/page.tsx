@@ -133,7 +133,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
         quantityDelta: deltaNum,
         notes: adjNotes.trim(),
       });
-      setSuccessMsg(res.message);
+      setSuccessMsg(`✓ ${res.message}`);
       setAdjNotes("");
       await loadInventoryData();
     } catch (err) {
@@ -150,17 +150,25 @@ export default function InventoryAndKardexPage(): JSX.Element {
     reason: reasonFilter,
     search: searchQuery,
   });
+  const hasActiveFilters =
+    reasonFilter !== "ALL" || searchQuery.trim().length > 0;
 
   return (
     <>
       <div className="wms-page-header">
         <div>
+          <div className="wms-eyebrow">
+            <span>● LEDGER INMUTABLE</span>
+            <span>·</span>
+            <span>{session.warehouseId}</span>
+          </div>
           <h1 className="wms-page-title">
-            Saldos de Inventario & Libro Mayor Inmutable (Kardex)
+            Saldos de inventario y libro mayor (Kardex)
           </h1>
           <p className="wms-page-subtitle">
-            Auditoría contable append-only (`InventoryTransaction`) y snapshots
-            en vivo (`InventoryBalance`: OnHand − Allocated = ATP).
+            Auditoría contable append-only (<code>InventoryTransaction</code>) y
+            snapshots en vivo (<code>InventoryBalance</code>: OnHand − Allocated
+            = ATP).
           </p>
         </div>
 
@@ -172,46 +180,81 @@ export default function InventoryAndKardexPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando…" : "Actualizar Saldos & Kardex"}
+          {loading ? "Sincronizando ledger…" : "Sincronizar saldos y kardex"}
         </button>
       </div>
 
-      {errorMsg ? <div className="wms-alert-banner">{errorMsg}</div> : null}
-      {successMsg ? (
-        <div className="wms-success-banner">{successMsg}</div>
+      {errorMsg ? (
+        <div className="wms-alert-banner" role="alert" aria-live="assertive">
+          <span>
+            <strong>⚠ Error de inventario:</strong> {errorMsg}
+          </span>
+        </div>
       ) : null}
 
-      <section className="wms-grid-4">
-        <div className="wms-card">
-          <div className="wms-kpi-label">Total OnHand (Físico)</div>
-          <div className="wms-kpi-value">{kpis.totalOnHand}</div>
+      {successMsg ? (
+        <div className="wms-success-banner" role="status" aria-live="polite">
+          <span>{successMsg}</span>
+        </div>
+      ) : null}
+
+      <section className="wms-grid-4" aria-label="Métricas de saldos contables">
+        <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Total OnHand (Físico)</span>
+            <span className="wms-tag wms-tag-slate">FÍSICO</span>
+          </div>
+          <div className="wms-kpi-value">
+            {kpis.totalOnHand}
+            <span className="wms-kpi-unit">uds</span>
+          </div>
           <div className="wms-kpi-foot">
-            {kpis.uniqueProductsWithStock} productos con stock
+            <span className="wms-mono">
+              {kpis.uniqueProductsWithStock} productos con stock
+            </span>
           </div>
         </div>
-        <div className="wms-card">
-          <div className="wms-kpi-label">Total Allocated (Reservado)</div>
-          <div className="wms-kpi-value" style={{ color: "#fbbf24" }}>
+
+        <div className="wms-card wms-kpi-card wms-kpi-card-amber">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Total Allocated (Reservado)</span>
+            <span className="wms-tag wms-tag-amber">▲ RESERVA</span>
+          </div>
+          <div className="wms-kpi-value wms-text-warning">
             {kpis.totalAllocated}
+            <span className="wms-kpi-unit">uds</span>
           </div>
           <div className="wms-kpi-foot">
-            Comprometido en pedidos ALLOCATED / PICKING
+            <span>Comprometido en ALLOCATED / PICKING</span>
           </div>
         </div>
-        <div className="wms-card">
-          <div className="wms-kpi-label">Available To Promise (ATP)</div>
-          <div className="wms-kpi-value" style={{ color: "#34d399" }}>
+
+        <div className="wms-card wms-kpi-card wms-kpi-card-emerald">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Available To Promise (ATP)</span>
+            <span className="wms-tag wms-tag-emerald">✓ ATP</span>
+          </div>
+          <div className="wms-kpi-value wms-text-success">
             {kpis.totalAtp}
+            <span className="wms-kpi-unit">uds</span>
           </div>
-          <div className="wms-kpi-foot">Disponible para nuevas reservas</div>
+          <div className="wms-kpi-foot">
+            <span>Disponible para nuevas reservas</span>
+          </div>
         </div>
-        <div className="wms-card">
-          <div className="wms-kpi-label">Tasa de Compromiso</div>
-          <div className="wms-kpi-value" style={{ color: "#38bdf8" }}>
+
+        <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Tasa de compromiso</span>
+            <span className="wms-tag wms-tag-blue">RATIO</span>
+          </div>
+          <div className="wms-kpi-value wms-text-accent">
             {kpis.utilizationRate}%
           </div>
           <div className="wms-kpi-foot">
-            En {kpis.uniqueLocationsWithStock} ubicaciones ocupadas
+            <span className="wms-mono">
+              En {kpis.uniqueLocationsWithStock} ubicaciones ocupadas
+            </span>
           </div>
         </div>
       </section>
@@ -219,7 +262,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
       <section className="wms-grid-2">
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Saldos en Vivo (`InventoryBalance`)</span>
+            <span>Saldos en vivo (InventoryBalance)</span>
             <span className="wms-tag wms-tag-emerald">
               {balances.length} registros
             </span>
@@ -231,16 +274,33 @@ export default function InventoryAndKardexPage(): JSX.Element {
                   <th>Ubicación</th>
                   <th>SKU</th>
                   <th>Producto</th>
-                  <th>OnHand</th>
-                  <th>Allocated</th>
-                  <th>ATP</th>
+                  <th className="wms-num">OnHand</th>
+                  <th className="wms-num">Allocated</th>
+                  <th className="wms-num">ATP (uds)</th>
                 </tr>
               </thead>
               <tbody>
-                {balances.length === 0 ? (
+                {loading && balances.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="wms-muted">
-                      No hay saldos positivos registrados.
+                    <td colSpan={6}>
+                      <span
+                        className="wms-skeleton"
+                        aria-label="Cargando saldos de inventario"
+                      />
+                    </td>
+                  </tr>
+                ) : balances.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="wms-empty-state">
+                        <div className="wms-empty-title">
+                          Sin saldos positivos en inventario
+                        </div>
+                        <div className="wms-empty-hint">
+                          Ejecuta un ajuste positivo o registra una entrada de
+                          mercancía para generar saldos en este almacén.
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -251,10 +311,12 @@ export default function InventoryAndKardexPage(): JSX.Element {
                       </td>
                       <td className="wms-mono">{b.productSku}</td>
                       <td>{b.productName}</td>
-                      <td>{b.onHandQty}</td>
-                      <td style={{ color: "#fbbf24" }}>{b.allocatedQty}</td>
-                      <td>
-                        <strong style={{ color: "#34d399" }}>{b.atpQty}</strong>
+                      <td className="wms-num">{b.onHandQty}</td>
+                      <td className="wms-num wms-text-warning">
+                        {b.allocatedQty}
+                      </td>
+                      <td className="wms-num">
+                        <strong className="wms-text-success">{b.atpQty}</strong>
                       </td>
                     </tr>
                   ))
@@ -269,16 +331,17 @@ export default function InventoryAndKardexPage(): JSX.Element {
           onSubmit={(e) => void handleCreateAdjustment(e)}
         >
           <div className="wms-card-title">
-            <span>Registrar Ajuste Contable (`ADJUSTMENT`)</span>
+            <span>Registrar ajuste contable (ADJUSTMENT)</span>
             <span className="wms-tag wms-tag-amber">Serializable + Lock</span>
           </div>
-          <p className="wms-muted" style={{ fontSize: "0.83rem", marginTop: 0 }}>
-            Genera una transacción inmutable en <code>inventory_transactions</code>{" "}
-            y actualiza atómicamente <code>onHandQty</code>.
+          <p className="wms-page-subtitle">
+            Genera una transacción inmutable en{" "}
+            <code>inventory_transactions</code> y actualiza atómicamente{" "}
+            <code>onHandQty</code> bajo aislamiento serializable.
           </p>
           <div className="wms-grid-2">
             <label className="wms-field">
-              <span>Ubicación *</span>
+              <span>Ubicación destino *</span>
               <select
                 required
                 value={adjLocationId}
@@ -294,7 +357,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
             </label>
 
             <label className="wms-field">
-              <span>Producto *</span>
+              <span>Producto afectado *</span>
               <select
                 required
                 value={adjProductId}
@@ -310,7 +373,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
             </label>
 
             <label className="wms-field">
-              <span>Delta de Cantidad (+ añade, − descuenta) *</span>
+              <span>Delta de cantidad (+ añade, − descuenta) *</span>
               <input
                 type="number"
                 required
@@ -321,7 +384,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
             </label>
 
             <label className="wms-field">
-              <span>Motivo / Auditoría (mín. 5 caracteres) *</span>
+              <span>Motivo de auditoría (mín. 5 caracteres) *</span>
               <input
                 type="text"
                 required
@@ -332,9 +395,9 @@ export default function InventoryAndKardexPage(): JSX.Element {
               />
             </label>
           </div>
-          <div style={{ marginTop: "1rem" }}>
+          <div className="wms-form-footer">
             <button type="submit" className="wms-btn wms-btn-emerald">
-              Ejecutar Ajuste en Ledger
+              Ejecutar ajuste en ledger
             </button>
           </div>
         </form>
@@ -342,19 +405,16 @@ export default function InventoryAndKardexPage(): JSX.Element {
 
       <section className="wms-card">
         <div className="wms-card-title">
-          <span>Libro Mayor Inmutable (Kardex de Transacciones)</span>
+          <span>Libro mayor inmutable (Kardex de transacciones)</span>
           <span className="wms-tag wms-tag-blue">
             Página {pagination.page} de {pagination.pages} ({pagination.total}{" "}
             movimientos)
           </span>
         </div>
 
-        <div
-          className="wms-grid-4"
-          style={{ marginBottom: "1rem", alignItems: "end" }}
-        >
+        <div className="wms-filter-bar">
           <label className="wms-field">
-            <span>Filtrar por Motivo (`TxReason`)</span>
+            <span>Filtrar por motivo (TxReason)</span>
             <select
               value={reasonFilter}
               onChange={(e) => {
@@ -370,17 +430,17 @@ export default function InventoryAndKardexPage(): JSX.Element {
             </select>
           </label>
 
-          <label className="wms-field" style={{ gridColumn: "span 2" }}>
-            <span>Búsqueda Rápida (SKU, ubicación, referencia, notas)</span>
+          <label className="wms-field">
+            <span>Búsqueda rápida (SKU, ubicación, referencia, notas)</span>
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Ej: PROD-001, A-01-01, ALLOCATION_CANCEL…"
             />
           </label>
 
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div className="wms-actions-row">
             <button
               type="button"
               className="wms-btn wms-btn-outline"
@@ -400,24 +460,66 @@ export default function InventoryAndKardexPage(): JSX.Element {
           </div>
         </div>
 
+        {hasActiveFilters ? (
+          <div className="wms-active-filters" aria-live="polite">
+            <span>Filtros activos:</span>
+            {reasonFilter !== "ALL" ? (
+              <span className="wms-filter-chip">Motivo: {reasonFilter}</span>
+            ) : null}
+            {searchQuery.trim().length > 0 ? (
+              <span className="wms-filter-chip">
+                Texto: &ldquo;{searchQuery.trim()}&rdquo;
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="wms-btn wms-btn-outline wms-btn-sm"
+              onClick={() => {
+                setReasonFilter("ALL");
+                setSearchQuery("");
+                setPage(1);
+              }}
+            >
+              Limpiar filtros
+            </button>
+          </div>
+        ) : null}
+
         <div className="wms-table-wrap">
           <table className="wms-table">
             <thead>
               <tr>
-                <th>Fecha (ISO)</th>
-                <th>Motivo (`TxReason`)</th>
+                <th>Fecha (UTC)</th>
+                <th>Motivo (TxReason)</th>
                 <th>SKU / Producto</th>
                 <th>Origen → Destino</th>
-                <th>Cantidad</th>
-                <th>Ref / Notas</th>
+                <th className="wms-num">Cantidad (uds)</th>
+                <th>Referencia y notas</th>
               </tr>
             </thead>
             <tbody>
-              {visibleTransactions.length === 0 ? (
+              {loading && visibleTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="wms-muted">
-                    No se encontraron movimientos en el Kardex con los filtros
-                    actuales.
+                  <td colSpan={6}>
+                    <span
+                      className="wms-skeleton"
+                      aria-label="Cargando movimientos del Kardex"
+                    />
+                  </td>
+                </tr>
+              ) : visibleTransactions.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="wms-empty-state">
+                      <div className="wms-empty-title">
+                        Sin movimientos coincidentes en el Kardex
+                      </div>
+                      <div className="wms-empty-hint">
+                        {hasActiveFilters
+                          ? "Prueba a limpiar los filtros de motivo o búsqueda para inspeccionar todo el historial."
+                          : "Aún no existen transacciones contables registradas para este almacén."}
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -438,7 +540,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
                     <td className="wms-mono">
                       {tx.fromLocation ?? "EXT"} → {tx.toLocation ?? "EXT"}
                     </td>
-                    <td>
+                    <td className="wms-num">
                       <strong>{tx.quantity}</strong>
                     </td>
                     <td className="wms-muted">

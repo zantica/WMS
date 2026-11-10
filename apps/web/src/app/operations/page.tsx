@@ -103,7 +103,7 @@ export default function OperationsMonitorPage(): JSX.Element {
       setExternalRef("");
       setCustomerName("");
       setSuccessMsg(
-        `Pedido ${created.externalRef ?? created.id} creado en estado ${created.status}.`,
+        `✓ Pedido ${created.externalRef ?? created.id} registrado en estado ${created.status}.`,
       );
       await loadOperations();
     } catch (err) {
@@ -120,7 +120,7 @@ export default function OperationsMonitorPage(): JSX.Element {
     try {
       const res = await client.allocateOrder(orderId);
       setSuccessMsg(
-        `Pedido ${orderId} reservado. Tarea de Picking generada: ${res.taskId}.`,
+        `✓ Pedido ${orderId} reservado. Tarea de picking generada: ${res.taskId}.`,
       );
       await loadOperations();
     } catch (err) {
@@ -144,7 +144,7 @@ export default function OperationsMonitorPage(): JSX.Element {
         "Cancelado por supervisor desde WMS Control Tower",
       );
       setSuccessMsg(
-        `Pedido ${res.orderId} cancelado (previo: ${res.previousStatus}). Unidades liberadas (ALLOCATION_CANCEL): ${res.totalReleasedQty}.`,
+        `✓ Pedido ${res.orderId} cancelado (previo: ${res.previousStatus}). Unidades liberadas (ALLOCATION_CANCEL): ${res.totalReleasedQty} uds.`,
       );
       await loadOperations();
     } catch (err) {
@@ -162,7 +162,7 @@ export default function OperationsMonitorPage(): JSX.Element {
     setSuccessMsg(null);
     try {
       const res = await client.dispatchOrder(orderId);
-      setSuccessMsg(`Pedido ${res.orderId} despachado (${res.status}).`);
+      setSuccessMsg(`✓ Pedido ${res.orderId} despachado (${res.status}).`);
       await loadOperations();
     } catch (err) {
       setErrorMsg(
@@ -180,13 +180,18 @@ export default function OperationsMonitorPage(): JSX.Element {
     <>
       <div className="wms-page-header">
         <div>
+          <div className="wms-eyebrow">
+            <span>▲ EJECUCIÓN DE PISO</span>
+            <span>·</span>
+            <span>{session.warehouseId}</span>
+          </div>
           <h1 className="wms-page-title">
-            Monitor de Pedidos & Ejecución de Tareas de Piso
+            Monitor de pedidos y ejecución de tareas
           </h1>
           <p className="wms-page-subtitle">
-            Control de alocación FEFO/FIFO, liberación atómica de reservas por
-            cancelación (`F3.1`) y seguimiento de pasos de operarios en tiempo
-            real.
+            Control de reserva FEFO/FIFO, liberación atómica de reservas por
+            cancelación (<code>F3.1</code>) y seguimiento de pasos de operarios
+            en tiempo real.
           </p>
         </div>
 
@@ -198,57 +203,96 @@ export default function OperationsMonitorPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando…" : "Refrescar Operaciones"}
+          {loading ? "Sincronizando operaciones…" : "Sincronizar operaciones"}
         </button>
       </div>
 
-      {errorMsg ? <div className="wms-alert-banner">{errorMsg}</div> : null}
-      {successMsg ? (
-        <div className="wms-success-banner">{successMsg}</div>
+      {errorMsg ? (
+        <div className="wms-alert-banner" role="alert" aria-live="assertive">
+          <span>
+            <strong>⚠ Error operativo:</strong> {errorMsg}
+          </span>
+        </div>
       ) : null}
 
-      <section className="wms-grid-4">
-        <div className="wms-card">
-          <div className="wms-kpi-label">Pedidos Activos</div>
-          <div className="wms-kpi-value">{ordersSummary.activeOrdersCount}</div>
+      {successMsg ? (
+        <div className="wms-success-banner" role="status" aria-live="polite">
+          <span>{successMsg}</span>
+        </div>
+      ) : null}
+
+      <section className="wms-grid-4" aria-label="Indicadores de operaciones">
+        <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Pedidos activos</span>
+            <span className="wms-tag wms-tag-blue">CARTERA</span>
+          </div>
+          <div className="wms-kpi-value">
+            {ordersSummary.activeOrdersCount}
+            <span className="wms-kpi-unit">pedidos</span>
+          </div>
           <div className="wms-kpi-foot">
-            De {ordersSummary.totalOrders} pedidos listados
+            <span className="wms-mono">
+              De {ordersSummary.totalOrders} pedidos listados
+            </span>
           </div>
         </div>
-        <div className="wms-card">
-          <div className="wms-kpi-label">Pedidos en ON_HOLD</div>
-          <div className="wms-kpi-value" style={{ color: "#fb7185" }}>
+
+        <div className="wms-card wms-kpi-card wms-kpi-card-rose">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Retenidos en ON_HOLD</span>
+            <span className="wms-tag wms-tag-rose">⚠ ROTURA</span>
+          </div>
+          <div className="wms-kpi-value wms-text-danger">
             {ordersSummary.onHoldOrders.length}
+            <span className="wms-kpi-unit">pedidos</span>
           </div>
           <div className="wms-kpi-foot">
-            Pendientes de reabastecimiento o re-alocación
+            <span>Pendientes de reabastecimiento o re-alocación</span>
           </div>
         </div>
-        <div className="wms-card">
-          <div className="wms-kpi-label">Listos para Despacho (PACKED)</div>
-          <div className="wms-kpi-value" style={{ color: "#34d399" }}>
+
+        <div className="wms-card wms-kpi-card wms-kpi-card-emerald">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Listos para despacho (PACKED)</span>
+            <span className="wms-tag wms-tag-emerald">✓ MUELLE</span>
+          </div>
+          <div className="wms-kpi-value wms-text-success">
             {ordersSummary.readyToDispatchOrders.length}
-          </div>
-          <div className="wms-kpi-foot">En mesa de empaquetado / muelle</div>
-        </div>
-        <div className="wms-card">
-          <div className="wms-kpi-label">Tareas Operativas en Piso</div>
-          <div className="wms-kpi-value" style={{ color: "#38bdf8" }}>
-            {tasksMonitor.totalTasks}
+            <span className="wms-kpi-unit">pedidos</span>
           </div>
           <div className="wms-kpi-foot">
-            {tasksMonitor.inProgressCount} en curso ·{" "}
-            {tasksMonitor.tasksWithExceptions.length} con excepción
+            <span>En mesa de empaquetado / muelle de salida</span>
+          </div>
+        </div>
+
+        <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Tareas operativas en piso</span>
+            <span className="wms-tag wms-tag-amber">▲ EJECUCIÓN</span>
+          </div>
+          <div className="wms-kpi-value wms-text-accent">
+            {tasksMonitor.totalTasks}
+            <span className="wms-kpi-unit">tareas</span>
+          </div>
+          <div className="wms-kpi-foot">
+            <span className="wms-mono">
+              {tasksMonitor.inProgressCount} en curso
+            </span>
+            <span>·</span>
+            <span className="wms-mono">
+              {tasksMonitor.tasksWithExceptions.length} con excepción
+            </span>
           </div>
         </div>
       </section>
 
       <section className="wms-grid-2">
         <form className="wms-card" onSubmit={(e) => void handleCreateOrder(e)}>
-          <h2 className="wms-card-title">Crear Pedido de Venta Manual</h2>
+          <h2 className="wms-card-title">Crear pedido de venta manual</h2>
           <div className="wms-grid-2">
             <label className="wms-field">
-              <span>Referencia Externa</span>
+              <span>Referencia externa</span>
               <input
                 type="text"
                 value={externalRef}
@@ -257,7 +301,7 @@ export default function OperationsMonitorPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Cliente</span>
+              <span>Cliente destinatario</span>
               <input
                 type="text"
                 value={customerName}
@@ -266,7 +310,7 @@ export default function OperationsMonitorPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Producto Solicitado *</span>
+              <span>Producto solicitado *</span>
               <select
                 required
                 value={selectedProductId}
@@ -282,7 +326,7 @@ export default function OperationsMonitorPage(): JSX.Element {
             </label>
             <div className="wms-grid-2">
               <label className="wms-field">
-                <span>Cantidad *</span>
+                <span>Cantidad (uds) *</span>
                 <input
                   type="number"
                   min={1}
@@ -292,7 +336,7 @@ export default function OperationsMonitorPage(): JSX.Element {
                 />
               </label>
               <label className="wms-field">
-                <span>Prioridad (0-100)</span>
+                <span>Prioridad (0–100)</span>
                 <input
                   type="number"
                   min={0}
@@ -303,51 +347,46 @@ export default function OperationsMonitorPage(): JSX.Element {
               </label>
             </div>
           </div>
-          <div style={{ marginTop: "1rem" }}>
+          <div className="wms-form-footer">
             <button type="submit" className="wms-btn wms-btn-emerald">
-              Registrar Pedido (PENDING)
+              Registrar pedido (PENDING)
             </button>
           </div>
         </form>
 
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Cola de Tareas Activas (`WarehouseTask`)</span>
+            <span>Cola de tareas activas (WarehouseTask)</span>
             <span className="wms-tag wms-tag-blue">
               {tasksMonitor.totalTasks} tareas
             </span>
           </div>
 
-          {tasksMonitor.rows.length === 0 ? (
-            <p className="wms-muted">
-              No hay tareas operativas pendientes ni en progreso.
-            </p>
+          {loading && tasksMonitor.rows.length === 0 ? (
+            <span
+              className="wms-skeleton"
+              aria-label="Cargando tareas operativas"
+            />
+          ) : tasksMonitor.rows.length === 0 ? (
+            <div className="wms-empty-state">
+              <div className="wms-empty-title">
+                Sin tareas operativas en ejecución
+              </div>
+              <div className="wms-empty-hint">
+                Lanza la reserva ATP de un pedido en estado PENDING para generar
+                automáticamente tareas de picking guiado.
+              </div>
+            </div>
           ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.85rem",
-              }}
-            >
+            <div className="wms-stack">
               {tasksMonitor.rows.map((row) => (
                 <div
                   key={row.task.id}
-                  className="wms-location-cell"
-                  style={{
-                    borderColor: row.hasException
-                      ? "rgba(244, 63, 94, 0.65)"
-                      : undefined,
-                  }}
+                  className={`wms-location-cell ${
+                    row.hasException ? "wms-location-exception" : ""
+                  }`}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "0.4rem",
-                    }}
-                  >
+                  <div className="wms-row-between">
                     <div>
                       <strong className="wms-mono">{row.task.type}</strong> ·{" "}
                       <span className="wms-mono wms-muted">{row.task.id}</span>
@@ -361,36 +400,30 @@ export default function OperationsMonitorPage(): JSX.Element {
                             : "wms-tag-blue"
                       }`}
                     >
-                      {row.task.status}
+                      {row.hasException ? `⚠ ${row.task.status}` : row.task.status}
                     </span>
                   </div>
 
                   <div className="wms-progress-track">
                     <div
-                      className="wms-progress-fill"
+                      className={`wms-progress-fill ${
+                        row.hasException ? "wms-progress-fill-rose" : ""
+                      }`}
                       style={{ width: `${row.percent}%` }}
                     />
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: "0.78rem",
-                      marginTop: "0.45rem",
-                    }}
-                    className="wms-muted"
-                  >
-                    <span>
-                      Pasos: {row.completedSteps}/{row.totalSteps} ({row.percent}
-                      %)
+                  <div className="wms-cell-stats">
+                    <span className="wms-muted">
+                      Pasos: {row.completedSteps}/{row.totalSteps} (
+                      {row.percent}%)
                     </span>
-                    <span>
-                      Unidades escaneadas: {row.scannedUnits}/{row.expectedUnits}
+                    <span className="wms-muted">
+                      Escaneado: {row.scannedUnits}/{row.expectedUnits} uds
                     </span>
                     {row.exceptionSteps > 0 ? (
-                      <strong style={{ color: "#fb7185" }}>
-                        {row.exceptionSteps} excepción(es)
+                      <strong className="wms-text-danger">
+                        ⚠ {row.exceptionSteps} excepción(es)
                       </strong>
                     ) : null}
                   </div>
@@ -403,19 +436,16 @@ export default function OperationsMonitorPage(): JSX.Element {
 
       <section className="wms-card">
         <div className="wms-card-title">
-          <span>Cartera de Pedidos de Venta ({orders.length})</span>
-          <label
-            className="wms-field"
-            style={{ flexDirection: "row", alignItems: "center", gap: "0.5rem" }}
-          >
-            <span>Estado:</span>
+          <span>Cartera de pedidos de venta ({orders.length})</span>
+          <label className="wms-field wms-field-inline">
+            <span>Filtrar estado:</span>
             <select
               value={statusFilter}
               onChange={(e) =>
                 setStatusFilter(e.target.value as OrderStatus | "ALL")
               }
             >
-              <option value="ALL">TODOS</option>
+              <option value="ALL">TODOS LOS ESTADOS</option>
               {ORDER_STATUS_LIST.map((st) => (
                 <option key={st} value={st}>
                   {st}
@@ -425,23 +455,54 @@ export default function OperationsMonitorPage(): JSX.Element {
           </label>
         </div>
 
+        {statusFilter !== "ALL" ? (
+          <div className="wms-active-filters" aria-live="polite">
+            <span>Filtro activo:</span>
+            <span className="wms-filter-chip">Estado: {statusFilter}</span>
+            <button
+              type="button"
+              className="wms-btn wms-btn-outline wms-btn-sm"
+              onClick={() => setStatusFilter("ALL")}
+            >
+              Ver todos los pedidos
+            </button>
+          </div>
+        ) : null}
+
         <div className="wms-table-wrap">
           <table className="wms-table">
             <thead>
               <tr>
-                <th>Pedido / Ref</th>
+                <th>Pedido / Referencia</th>
                 <th>Cliente</th>
-                <th>Prioridad</th>
+                <th className="wms-num">Prioridad</th>
                 <th>Estado</th>
-                <th>Líneas (Solicitado / Picked)</th>
-                <th>Acciones de Supervisor</th>
+                <th>Líneas (Recolectado / Solicitado)</th>
+                <th>Acciones de supervisor</th>
               </tr>
             </thead>
             <tbody>
-              {orders.length === 0 ? (
+              {loading && orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="wms-muted">
-                    No hay pedidos registrados para el filtro seleccionado.
+                  <td colSpan={6}>
+                    <span
+                      className="wms-skeleton"
+                      aria-label="Cargando cartera de pedidos"
+                    />
+                  </td>
+                </tr>
+              ) : orders.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="wms-empty-state">
+                      <div className="wms-empty-title">
+                        Sin pedidos para el filtro seleccionado
+                      </div>
+                      <div className="wms-empty-hint">
+                        Crea un pedido manual desde el panel superior o cambia
+                        el filtro de estado operativo.
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -462,15 +523,12 @@ export default function OperationsMonitorPage(): JSX.Element {
                         <strong className="wms-mono">
                           {order.externalRef ?? order.id}
                         </strong>
-                        <div
-                          className="wms-muted wms-mono"
-                          style={{ fontSize: "0.74rem" }}
-                        >
+                        <div className="wms-cell-meta wms-mono">
                           {order.id}
                         </div>
                       </td>
-                      <td>{order.customerName ?? "Cliente Estándar"}</td>
-                      <td>
+                      <td>{order.customerName ?? "Cliente estándar"}</td>
+                      <td className="wms-num">
                         <span
                           className={`wms-tag ${
                             order.priority >= 10
@@ -505,49 +563,43 @@ export default function OperationsMonitorPage(): JSX.Element {
                         ))}
                       </td>
                       <td>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "0.45rem",
-                            flexWrap: "wrap",
-                          }}
-                        >
+                        <div className="wms-actions-row">
                           {canAllocate ? (
                             <button
                               type="button"
-                              className="wms-btn wms-btn-primary"
+                              className="wms-btn wms-btn-secondary wms-btn-sm"
                               disabled={isBusy}
                               onClick={() => {
                                 void handleAllocateOrder(order.id);
                               }}
                             >
-                              Alocar Stock
+                              Lanzar reserva ATP
                             </button>
                           ) : null}
 
                           {canDispatch ? (
                             <button
                               type="button"
-                              className="wms-btn wms-btn-emerald"
+                              className="wms-btn wms-btn-emerald wms-btn-sm"
                               disabled={isBusy}
                               onClick={() => {
                                 void handleDispatchOrder(order.id);
                               }}
                             >
-                              Despachar
+                              Confirmar despacho
                             </button>
                           ) : null}
 
                           {canCancel ? (
                             <button
                               type="button"
-                              className="wms-btn wms-btn-danger"
+                              className="wms-btn wms-btn-danger wms-btn-sm"
                               disabled={isBusy}
                               onClick={() => {
                                 void handleCancelOrder(order.id);
                               }}
                             >
-                              Cancelar Pedido
+                              Cancelar pedido
                             </button>
                           ) : null}
                         </div>

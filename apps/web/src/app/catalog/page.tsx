@@ -88,7 +88,7 @@ export default function CatalogAndLocationsPage(): JSX.Element {
       setProductName("");
       setBarcode("");
       setWeightGrams("");
-      setSuccessMsg(`Producto ${created.sku} creado correctamente.`);
+      setSuccessMsg(`✓ Producto ${created.sku} registrado en el catálogo.`);
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "No se pudo crear el producto",
@@ -116,7 +116,7 @@ export default function CatalogAndLocationsPage(): JSX.Element {
       setLocCode("");
       setLocDescription("");
       setSuccessMsg(
-        `Ubicación ${created.code} (${created.type}) registrada en ${session.warehouseId}.`,
+        `✓ Ubicación ${created.code} (${created.type}) registrada en ${session.warehouseId}.`,
       );
     } catch (err) {
       setErrorMsg(
@@ -131,12 +131,17 @@ export default function CatalogAndLocationsPage(): JSX.Element {
     <>
       <div className="wms-page-header">
         <div>
+          <div className="wms-eyebrow">
+            <span>◆ TOPOLOGÍA FÍSICA</span>
+            <span>·</span>
+            <span>{session.warehouseId}</span>
+          </div>
           <h1 className="wms-page-title">
-            Catálogo de Productos & Mapa de Ubicaciones
+            Catálogo de productos y mapa de ubicaciones
           </h1>
           <p className="wms-page-subtitle">
-            Topología física del almacén ({session.warehouseId}) ordenada por
-            flujo operativo: RECEIVING → STORAGE → PACKING → DISPATCH.
+            Distribución espacial del almacén ordenada por flujo físico:
+            RECEIVING → STORAGE → PACKING → DISPATCH.
           </p>
         </div>
 
@@ -148,50 +153,73 @@ export default function CatalogAndLocationsPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Cargando…" : "Refrescar Topología"}
+          {loading ? "Sincronizando topología…" : "Sincronizar topología"}
         </button>
       </div>
 
-      {errorMsg ? <div className="wms-alert-banner">{errorMsg}</div> : null}
+      {errorMsg ? (
+        <div className="wms-alert-banner" role="alert" aria-live="assertive">
+          <span>
+            <strong>⚠ Error en catálogo:</strong> {errorMsg}
+          </span>
+        </div>
+      ) : null}
+
       {successMsg ? (
-        <div className="wms-success-banner">{successMsg}</div>
+        <div className="wms-success-banner" role="status" aria-live="polite">
+          <span>{successMsg}</span>
+        </div>
       ) : null}
 
       <section className="wms-card">
         <div className="wms-card-title">
-          <span>Mapa de Ubicaciones en Vivo por Zona Operativa</span>
+          <span>Mapa de ubicaciones por zona operativa</span>
           <span className="wms-tag wms-tag-blue">
             {locations.length} ubicaciones registradas
           </span>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+        <div className="wms-stack">
           {zoneGroups.map((group) => (
-            <div key={group.zone}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.6rem",
-                }}
-              >
-                <div>
-                  <strong>{group.label}</strong>{" "}
+            <div key={group.zone} className="wms-zone-block">
+              <div className="wms-zone-header">
+                <div className="wms-actions-row">
+                  <strong>{group.label}</strong>
                   <span className="wms-tag wms-tag-slate wms-mono">
                     {group.zone}
                   </span>
                 </div>
-                <span className="wms-muted" style={{ fontSize: "0.82rem" }}>
-                  Ocupadas: {group.occupiedLocations}/{group.totalLocations} ·
-                  OnHand: {group.totalOnHand} · Reservado:{" "}
-                  {group.totalAllocated} · ATP: {group.totalAtp}
-                </span>
+                <div className="wms-zone-metrics">
+                  <span>
+                    Ocupadas: {group.occupiedLocations}/{group.totalLocations}
+                  </span>
+                  <span>·</span>
+                  <span>OnHand: {group.totalOnHand} uds</span>
+                  <span>·</span>
+                  <span className="wms-text-warning">
+                    Reservado: {group.totalAllocated} uds
+                  </span>
+                  <span>·</span>
+                  <strong className="wms-text-success">
+                    ATP: {group.totalAtp} uds
+                  </strong>
+                </div>
               </div>
 
-              {group.locations.length === 0 ? (
-                <div className="wms-muted" style={{ fontSize: "0.84rem" }}>
-                  Sin ubicaciones configuradas en la zona {group.zone}.
+              {loading && locations.length === 0 ? (
+                <span
+                  className="wms-skeleton"
+                  aria-label={`Cargando zona ${group.zone}`}
+                />
+              ) : group.locations.length === 0 ? (
+                <div className="wms-empty-state">
+                  <div className="wms-empty-title">
+                    Zona {group.zone} sin ubicaciones configuradas
+                  </div>
+                  <div className="wms-empty-hint">
+                    Utiliza el formulario de alta de ubicación física para
+                    habilitar posiciones en esta zona operativa.
+                  </div>
                 </div>
               ) : (
                 <div className="wms-location-grid">
@@ -202,13 +230,7 @@ export default function CatalogAndLocationsPage(): JSX.Element {
                         node.isOccupied ? "wms-location-occupied" : ""
                       }`}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
+                      <div className="wms-row-between">
                         <strong className="wms-mono">
                           {node.location.code}
                         </strong>
@@ -220,27 +242,22 @@ export default function CatalogAndLocationsPage(): JSX.Element {
                           }`}
                         >
                           {node.isOccupied
-                            ? `${node.skuCount} SKU(s)`
-                            : "VACÍA"}
+                            ? `● ${node.skuCount} SKU(s)`
+                            : "○ VACÍA"}
                         </span>
                       </div>
                       <div
-                        className="wms-muted"
-                        style={{ fontSize: "0.76rem", marginTop: "0.25rem" }}
+                        className="wms-cell-meta"
+                        title={node.location.description ?? "Sin descripción"}
                       >
                         {node.location.description ?? "Sin descripción"}
                       </div>
-                      <div
-                        style={{
-                          marginTop: "0.55rem",
-                          fontSize: "0.78rem",
-                          display: "flex",
-                          justifyContent: "space-between",
-                        }}
-                      >
-                        <span>OnHand: {node.onHandQty}</span>
-                        <span>Alloc: {node.allocatedQty}</span>
-                        <strong style={{ color: "#34d399" }}>
+                      <div className="wms-cell-stats">
+                        <span>OH: {node.onHandQty}</span>
+                        <span className="wms-text-warning">
+                          AL: {node.allocatedQty}
+                        </span>
+                        <strong className="wms-text-success">
                           ATP: {node.atpQty}
                         </strong>
                       </div>
@@ -255,10 +272,10 @@ export default function CatalogAndLocationsPage(): JSX.Element {
 
       <section className="wms-grid-2">
         <form className="wms-card" onSubmit={(e) => void handleCreateProduct(e)}>
-          <h2 className="wms-card-title">Alta de Producto en Catálogo</h2>
+          <h2 className="wms-card-title">Alta de producto en catálogo</h2>
           <div className="wms-grid-2">
             <label className="wms-field">
-              <span>SKU *</span>
+              <span>Código SKU *</span>
               <input
                 type="text"
                 required
@@ -268,7 +285,7 @@ export default function CatalogAndLocationsPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Nombre del Producto *</span>
+              <span>Nombre descriptivo *</span>
               <input
                 type="text"
                 required
@@ -278,7 +295,7 @@ export default function CatalogAndLocationsPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Código de Barras (EAN / QR)</span>
+              <span>Código de barras (EAN / QR)</span>
               <input
                 type="text"
                 value={barcode}
@@ -287,7 +304,7 @@ export default function CatalogAndLocationsPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Peso (gramos)</span>
+              <span>Peso unitario (gramos)</span>
               <input
                 type="number"
                 min={1}
@@ -297,9 +314,9 @@ export default function CatalogAndLocationsPage(): JSX.Element {
               />
             </label>
           </div>
-          <div style={{ marginTop: "1rem" }}>
+          <div className="wms-form-footer">
             <button type="submit" className="wms-btn wms-btn-emerald">
-              Crear Producto
+              Registrar producto
             </button>
           </div>
         </form>
@@ -308,10 +325,10 @@ export default function CatalogAndLocationsPage(): JSX.Element {
           className="wms-card"
           onSubmit={(e) => void handleCreateLocation(e)}
         >
-          <h2 className="wms-card-title">Alta de Ubicación Física</h2>
+          <h2 className="wms-card-title">Alta de ubicación física</h2>
           <div className="wms-grid-2">
             <label className="wms-field">
-              <span>Código de Ubicación *</span>
+              <span>Código de posición *</span>
               <input
                 type="text"
                 required
@@ -321,30 +338,30 @@ export default function CatalogAndLocationsPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Zona (`LocationType`) *</span>
+              <span>Zona operativa (LocationType) *</span>
               <select
                 value={locType}
                 onChange={(e) => setLocType(e.target.value as LocationType)}
               >
-                <option value="RECEIVING">RECEIVING (Muelle Entrada)</option>
-                <option value="STORAGE">STORAGE (Estantería Picking)</option>
-                <option value="PACKING">PACKING (Mesa Empaquetado)</option>
-                <option value="DISPATCH">DISPATCH (Muelle Salida)</option>
+                <option value="RECEIVING">RECEIVING (Muelle entrada)</option>
+                <option value="STORAGE">STORAGE (Estantería picking)</option>
+                <option value="PACKING">PACKING (Mesa empaquetado)</option>
+                <option value="DISPATCH">DISPATCH (Muelle salida)</option>
               </select>
             </label>
-            <label className="wms-field" style={{ gridColumn: "1 / -1" }}>
-              <span>Descripción</span>
+            <label className="wms-field wms-field-full">
+              <span>Descripción de pasillo / nivel</span>
               <input
                 type="text"
                 value={locDescription}
                 onChange={(e) => setLocDescription(e.target.value)}
-                placeholder="Pasillo A nivel 1"
+                placeholder="Pasillo A · Nivel 1 · Frontal"
               />
             </label>
           </div>
-          <div style={{ marginTop: "1rem" }}>
-            <button type="submit" className="wms-btn wms-btn-primary">
-              Crear Ubicación
+          <div className="wms-form-footer">
+            <button type="submit" className="wms-btn wms-btn-secondary">
+              Registrar ubicación
             </button>
           </div>
         </form>
@@ -352,24 +369,44 @@ export default function CatalogAndLocationsPage(): JSX.Element {
 
       <section className="wms-card">
         <div className="wms-card-title">
-          <span>Catálogo Maestro de Productos ({products.length})</span>
+          <span>Catálogo maestro de productos</span>
+          <span className="wms-tag wms-tag-slate">
+            {products.length} referencias
+          </span>
         </div>
         <div className="wms-table-wrap">
           <table className="wms-table">
             <thead>
               <tr>
                 <th>SKU</th>
-                <th>Nombre</th>
-                <th>Barcode</th>
-                <th>Peso (g)</th>
+                <th>Nombre del producto</th>
+                <th>Código de barras</th>
+                <th className="wms-num">Peso (g)</th>
                 <th>Estado</th>
               </tr>
             </thead>
             <tbody>
-              {products.length === 0 ? (
+              {loading && products.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="wms-muted">
-                    No hay productos registrados en este tenant.
+                  <td colSpan={5}>
+                    <span
+                      className="wms-skeleton"
+                      aria-label="Cargando catálogo de productos"
+                    />
+                  </td>
+                </tr>
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>
+                    <div className="wms-empty-state">
+                      <div className="wms-empty-title">
+                        Catálogo vacío en este tenant
+                      </div>
+                      <div className="wms-empty-hint">
+                        Registra tu primer SKU mediante el formulario de alta de
+                        producto para habilitar recepciones y pedidos.
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -382,14 +419,16 @@ export default function CatalogAndLocationsPage(): JSX.Element {
                     <td className="wms-mono wms-muted">
                       {prod.barcode ?? "—"}
                     </td>
-                    <td>{prod.weightGrams ?? "—"}</td>
+                    <td className="wms-num">
+                      {prod.weightGrams ? `${prod.weightGrams} g` : "—"}
+                    </td>
                     <td>
                       <span
                         className={`wms-tag ${
                           prod.isActive ? "wms-tag-emerald" : "wms-tag-slate"
                         }`}
                       >
-                        {prod.isActive ? "ACTIVO" : "INACTIVO"}
+                        {prod.isActive ? "● ACTIVO" : "○ INACTIVO"}
                       </span>
                     </td>
                   </tr>

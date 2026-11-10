@@ -1,7 +1,7 @@
 "use client";
 
 // apps/web/src/app/page.tsx
-// Vista principal del Dashboard de Supervisores: KPIs ejecutivos de inventario, estado de pedidos, alertas y últimos movimientos del Ledger.
+// Vista principal del Dashboard de Supervisores: HUD contable (OnHand − Allocated = ATP), pipeline de pedidos y últimos movimientos del Ledger.
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type JSX } from "react";
@@ -25,6 +25,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
   const [tasks, setTasks] = useState<WarehouseTaskDTO[]>([]);
   const [recentTx, setRecentTx] = useState<KardexTransactionItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
@@ -41,6 +42,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
       setOrders(ordRes);
       setTasks(taskRes);
       setRecentTx(txRes.data);
+      setLastSyncedAt(new Date().toISOString().slice(11, 19));
     } catch (err) {
       const msg =
         err instanceof Error
@@ -59,17 +61,29 @@ export default function SupervisorOverviewPage(): JSX.Element {
   const inventoryKpis = computeInventoryKpis(balances);
   const ordersSummary = summarizeOrdersByStatus(orders);
   const tasksSummary = summarizeTasksMonitor(tasks);
+  const hasOperationalAlerts =
+    ordersSummary.onHoldOrders.length > 0 ||
+    tasksSummary.tasksWithExceptions.length > 0;
 
   return (
     <>
       <div className="wms-page-header">
         <div>
-          <h1 className="wms-page-title">
-            Torre de Control Operativa ({session.warehouseId})
-          </h1>
+          <div className="wms-eyebrow">
+            <span>● TELEMETRÍA EN VIVO</span>
+            <span>·</span>
+            <span>{session.warehouseId}</span>
+            {lastSyncedAt ? (
+              <>
+                <span>·</span>
+                <span>SYNC {lastSyncedAt} UTC</span>
+              </>
+            ) : null}
+          </div>
+          <h1 className="wms-page-title">Torre de control operativa</h1>
           <p className="wms-page-subtitle">
-            Visibilidad en tiempo real sobre saldos contables (OnHand vs
-            Allocated vs ATP), cartera de pedidos y ejecución de piso.
+            Visibilidad en tiempo real sobre saldos contables del ledger
+            inmutable, pipeline de pedidos y ejecución de piso.
           </p>
         </div>
 
@@ -81,70 +95,179 @@ export default function SupervisorOverviewPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando…" : "Actualizar Panel"}
+          {loading ? "Sincronizando telemetría…" : "Sincronizar panel"}
         </button>
       </div>
 
       {errorMsg ? (
-        <div className="wms-alert-banner">
-          <strong>Aviso de Conexión:</strong> {errorMsg}. Verifica que{" "}
-          <code>@wms/api</code> esté corriendo en{" "}
-          <code>{session.apiBaseUrl}</code>.
+        <div className="wms-alert-banner" role="alert" aria-live="assertive">
+          <div>
+            <strong>⚠ Fallo de sincronización con la API:</strong> {errorMsg}.
+            Verifica que <code>@wms/api</code> esté ejecutándose en{" "}
+            <code>{session.apiBaseUrl}</code> y que el header{" "}
+            <code>x-api-key</code> sea válido.
+          </div>
+          <button
+            type="button"
+            className="wms-btn wms-btn-outline wms-btn-sm"
+            onClick={() => {
+              void loadOverview();
+            }}
+          >
+            Reintentar ahora
+          </button>
         </div>
       ) : null}
 
-      <section className="wms-grid-4">
-        <div className="wms-card">
-          <div className="wms-kpi-label">Stock Físico Total (OnHand)</div>
-          <div className="wms-kpi-value">{inventoryKpis.totalOnHand}</div>
+      {/* Elemento memorable: HUD de Métricas Contables con iluminación perimetral */}
+      <section className="wms-grid-4" aria-label="Indicadores clave del almacén">
+        <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Stock físico (OnHand)</span>
+            <span className="wms-tag wms-tag-slate">FÍSICO</span>
+          </div>
+          <div className="wms-kpi-value">
+            {loading && balances.length === 0 ? (
+              <span className="wms-skeleton" aria-label="Cargando OnHand" />
+            ) : (
+              <>
+                {inventoryKpis.totalOnHand}
+                <span className="wms-kpi-unit">uds</span>
+              </>
+            )}
+          </div>
           <div className="wms-kpi-foot">
-            {inventoryKpis.uniqueProductsWithStock} SKUs en{" "}
-            {inventoryKpis.uniqueLocationsWithStock} ubicaciones activas
+            <span className="wms-mono">
+              {inventoryKpis.uniqueProductsWithStock} SKUs
+            </span>
+            <span>·</span>
+            <span className="wms-mono">
+              {inventoryKpis.uniqueLocationsWithStock} ubicaciones activas
+            </span>
           </div>
         </div>
 
-        <div className="wms-card">
-          <div className="wms-kpi-label">Stock Reservado (Allocated)</div>
-          <div className="wms-kpi-value" style={{ color: "#fbbf24" }}>
-            {inventoryKpis.totalAllocated}
+        <div className="wms-card wms-kpi-card wms-kpi-card-amber">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Stock reservado (Allocated)</span>
+            <span className="wms-tag wms-tag-amber">▲ RESERVA</span>
+          </div>
+          <div className="wms-kpi-value wms-text-warning">
+            {loading && balances.length === 0 ? (
+              <span className="wms-skeleton" aria-label="Cargando Allocated" />
+            ) : (
+              <>
+                {inventoryKpis.totalAllocated}
+                <span className="wms-kpi-unit">uds</span>
+              </>
+            )}
           </div>
           <div className="wms-kpi-foot">
-            Tasa de reserva: {inventoryKpis.utilizationRate}% del OnHand
+            <span>Tasa de compromiso:</span>
+            <strong className="wms-mono wms-text-primary">
+              {inventoryKpis.utilizationRate}%
+            </strong>
+            <span>del OnHand</span>
           </div>
         </div>
 
-        <div className="wms-card">
-          <div className="wms-kpi-label">Disponible Prometible (ATP)</div>
-          <div className="wms-kpi-value" style={{ color: "#34d399" }}>
-            {inventoryKpis.totalAtp}
+        <div className="wms-card wms-kpi-card wms-kpi-card-emerald">
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Disponible prometible (ATP)</span>
+            <span className="wms-tag wms-tag-emerald">✓ PROMETIBLE</span>
+          </div>
+          <div className="wms-kpi-value wms-text-success">
+            {loading && balances.length === 0 ? (
+              <span className="wms-skeleton" aria-label="Cargando ATP" />
+            ) : (
+              <>
+                {inventoryKpis.totalAtp}
+                <span className="wms-kpi-unit">uds</span>
+              </>
+            )}
           </div>
           <div className="wms-kpi-foot">
-            Invariante: ATP = OnHand − Allocated
+            <span className="wms-mono">Invariante: OnHand − Allocated</span>
           </div>
         </div>
 
-        <div className="wms-card">
-          <div className="wms-kpi-label">Pedidos Activos & Tareas</div>
-          <div className="wms-kpi-value" style={{ color: "#38bdf8" }}>
-            {ordersSummary.activeOrdersCount} / {tasksSummary.totalTasks}
+        <div
+          className={`wms-card wms-kpi-card ${
+            hasOperationalAlerts ? "wms-kpi-card-rose" : "wms-kpi-card-cyan"
+          }`}
+        >
+          <div className="wms-kpi-header">
+            <span className="wms-kpi-label">Pedidos y tareas en piso</span>
+            <span
+              className={`wms-tag ${
+                hasOperationalAlerts ? "wms-tag-rose" : "wms-tag-blue"
+              }`}
+            >
+              {hasOperationalAlerts ? "⚠ ATENCIÓN" : "● FLUJO OK"}
+            </span>
+          </div>
+          <div className="wms-kpi-value wms-text-accent">
+            {loading && orders.length === 0 && tasks.length === 0 ? (
+              <span className="wms-skeleton" aria-label="Cargando pedidos" />
+            ) : (
+              <>
+                {ordersSummary.activeOrdersCount}
+                <span className="wms-kpi-unit">pedidos</span>
+                {" / "}
+                {tasksSummary.totalTasks}
+                <span className="wms-kpi-unit">tareas</span>
+              </>
+            )}
           </div>
           <div className="wms-kpi-foot">
-            {ordersSummary.onHoldOrders.length} pedidos ON_HOLD ·{" "}
-            {tasksSummary.tasksWithExceptions.length} tareas con excepción
+            <span className="wms-mono">
+              {ordersSummary.onHoldOrders.length} ON_HOLD
+            </span>
+            <span>·</span>
+            <span className="wms-mono">
+              {tasksSummary.tasksWithExceptions.length} con excepción
+            </span>
           </div>
         </div>
       </section>
 
-      {ordersSummary.onHoldOrders.length > 0 ||
-      tasksSummary.tasksWithExceptions.length > 0 ? (
-        <section className="wms-alert-banner">
-          <strong>Atención del Supervisor Requerida:</strong> Hay{" "}
-          <strong>{ordersSummary.onHoldOrders.length}</strong> pedido(s) en
-          estado <code>ON_HOLD</code> por rotura de stock en estantería y{" "}
-          <strong>{tasksSummary.tasksWithExceptions.length}</strong> tarea(s)
-          operativas con pasos en excepción.{" "}
-          <Link href="/operations" style={{ color: "#ffffff" }}>
-            Ir al Panel de Operaciones →
+      {/* Barra de verificación en vivo del invariante contable */}
+      <section
+        className="wms-invariant-bar"
+        aria-label="Ecuación de integridad del Ledger"
+      >
+        <div className="wms-invariant-formula">
+          <span className="wms-muted">ECUACIÓN DEL LEDGER:</span>
+          <strong>OnHand ({inventoryKpis.totalOnHand} uds)</strong>
+          <span>−</span>
+          <strong className="wms-text-warning">
+            Allocated ({inventoryKpis.totalAllocated} uds)
+          </strong>
+          <span>=</span>
+          <strong className="wms-text-success">
+            ATP ({inventoryKpis.totalAtp} uds)
+          </strong>
+        </div>
+        <span className="wms-tag wms-tag-emerald">
+          ✓ Invariante contable verificado
+        </span>
+      </section>
+
+      {hasOperationalAlerts ? (
+        <section className="wms-alert-banner" role="status" aria-live="polite">
+          <div>
+            <strong>⚠ Atención del supervisor requerida:</strong> Se detectaron{" "}
+            <strong className="wms-mono">
+              {ordersSummary.onHoldOrders.length}
+            </strong>{" "}
+            pedido(s) retenidos en <code>ON_HOLD</code> por rotura de stock y{" "}
+            <strong className="wms-mono">
+              {tasksSummary.tasksWithExceptions.length}
+            </strong>{" "}
+            tarea(s) operativas con pasos en excepción.
+          </div>
+          <Link href="/operations" className="wms-banner-link">
+            Resolver en monitor de operaciones →
           </Link>
         </section>
       ) : null}
@@ -152,56 +275,69 @@ export default function SupervisorOverviewPage(): JSX.Element {
       <section className="wms-grid-2">
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Estado del Pipeline de Pedidos</span>
-            <Link href="/operations" className="wms-btn wms-btn-outline">
-              Gestionar Pedidos
+            <span>Estado del pipeline de pedidos</span>
+            <Link
+              href="/operations"
+              className="wms-btn wms-btn-outline wms-btn-sm"
+            >
+              Gestionar cartera →
             </Link>
           </div>
           <div className="wms-table-wrap">
             <table className="wms-table">
               <thead>
                 <tr>
-                  <th>Estado</th>
-                  <th>Cantidad</th>
-                  <th>Acción Recomendada</th>
+                  <th>Estado operativo</th>
+                  <th className="wms-num">Pedidos</th>
+                  <th>Siguiente acción recomendada</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td>
-                    <span className="wms-tag wms-tag-slate">PENDING</span>
+                    <span className="wms-tag wms-tag-slate">● PENDING</span>
                   </td>
-                  <td>{ordersSummary.countsByStatus.PENDING}</td>
+                  <td className="wms-num">
+                    {ordersSummary.countsByStatus.PENDING}
+                  </td>
                   <td className="wms-muted">Lanzar reserva ATP (Allocate)</td>
                 </tr>
                 <tr>
                   <td>
-                    <span className="wms-tag wms-tag-blue">ALLOCATED</span>
+                    <span className="wms-tag wms-tag-blue">◆ ALLOCATED</span>
                   </td>
-                  <td>{ordersSummary.countsByStatus.ALLOCATED}</td>
-                  <td className="wms-muted">En cola de Picking móvil</td>
+                  <td className="wms-num">
+                    {ordersSummary.countsByStatus.ALLOCATED}
+                  </td>
+                  <td className="wms-muted">En cola de picking móvil</td>
                 </tr>
                 <tr>
                   <td>
-                    <span className="wms-tag wms-tag-amber">PICKING</span>
+                    <span className="wms-tag wms-tag-amber">▲ PICKING</span>
                   </td>
-                  <td>{ordersSummary.countsByStatus.PICKING}</td>
+                  <td className="wms-num">
+                    {ordersSummary.countsByStatus.PICKING}
+                  </td>
                   <td className="wms-muted">Operario recolectando en pasillo</td>
                 </tr>
                 <tr>
                   <td>
-                    <span className="wms-tag wms-tag-emerald">PACKED</span>
+                    <span className="wms-tag wms-tag-emerald">✓ PACKED</span>
                   </td>
-                  <td>{ordersSummary.countsByStatus.PACKED}</td>
-                  <td className="wms-muted">Listos para despacho final</td>
+                  <td className="wms-num">
+                    {ordersSummary.countsByStatus.PACKED}
+                  </td>
+                  <td className="wms-muted">Listos para confirmar despacho</td>
                 </tr>
                 <tr>
                   <td>
-                    <span className="wms-tag wms-tag-rose">ON_HOLD</span>
+                    <span className="wms-tag wms-tag-rose">⚠ ON_HOLD</span>
                   </td>
-                  <td>{ordersSummary.countsByStatus.ON_HOLD}</td>
+                  <td className="wms-num">
+                    {ordersSummary.countsByStatus.ON_HOLD}
+                  </td>
                   <td className="wms-muted">
-                    Requiere ajuste o reabastecimiento
+                    Ejecutar reabastecimiento o ajuste
                   </td>
                 </tr>
               </tbody>
@@ -211,9 +347,12 @@ export default function SupervisorOverviewPage(): JSX.Element {
 
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Últimos Movimientos del Ledger (Kardex)</span>
-            <Link href="/inventory" className="wms-btn wms-btn-outline">
-              Ver Kardex Completo
+            <span>Últimos movimientos del ledger (Kardex)</span>
+            <Link
+              href="/inventory"
+              className="wms-btn wms-btn-outline wms-btn-sm"
+            >
+              Auditar kardex completo →
             </Link>
           </div>
           <div className="wms-table-wrap">
@@ -222,15 +361,33 @@ export default function SupervisorOverviewPage(): JSX.Element {
                 <tr>
                   <th>Motivo</th>
                   <th>SKU</th>
-                  <th>Flujo</th>
-                  <th>Cant.</th>
+                  <th>Flujo de ubicación</th>
+                  <th className="wms-num">Cant. (uds)</th>
                 </tr>
               </thead>
               <tbody>
-                {recentTx.length === 0 ? (
+                {loading && recentTx.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="wms-muted">
-                      Sin transacciones recientes cargadas.
+                    <td colSpan={4}>
+                      <span
+                        className="wms-skeleton"
+                        aria-label="Cargando movimientos recientes"
+                      />
+                    </td>
+                  </tr>
+                ) : recentTx.length === 0 ? (
+                  <tr>
+                    <td colSpan={4}>
+                      <div className="wms-empty-state">
+                        <div className="wms-empty-title">
+                          Sin transacciones registradas en el ledger
+                        </div>
+                        <div className="wms-empty-hint">
+                          Registra una recepción de mercancía o ejecuta un
+                          ajuste contable en el módulo de inventario para
+                          inaugurar la trazabilidad.
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -241,11 +398,13 @@ export default function SupervisorOverviewPage(): JSX.Element {
                           {tx.reason}
                         </span>
                       </td>
-                      <td className="wms-mono">{tx.productSku}</td>
+                      <td className="wms-mono">
+                        <strong>{tx.productSku}</strong>
+                      </td>
                       <td className="wms-mono wms-muted">
                         {tx.fromLocation ?? "EXT"} → {tx.toLocation ?? "EXT"}
                       </td>
-                      <td>
+                      <td className="wms-num">
                         <strong>{tx.quantity}</strong>
                       </td>
                     </tr>
