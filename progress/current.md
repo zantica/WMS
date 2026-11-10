@@ -17,6 +17,8 @@
   5. ✅ **`FIX-SONAR-DUP`** — Remediación de duplicación SonarCloud: `.sonarcloud.properties` + refactorización DRY en tareas móviles (`done`)
   6. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`)
   7. ⏳ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`pending`)
+- **Sesión (2026-11-10)**: ✅ **`DOM-1`** (`done`, review `APPROVED`; pendiente Quality Gate/commit) — Paquete `@wms/domain` (TS puro, compartido API/Web/Mobile): primitivas DDD, `InventoryBalance`, máquinas de estado `WarehouseTask`/`TaskStep`/`SalesOrder`, tests happy path + "romper a propósito". Se ejecuta **antes** de `F5.1`. Alcance: solo el paquete nuevo + wiring Turborepo; **no** se refactorizan casos de uso de `@wms/api` (eso será `DOM-2`, tras revisión).
+  - Archivos relevantes: `apps/api/src/use-cases/inventory/{move-stock,allocate-order,cancel-order,handle-picking-exception}.ts`, `apps/api/src/use-cases/tasks/confirm-task-step.ts`, `packages/db/prisma/schema.prisma` (enums reales), `docs/architecture.md`.
 - **Siguiente Feature en Cola**: `F5.1` — *Carga masiva (Bulk Import) desacoplada con modo `dryRun`, normalización y estrategia `ColumnMapper`*
 
 ---

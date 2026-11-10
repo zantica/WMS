@@ -203,3 +203,9 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Generación criptográfica de `idempotencyKey` (`crypto.randomUUID()`) en el instante exacto del escaneo (`occurredAt`), ordenación FIFO, backoff exponencial con límite ante fallos de transporte y aislamiento en estado `QUARANTINED` para conflictos Servidor-Gana (`CONFLICT` / `REJECTED`).
   - Componentes UI `OfflineSyncStatusBar` y `QuarantineModal` integrados en `@wms/mobile` bajo el Design System `S5 dark-data-dense` / `P2 Refinada` / `T3` (0 colores hex crudos, targets táctiles `>= 44px`, tipografía monoespaciada tabular).
   - 56 tests unitarios y de fallo pasando en `@wms/mobile` (cobertura de `87.11%` en `src/offline/` y `89.77%` global en móvil) y 180 tests pasando en `@wms/api`.
+
+## DOM-1 — Paquete @wms/domain (2026-11-10)
+- **Estado**: done (review APPROVED, evidencia ejecutada en progress/review_DOM-1.md)
+- **Reportes**: progress/impl_DOM-1.md, progress/review_DOM-1.md; ADR: docs/adr/006-shared-domain-package.md
+- **Cambios clave**: nuevo paquete TS puro packages/domain (primitivas DDD, Quantity, InventoryBalance, WarehouseTask/TaskStep, maquinas de estado Task/Step/Order, 11 DomainError con code estable) + guarda de pureza por test. 81 tests (happy path + romper a proposito), 100% lineas / 97.67% ramas. apps/api, web, mobile y Prisma sin tocar.
+- **Pendiente (DOM-2)**: adoptar el dominio en la API; resolver las 8 inconsistencias codigo-esquema listadas en impl_DOM-1.md.
