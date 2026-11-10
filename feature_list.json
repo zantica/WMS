@@ -175,7 +175,7 @@
       "milestone": "Hito 6 — Modo Offline-First (Parte API)",
       "title": "Puerto IdempotencyStore y Endpoint POST /api/v1/tasks/sync-batch",
       "boundedContext": "Fulfillment & Tasks / API",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Puerto IdempotencyStore y persistencia transaccional única por (tenantId, idempotencyKey) en la misma transacción del Ledger para confirmTaskStep y confirmReceiptLine",
         "Caso de uso y endpoint POST /api/v1/tasks/sync-batch procesando lotes en orden FIFO con registro de occurredAt (cliente) y receivedAt (servidor), política servidor-gana ante conflictos y ADR en docs/adr/",

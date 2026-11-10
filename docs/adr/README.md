@@ -17,3 +17,4 @@ cuando una feature introduce una decisión de diseño relevante (conflictos offl
 | [001](./001-observability-and-diagnostics-port.md) | Observabilidad estructurada, `correlationId` y puerto `DiagnosticsStore` | Aceptado | `F7.1` |
 | [002](./002-postgresql-rls-and-tenant-context.md) | PostgreSQL Row Level Security (`FORCE RLS`) y puerto `TenantContextPort` | Aceptado | `F7.2` |
 | [003](./003-auth-and-webhook-integrations.md) | Estrategia de Autenticación Híbrida (RS256/HS256), Aislamiento de Privilegios e Idempotencia de Webhooks | Aceptado | `F4.2` |
+| [004](./004-offline-idempotency-and-sync-batch.md) | Puerto `IdempotencyStore`, Idempotencia Transaccional y Sincronización por Lotes Offline (Server-Wins) | Aceptado | `F6.1` |

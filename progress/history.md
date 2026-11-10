@@ -172,3 +172,19 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Eliminados `package-lock.json` (+ `.gitignore` + guarda en `init.ps1`/`init.sh`), `apps/mobile/src/components/BarcodeScannerView.tsx` y `apps/mobile/src/context/session-context.tsx` (re-exports sin consumidores).
   - Re-auditoría independiente de `F4.2` → [`progress/review_F4.2_reaudit.md`](./review_F4.2_reaudit.md) con veredicto **`CHANGES_REQUESTED`** (15 hallazgos de seguridad JWT/Clerk, idempotencia concurrente y cobertura). `F4.2` se revierte a `"in_progress"` en `feature_list.json`.
   - Remediación por el subagente `implementer` ([`progress/impl_F4.2.md`](./impl_F4.2.md)) y re-evaluación por `reviewer` independiente ([`progress/review_F4.2.md`](./review_F4.2.md)) con veredicto **`APPROVED`** (157 tests en `@wms/api`, 0 fallos, 90.54% branches en `integrations`, ADR 003 y migración `@@unique([tenantId, externalId])`). `F4.2` queda formalmente cerrada en `"done"`.
+
+
+---
+
+## [2026-11-10] Feature `F6.1` — Puerto `IdempotencyStore` y Endpoint `POST /api/v1/tasks/sync-batch`
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F6.1.md`](./impl_F6.1.md)
+  - Revisión: [`progress/review_F6.1.md`](./review_F6.1.md)
+  - ADR: [`docs/adr/004-offline-idempotency-and-sync-batch.md`](../docs/adr/004-offline-idempotency-and-sync-batch.md)
+- **Cambios clave**:
+  - Nuevos contratos en `@wms/shared-types` (`SyncTaskBatchItem`, `SyncTaskBatchRequest`, `SyncBatchItemResult`, `SyncTaskBatchResult`, `IdempotencyRecordDTO`, error `"CONFLICT"`).
+  - Modelo Prisma `IdempotencyRecord` y migración SQL `20261110120000_idempotency_records` con restricción única `@@unique([tenantId, idempotencyKey])` y protección `ENABLE` + `FORCE ROW LEVEL SECURITY` (`idempotency_records_tenant_isolation_policy`).
+  - Puerto hexagonal `IdempotencyStore` (`apps/api/src/ports/idempotency-store.ts`) con adaptadores `InMemoryIdempotencyStore` y `PrismaIdempotencyStore` participando en la misma transacción `Serializable` del Ledger para `confirmTaskStep` y `confirmReceiptLine`.
+  - Caso de uso `syncTaskBatch` (`apps/api/src/use-cases/tasks/sync-task-batch.ts`) y endpoint `POST /api/v1/tasks/sync-batch` con ordenación FIFO por `occurredAt`, registro de `receivedAt` y política Servidor-Gana (`CONFLICT` / `REJECTED`).
+  - 180 tests unitarios pasando en `@wms/api` (cobertura de `93.32%` en `use-cases`) y 3 tests de integración en PostgreSQL 16 real (`idempotency.integration.test.ts`).
