@@ -18,8 +18,17 @@ wms/
 ### Grafo de Dependencias Permitido
 - `@wms/shared-types` **no tiene dependencias internas** (prohibido importar `@prisma/client` o `@wms/db`).
 - `@wms/db` encapsula Prisma y exporta el singleton `prisma` y los tipos de base de datos.
-- `@wms/api` consume `@wms/db` y `@wms/shared-types`.
-- `@wms/mobile` y `@wms/web` consumen **únicamente** `@wms/shared-types` (nunca `@wms/db` directamente).
+- `@wms/domain` **no tiene dependencias** (ni internas ni de runtime): TypeScript puro sin Prisma, Fastify, React, Expo ni APIs de Node (ver sección "Paquete `@wms/domain`" más abajo y ADR 006).
+- `@wms/api` consume `@wms/db`, `@wms/shared-types` y `@wms/domain`.
+- `@wms/mobile` y `@wms/web` consumen **únicamente** `@wms/shared-types` y `@wms/domain` (nunca `@wms/db` directamente).
+
+### Paquete `@wms/domain` (Hito 8, ADR 006)
+Capa de dominio compartida y pura, en `packages/domain/src`:
+- `shared/`: `Entity`, `ValueObject`, `AggregateRoot` y `DomainError` con subclases tipadas (`code` estable).
+- `inventory/`: `Quantity` (Decimal(12,4)), `InventoryBalance` (onHand >= 0, allocated <= onHand, available = onHand - allocated) y `TxReason`.
+- `tasks/`: `WarehouseTask`/`TaskStep` y máquina de estados `TaskStatus`/`StepStatus`.
+- `orders/`: máquina de estados de `OrderStatus` y `planOrderCancellation`.
+Los enums se redefinen como uniones de literales (no importa `@wms/db`). Un test (`domain-purity.test.ts`) impide imports de infraestructura. Los casos de uso de `@wms/api` adoptarán el dominio en `DOM-2`.
 
 ---
 

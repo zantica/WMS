@@ -19,3 +19,4 @@ cuando una feature introduce una decisión de diseño relevante (conflictos offl
 | [003](./003-auth-and-webhook-integrations.md) | Estrategia de Autenticación Híbrida (RS256/HS256), Aislamiento de Privilegios e Idempotencia de Webhooks | Aceptado | `F4.2` |
 | [004](./004-offline-idempotency-and-sync-batch.md) | Puerto `IdempotencyStore`, Idempotencia Transaccional y Sincronización por Lotes Offline (Server-Wins) | Aceptado | `F6.1` |
 | [005](./005-offline-sync-queue-and-local-cache.md) | Motor `OfflineSyncQueue` Hexagonal, Caché Local de Tareas y Cuarentena en Móvil | Aceptado | `F6.2` |
+| [006](./006-shared-domain-package.md) | Paquete de dominio compartido `@wms/domain` (TypeScript puro, sin infraestructura) | Aceptado | `DOM-1` |
