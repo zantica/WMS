@@ -303,3 +303,10 @@ export type WmsErrorCode =
   | "FORBIDDEN"
   | "VALIDATION_ERROR"
   | "CONFIGURATION_ERROR";
+
+// ─────────────────────────────────────────────────────────────
+// DESIGN SYSTEM COMPARTIDO (S5 dark-data-dense / P2 / T3)
+// ─────────────────────────────────────────────────────────────
+
+export * from "./design-tokens.js";
+
