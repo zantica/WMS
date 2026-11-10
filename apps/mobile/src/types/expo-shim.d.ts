@@ -96,31 +96,36 @@ declare module "react-native" {
 
   export interface TextInputProps {
     key?: string | number | null | undefined;
-    style?: StyleProp<TextStyle>;
-    value?: string;
-    onChangeText?: (text: string) => void;
-    onSubmitEditing?: () => void;
-    placeholder?: string;
-    placeholderTextColor?: string;
-    autoCapitalize?: "none" | "sentences" | "words" | "characters";
-    autoCorrect?: boolean;
-    autoFocus?: boolean;
-    keyboardType?: "default" | "numeric" | "url" | "email-address";
-    returnKeyType?: "done" | "go" | "next" | "search" | "send";
-    secureTextEntry?: boolean;
-    editable?: boolean;
-    testID?: string;
+    style?: StyleProp<TextStyle> | undefined;
+    value?: string | undefined;
+    onChangeText?: ((text: string) => void) | undefined;
+    onSubmitEditing?: (() => void) | undefined;
+    placeholder?: string | undefined;
+    placeholderTextColor?: string | undefined;
+    autoCapitalize?: ("none" | "sentences" | "words" | "characters") | undefined;
+    autoCorrect?: boolean | undefined;
+    autoFocus?: boolean | undefined;
+    keyboardType?: ("default" | "numeric" | "url" | "email-address") | undefined;
+    returnKeyType?: ("done" | "go" | "next" | "search" | "send") | undefined;
+    secureTextEntry?: boolean | undefined;
+    editable?: boolean | undefined;
+    multiline?: boolean | undefined;
+    accessibilityLabel?: string | undefined;
+    testID?: string | undefined;
   }
 
   export interface PressableProps {
     key?: string | number | null | undefined;
     style?:
       | StyleProp<ViewStyle>
-      | ((state: { pressed: boolean }) => StyleProp<ViewStyle>);
-    onPress?: () => void;
-    disabled?: boolean;
+      | ((state: { pressed: boolean }) => StyleProp<ViewStyle>)
+      | undefined;
+    onPress?: (() => void) | undefined;
+    disabled?: boolean | undefined;
+    accessibilityRole?: string | undefined;
+    accessibilityLabel?: string | undefined;
     children?: ReactNode;
-    testID?: string;
+    testID?: string | undefined;
   }
 
   export interface ScrollViewProps extends ViewProps {

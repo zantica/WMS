@@ -12,13 +12,20 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { TaskStepDTO, WarehouseTaskDTO } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
 import { OfflineSyncStatusBar } from "../../../src/components/OfflineSyncStatusBar";
+import {
+  commonTaskStyles,
+  TaskQuantityControl,
+} from "../../../src/components/TaskScreenCommon";
+import {
+  handleOfflineReceiptLineConfirmation,
+  handleOfflineTaskLoad,
+} from "../../../src/offline/task-screen-offline";
 import {
   WmsBanner,
   WmsProgressBar,
@@ -84,7 +91,11 @@ export default function ReceivingTaskScreen(): JSX.Element {
     setIsLoading(true);
 
     if (!isOnline) {
-      const cached = cache.getTask(taskId);
+      const { task: cached, domainError: offErr } = handleOfflineTaskLoad(
+        taskId,
+        cache,
+        "Esta orden de recepción no se encuentra en caché local.",
+      );
       if (cached) {
         setTask(cached);
         const nextStep = getNextActiveStep(cached.steps);
@@ -95,13 +106,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
           setSelectedStepId(null);
         }
       } else {
-        setDomainError({
-          title: "Tarea no disponible offline",
-          message: "Esta orden de recepción no se encuentra en caché local.",
-          actionHint: "Conecta la terminal a la red para descargar las órdenes de recepción.",
-          severity: "warning",
-          code: "OFFLINE_CACHE_MISS",
-        });
+        setDomainError(offErr);
       }
       setIsLoading(false);
       return;
@@ -119,7 +124,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
         setSelectedStepId(null);
       }
     } catch (err) {
-      const cached = cache.getTask(taskId);
+      const { task: cached } = handleOfflineTaskLoad(taskId, cache);
       if (cached) {
         setTask(cached);
         const nextStep = getNextActiveStep(cached.steps);
@@ -206,39 +211,24 @@ export default function ReceivingTaskScreen(): JSX.Element {
             : parsedQty;
 
         if (!isOnline) {
-          const val = cache.validateReceiptLine(
-            task.id,
-            targetStep.productId,
+          const offRes = await handleOfflineReceiptLineConfirmation({
+            cache,
+            enqueueReceiptLineConfirmation,
+            taskId: task.id,
+            productId: targetStep.productId,
             scannedCode,
-            qtyToConfirm,
-          );
-          if (!val.isValid) {
-            setDomainError(
-              formatDomainErrorBanner(
-                new WmsApiClientError(
-                  val.code ?? "INVALID_SCAN",
-                  val.message ?? "Error en validación de recepción offline.",
-                  422,
-                ),
-              ),
-            );
+            quantity: qtyToConfirm,
+          });
+
+          if (!offRes.success) {
+            if (offRes.error) setDomainError(offRes.error);
             setIsSubmitting(false);
             return;
           }
 
-          await enqueueReceiptLineConfirmation({
-            taskId: task.id,
-            productId: targetStep.productId,
-            scannedQty: qtyToConfirm,
-            barcode: scannedCode,
-          });
-
-          const updated = cache.applyOptimisticReceiptLine(
-            task.id,
-            targetStep.productId,
-            qtyToConfirm,
-          );
-          setTask(updated);
+          if (offRes.updatedTask) {
+            setTask(offRes.updatedTask);
+          }
           setSuccessNote(
             `[OFFLINE] Guardado en cola local: ${targetStep.productSku} (${qtyToConfirm} uds).`,
           );
@@ -415,46 +405,20 @@ export default function ReceivingTaskScreen(): JSX.Element {
             </View>
 
             {/* Selector de cantidad a confirmar en este escaneo */}
-            <View style={styles.qtyControlRow}>
-              <Text style={styles.qtyControlLabel}>
-                Cantidad a confirmar en este escaneo:
-              </Text>
-              <View style={styles.qtyButtonsGroup}>
-                <Pressable
-                  onPress={() => handleAdjustQty(-1)}
-                  disabled={isSubmitting}
-                  style={styles.qtyStepBtn}
-                >
-                  <Text style={[styles.qtyStepBtnText, monoText]}>-1</Text>
-                </Pressable>
-                <TextInput
-                  style={[styles.qtyInput, monoText]}
-                  value={qtyInput}
-                  onChangeText={setQtyInput}
-                  keyboardType="numeric"
-                  editable={!isSubmitting}
-                  testID="receiving-qty-input"
-                />
-                <Pressable
-                  onPress={() => handleAdjustQty(1)}
-                  disabled={isSubmitting}
-                  style={styles.qtyStepBtn}
-                >
-                  <Text style={[styles.qtyStepBtnText, monoText]}>+1</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    setQtyInput(
-                      String(Math.max(1, getRemainingStepQty(activeStep))),
-                    )
-                  }
-                  disabled={isSubmitting}
-                  style={styles.qtyMaxBtn}
-                >
-                  <Text style={styles.qtyMaxBtnText}>Total restante</Text>
-                </Pressable>
-              </View>
-            </View>
+            <TaskQuantityControl
+              label="Cantidad a confirmar en este escaneo:"
+              value={qtyInput}
+              onChangeValue={setQtyInput}
+              onAdjust={handleAdjustQty}
+              maxPendingQty={getRemainingStepQty(activeStep)}
+              onSelectMax={() =>
+                setQtyInput(
+                  String(Math.max(1, getRemainingStepQty(activeStep))),
+                )
+              }
+              disabled={isSubmitting}
+              inputTestID="receiving-qty-input"
+            />
 
             <BarcodeScannerBox
               onScan={(code) => {
@@ -471,8 +435,8 @@ export default function ReceivingTaskScreen(): JSX.Element {
         ) : null}
 
         {/* Lista completa de líneas de la recepción */}
-        <View style={styles.stepsListSection}>
-          <Text style={styles.sectionTitle}>
+        <View style={commonTaskStyles.stepsListSection}>
+          <Text style={commonTaskStyles.sectionTitle}>
             Líneas de entrada ({task?.steps.length ?? 0})
           </Text>
           {task?.steps.map((step) => {
@@ -485,13 +449,13 @@ export default function ReceivingTaskScreen(): JSX.Element {
                 key={step.id}
                 onPress={() => handleSelectStep(step)}
                 style={[
-                  styles.stepRowCard,
+                  commonTaskStyles.stepRowCard,
                   isSelected ? styles.stepRowSelected : null,
                   isCompleted ? styles.stepRowCompleted : null,
                 ]}
               >
-                <View style={styles.stepRowHeader}>
-                  <Text style={[styles.stepSeqText, monoText]}>
+                <View style={commonTaskStyles.stepRowHeader}>
+                  <Text style={[commonTaskStyles.stepSeqText, monoText]}>
                     Línea #{step.sequence} · {step.productSku}
                   </Text>
                   <WmsTag
@@ -500,13 +464,13 @@ export default function ReceivingTaskScreen(): JSX.Element {
                     tone={stepVisual.tone}
                   />
                 </View>
-                <Text style={styles.stepProductName}>{step.productName}</Text>
+                <Text style={commonTaskStyles.stepProductName}>{step.productName}</Text>
                 <View style={styles.stepFooterRow}>
                   <Text style={[styles.stepBarcodeSmall, monoText]}>
                     EAN: {step.productBarcode ?? "N/A"} · Muelle:{" "}
                     {step.locationCode}
                   </Text>
-                  <Text style={[styles.stepUnitsBadge, monoText]}>
+                  <Text style={[commonTaskStyles.stepUnitsBadge, monoText]}>
                     {step.scannedQty}/{step.expectedQty} uds
                   </Text>
                 </View>
@@ -646,82 +610,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  qtyControlRow: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: WMS_SPACING.sm,
-  },
-  qtyControlLabel: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "600",
-  },
-  qtyButtonsGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: WMS_SPACING.sm,
-  },
-  qtyStepBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surfaceHover,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderRadius: WMS_RADII.md,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyStepBtnText: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
-    fontWeight: "800",
-  },
-  qtyInput: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surface,
-    color: WMS_COLORS.text,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    borderRadius: WMS_RADII.md,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: 6,
-    minWidth: 68,
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  qtyMaxBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.accentTint,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.accentBorder,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderRadius: WMS_RADII.md,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyMaxBtnText: {
-    color: WMS_COLORS.accent,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
-  },
-  stepsListSection: {
-    gap: WMS_SPACING.sm,
-  },
-  stepRowCard: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: 4,
-  },
   stepRowSelected: {
     borderColor: WMS_COLORS.accentBorder,
     backgroundColor: WMS_COLORS.surfaceHover,
@@ -729,21 +617,6 @@ const styles = StyleSheet.create({
   stepRowCompleted: {
     opacity: 0.72,
     borderColor: WMS_COLORS.successBorder,
-  },
-  stepRowHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: WMS_SPACING.sm,
-  },
-  stepSeqText: {
-    color: WMS_COLORS.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  stepProductName: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
   },
   stepFooterRow: {
     flexDirection: "row",
@@ -754,10 +627,5 @@ const styles = StyleSheet.create({
   stepBarcodeSmall: {
     color: WMS_COLORS.muted,
     fontSize: 11,
-  },
-  stepUnitsBadge: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
   },
 });

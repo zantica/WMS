@@ -12,13 +12,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { TaskStepDTO, WarehouseTaskDTO } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
 import { OfflineSyncStatusBar } from "../../../src/components/OfflineSyncStatusBar";
+import {
+  commonTaskStyles,
+  TaskExceptionSection,
+  TaskQuantityControl,
+} from "../../../src/components/TaskScreenCommon";
+import {
+  handleOfflineStepConfirmation,
+  handleOfflineTaskLoad,
+} from "../../../src/offline/task-screen-offline";
 import {
   WmsBanner,
   WmsProgressBar,
@@ -81,7 +89,10 @@ export default function PutawayTaskScreen(): JSX.Element {
     setIsLoading(true);
 
     if (!isOnline) {
-      const cached = cache.getTask(taskId);
+      const { task: cached, domainError: offErr } = handleOfflineTaskLoad(
+        taskId,
+        cache,
+      );
       if (cached) {
         setTask(cached);
         const next = getNextActiveStep(cached.steps);
@@ -89,13 +100,7 @@ export default function PutawayTaskScreen(): JSX.Element {
           setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
         }
       } else {
-        setDomainError({
-          title: "Tarea no disponible offline",
-          message: "Esta tarea no fue descargada previamente en la caché local.",
-          actionHint: "Conecta la terminal a la red para descargar las tareas de almacén.",
-          severity: "warning",
-          code: "OFFLINE_CACHE_MISS",
-        });
+        setDomainError(offErr);
       }
       setIsLoading(false);
       return;
@@ -116,7 +121,7 @@ export default function PutawayTaskScreen(): JSX.Element {
         setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
       }
     } catch (err) {
-      const cached = cache.getTask(taskId);
+      const { task: cached } = handleOfflineTaskLoad(taskId, cache);
       if (cached) {
         setTask(cached);
         const next = getNextActiveStep(cached.steps);
@@ -158,64 +163,34 @@ export default function PutawayTaskScreen(): JSX.Element {
       setIsSubmitting(true);
 
       if (!isOnline) {
-        const val = cache.validateScan(
-          task.id,
-          nextStep.id,
+        const offRes = await handleOfflineStepConfirmation({
+          cache,
+          enqueueStepConfirmation,
+          taskId: task.id,
+          stepId: nextStep.id,
           scannedCode,
-          parsedQty,
-        );
-        if (!val.isValid) {
-          setDomainError(
-            formatDomainErrorBanner(
-              new WmsApiClientError(
-                val.code ?? "INVALID_SCAN",
-                val.message ?? "Error de validación offline.",
-                422,
-              ),
-            ),
-          );
+          quantity: parsedQty,
+        });
+
+        if (!offRes.success) {
+          if (offRes.error) setDomainError(offRes.error);
           setIsSubmitting(false);
           return;
         }
 
-        try {
-          await enqueueStepConfirmation({
-            taskId: task.id,
-            stepId: nextStep.id,
-            scannedCode,
-            quantity: parsedQty,
-          });
-
-          const updated = cache.applyOptimisticStep(
-            task.id,
-            nextStep.id,
-            parsedQty,
-          );
-          setTask(updated);
-          const next = getNextActiveStep(updated.steps);
+        if (offRes.updatedTask) {
+          setTask(offRes.updatedTask);
+          const next = getNextActiveStep(offRes.updatedTask.steps);
           if (next) {
             setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
           }
-          setSuccessNote(
-            `[OFFLINE] Guardado en cola local: ${parsedQty} uds en ${nextStep.locationCode}.`,
-          );
-          setShowExceptionForm(false);
-          setExceptionNote("");
-        } catch (enqueueErr) {
-          setDomainError(
-            formatDomainErrorBanner(
-              new WmsApiClientError(
-                "OFFLINE_QUEUE_ERROR",
-                enqueueErr instanceof Error
-                  ? enqueueErr.message
-                  : "No se pudo guardar la mutación en la cola offline.",
-                500,
-              ),
-            ),
-          );
-        } finally {
-          setIsSubmitting(false);
         }
+        setSuccessNote(
+          `[OFFLINE] Guardado en cola local: ${parsedQty} uds en ${nextStep.locationCode}.`,
+        );
+        setShowExceptionForm(false);
+        setExceptionNote("");
+        setIsSubmitting(false);
         return;
       }
 
@@ -399,16 +374,16 @@ export default function PutawayTaskScreen(): JSX.Element {
               <Text style={[styles.destinationCode, monoText]}>
                 {nextStep.locationCode}
               </Text>
-              <View style={styles.productSummaryBox}>
-                <Text style={styles.productNameText}>
+              <View style={commonTaskStyles.productSummaryBox}>
+                <Text style={commonTaskStyles.productNameText}>
                   <Text style={monoText}>{nextStep.productSku}</Text> —{" "}
                   {nextStep.productName}
                 </Text>
-                <Text style={[styles.productMetaText, monoText]}>
+                <Text style={[commonTaskStyles.productMetaText, monoText]}>
                   EAN/Barcode: {nextStep.productBarcode ?? "Sin EAN"} · Ubicado:{" "}
                   {nextStep.scannedQty}/{nextStep.expectedQty} uds
                 </Text>
-                <Text style={[styles.remainingHighlight, monoText]}>
+                <Text style={[commonTaskStyles.remainingHighlight, monoText]}>
                   Cantidad a depositar ahora: {getRemainingStepQty(nextStep)}{" "}
                   unidades
                 </Text>
@@ -416,57 +391,27 @@ export default function PutawayTaskScreen(): JSX.Element {
             </View>
 
             {/* Control de cantidad a ubicar */}
-            <View style={styles.qtyControlRow}>
-              <Text style={styles.qtyControlLabel}>
-                Cantidad a confirmar en {nextStep.locationCode}:
-              </Text>
-              <View style={styles.qtyButtonsGroup}>
-                <Pressable
-                  onPress={() =>
-                    setQtyInput(String(Math.max(1, parsedQty - 1)))
-                  }
-                  disabled={isSubmitting}
-                  style={styles.qtyStepBtn}
-                >
-                  <Text style={[styles.qtyStepBtnText, monoText]}>-1</Text>
-                </Pressable>
-                <TextInput
-                  style={[styles.qtyInput, monoText]}
-                  value={qtyInput}
-                  onChangeText={setQtyInput}
-                  keyboardType="numeric"
-                  editable={!isSubmitting}
-                  testID="putaway-qty-input"
-                />
-                <Pressable
-                  onPress={() =>
-                    setQtyInput(
-                      String(
-                        Math.min(
-                          Math.max(1, getRemainingStepQty(nextStep)),
-                          parsedQty + 1,
-                        ),
-                      ),
-                    )
-                  }
-                  disabled={isSubmitting}
-                  style={styles.qtyStepBtn}
-                >
-                  <Text style={[styles.qtyStepBtnText, monoText]}>+1</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    setQtyInput(
-                      String(Math.max(1, getRemainingStepQty(nextStep))),
-                    )
-                  }
-                  disabled={isSubmitting}
-                  style={styles.qtyMaxBtn}
-                >
-                  <Text style={styles.qtyMaxBtnText}>Total paso</Text>
-                </Pressable>
-              </View>
-            </View>
+            <TaskQuantityControl
+              label={`Cantidad a confirmar en ${nextStep.locationCode}:`}
+              value={qtyInput}
+              onChangeValue={setQtyInput}
+              onAdjust={(delta) =>
+                setQtyInput(
+                  String(
+                    Math.min(
+                      Math.max(1, getRemainingStepQty(nextStep)),
+                      Math.max(1, parsedQty + delta),
+                    ),
+                  ),
+                )
+              }
+              maxPendingQty={getRemainingStepQty(nextStep)}
+              onSelectMax={() =>
+                setQtyInput(String(Math.max(1, getRemainingStepQty(nextStep))))
+              }
+              disabled={isSubmitting}
+              inputTestID="putaway-qty-input"
+            />
 
             <BarcodeScannerBox
               onScan={(code) => {
@@ -479,50 +424,26 @@ export default function PutawayTaskScreen(): JSX.Element {
             />
 
             {/* Botón y formulario para reportar excepción en ubicación/stock */}
-            <View style={styles.exceptionContainer}>
-              <Pressable
-                onPress={() => setShowExceptionForm((prev) => !prev)}
-                style={styles.toggleExceptionButton}
-              >
-                <Text style={styles.toggleExceptionText}>
-                  {showExceptionForm
-                    ? "Cancelar reporte de incidencia"
-                    : "⚠ Reportar incidencia (ubicación llena / merma)"}
-                </Text>
-              </Pressable>
-
-              {showExceptionForm ? (
-                <View style={styles.exceptionForm}>
-                  <TextInput
-                    style={styles.exceptionInput}
-                    value={exceptionNote}
-                    onChangeText={setExceptionNote}
-                    placeholder="Describe el motivo (ej. Ubicación A-01-01 bloqueada)..."
-                    placeholderTextColor={WMS_COLORS.muted}
-                    editable={!isSubmitting}
-                    testID="putaway-exception-input"
-                  />
-                  <Pressable
-                    onPress={() => {
-                      void handleReportException();
-                    }}
-                    disabled={isSubmitting}
-                    style={styles.submitExceptionButton}
-                    testID="putaway-submit-exception-btn"
-                  >
-                    <Text style={styles.submitExceptionButtonText}>
-                      Confirmar incidencia en paso #{nextStep.sequence}
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-            </View>
+            <TaskExceptionSection
+              isOpen={showExceptionForm}
+              onToggle={() => setShowExceptionForm((prev) => !prev)}
+              note={exceptionNote}
+              onChangeNote={setExceptionNote}
+              onSubmit={() => void handleReportException()}
+              isSubmitting={isSubmitting}
+              toggleLabelOpen="Cancelar reporte de incidencia"
+              toggleLabelClosed="⚠ Reportar incidencia (ubicación llena / merma)"
+              placeholder="Describe el motivo (ej. Ubicación A-01-01 bloqueada)..."
+              submitLabel={`Confirmar incidencia en paso #${nextStep.sequence}`}
+              inputTestID="putaway-exception-input"
+              submitTestID="putaway-submit-exception-btn"
+            />
           </View>
         )}
 
         {/* Secuencia completa de pasos de Putaway */}
-        <View style={styles.stepsListSection}>
-          <Text style={styles.sectionTitle}>
+        <View style={commonTaskStyles.stepsListSection}>
+          <Text style={commonTaskStyles.sectionTitle}>
             Ruta de ubicación ({task?.steps.length ?? 0} paradas)
           </Text>
           {task?.steps.map((step) => {
@@ -534,13 +455,13 @@ export default function PutawayTaskScreen(): JSX.Element {
               <View
                 key={step.id}
                 style={[
-                  styles.stepRowCard,
+                  commonTaskStyles.stepRowCard,
                   isCurrent ? styles.stepRowCurrent : null,
                   isCompleted ? styles.stepRowCompleted : null,
                 ]}
               >
-                <View style={styles.stepRowHeader}>
-                  <Text style={[styles.stepSeqText, monoText]}>
+                <View style={commonTaskStyles.stepRowHeader}>
+                  <Text style={[commonTaskStyles.stepSeqText, monoText]}>
                     #{step.sequence} · Estantería {step.locationCode}
                   </Text>
                   <WmsTag
@@ -549,11 +470,11 @@ export default function PutawayTaskScreen(): JSX.Element {
                     tone={stepVisual.tone}
                   />
                 </View>
-                <Text style={styles.stepProductName}>
+                <Text style={commonTaskStyles.stepProductName}>
                   <Text style={monoText}>{step.productSku}</Text> —{" "}
                   {step.productName}
                 </Text>
-                <Text style={[styles.stepUnitsBadge, monoText]}>
+                <Text style={[commonTaskStyles.stepUnitsBadge, monoText]}>
                   {step.scannedQty}/{step.expectedQty} uds
                 </Text>
               </View>
@@ -666,160 +587,6 @@ const styles = StyleSheet.create({
     fontSize: WMS_FONT_SIZES.display,
     fontWeight: "900",
   },
-  productSummaryBox: {
-    backgroundColor: WMS_COLORS.bg,
-    borderRadius: WMS_RADII.md,
-    padding: WMS_SPACING.sm,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: 4,
-    marginTop: WMS_SPACING.xs,
-  },
-  productNameText: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
-    fontWeight: "700",
-  },
-  productMetaText: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-  },
-  remainingHighlight: {
-    color: WMS_COLORS.success,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  qtyControlRow: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: WMS_SPACING.sm,
-  },
-  qtyControlLabel: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "600",
-  },
-  qtyButtonsGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: WMS_SPACING.sm,
-  },
-  qtyStepBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surfaceHover,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderRadius: WMS_RADII.md,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyStepBtnText: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
-    fontWeight: "800",
-  },
-  qtyInput: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surface,
-    color: WMS_COLORS.text,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    borderRadius: WMS_RADII.md,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: 6,
-    minWidth: 68,
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  qtyMaxBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.accentTint,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.accentBorder,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderRadius: WMS_RADII.md,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyMaxBtnText: {
-    color: WMS_COLORS.accent,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
-  },
-  exceptionContainer: {
-    gap: WMS_SPACING.sm,
-  },
-  toggleExceptionButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.warningTint,
-    borderRadius: WMS_RADII.md,
-    paddingVertical: WMS_SPACING.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: WMS_COLORS.warningBorder,
-  },
-  toggleExceptionText: {
-    color: WMS_COLORS.warning,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
-  },
-  exceptionForm: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.warningBorder,
-    gap: WMS_SPACING.sm,
-  },
-  exceptionInput: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surface,
-    color: WMS_COLORS.text,
-    borderRadius: WMS_RADII.md,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    fontSize: 13,
-  },
-  submitExceptionButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.warning,
-    borderRadius: WMS_RADII.md,
-    paddingVertical: WMS_SPACING.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  submitExceptionButtonText: {
-    color: WMS_COLORS.accentContrast,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  stepsListSection: {
-    gap: WMS_SPACING.sm,
-  },
-  sectionTitle: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.base,
-    fontWeight: "700",
-  },
-  stepRowCard: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: 4,
-  },
   stepRowCurrent: {
     borderColor: WMS_COLORS.accentBorder,
     backgroundColor: WMS_COLORS.surfaceHover,
@@ -827,25 +594,5 @@ const styles = StyleSheet.create({
   stepRowCompleted: {
     opacity: 0.72,
     borderColor: WMS_COLORS.successBorder,
-  },
-  stepRowHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: WMS_SPACING.sm,
-  },
-  stepSeqText: {
-    color: WMS_COLORS.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  stepProductName: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-  },
-  stepUnitsBadge: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
   },
 });

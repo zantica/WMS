@@ -13,7 +13,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -24,6 +23,12 @@ import type {
 } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
 import { OfflineSyncStatusBar } from "../../../src/components/OfflineSyncStatusBar";
+import {
+  commonTaskStyles,
+  TaskExceptionSection,
+  TaskQuantityControl,
+} from "../../../src/components/TaskScreenCommon";
+import { handleOfflineTaskLoad } from "../../../src/offline/task-screen-offline";
 import {
   WmsBanner,
   WmsProgressBar,
@@ -101,7 +106,10 @@ export default function PickingTaskScreen(): JSX.Element {
     setIsLoading(true);
 
     if (!isOnline) {
-      const cached = cache.getTask(taskId);
+      const { task: cached, domainError: offErr } = handleOfflineTaskLoad(
+        taskId,
+        cache,
+      );
       if (cached) {
         setTask(cached);
         const next = getNextPickingStep(cached.steps);
@@ -114,13 +122,7 @@ export default function PickingTaskScreen(): JSX.Element {
           );
         }
       } else {
-        setDomainError({
-          title: "Tarea no disponible offline",
-          message: "Esta tarea no fue descargada previamente en la caché local.",
-          actionHint: "Conecta la terminal a la red para descargar las tareas de almacén.",
-          severity: "warning",
-          code: "OFFLINE_CACHE_MISS",
-        });
+        setDomainError(offErr);
       }
       setIsLoading(false);
       return;
@@ -146,7 +148,7 @@ export default function PickingTaskScreen(): JSX.Element {
         );
       }
     } catch (err) {
-      const cached = cache.getTask(taskId);
+      const { task: cached } = handleOfflineTaskLoad(taskId, cache);
       if (cached) {
         setTask(cached);
         const next = getNextPickingStep(cached.steps);
@@ -539,16 +541,16 @@ export default function PickingTaskScreen(): JSX.Element {
                 </Pressable>
               ) : null}
 
-              <View style={styles.productSummaryBox}>
-                <Text style={styles.productNameText}>
+              <View style={commonTaskStyles.productSummaryBox}>
+                <Text style={commonTaskStyles.productNameText}>
                   <Text style={monoText}>{nextStep.productSku}</Text> —{" "}
                   {nextStep.productName}
                 </Text>
-                <Text style={[styles.productMetaText, monoText]}>
+                <Text style={[commonTaskStyles.productMetaText, monoText]}>
                   EAN/Barcode: {nextStep.productBarcode ?? "Sin EAN"} · Recogido:{" "}
                   {nextStep.scannedQty}/{nextStep.expectedQty} uds
                 </Text>
-                <Text style={[styles.remainingHighlight, monoText]}>
+                <Text style={[commonTaskStyles.remainingHighlight, monoText]}>
                   Cantidad a extraer ahora: {getRemainingStepQty(nextStep)}{" "}
                   unidades
                 </Text>
@@ -556,57 +558,27 @@ export default function PickingTaskScreen(): JSX.Element {
             </View>
 
             {/* Control de cantidad (habilitado para confirmar en el paso 2 de producto) */}
-            <View style={styles.qtyControlRow}>
-              <Text style={styles.qtyControlLabel}>
-                Cantidad a recoger de {nextStep.locationCode}:
-              </Text>
-              <View style={styles.qtyButtonsGroup}>
-                <Pressable
-                  onPress={() =>
-                    setQtyInput(String(Math.max(1, parsedQty - 1)))
-                  }
-                  disabled={isSubmitting}
-                  style={styles.qtyStepBtn}
-                >
-                  <Text style={[styles.qtyStepBtnText, monoText]}>-1</Text>
-                </Pressable>
-                <TextInput
-                  style={[styles.qtyInput, monoText]}
-                  value={qtyInput}
-                  onChangeText={setQtyInput}
-                  keyboardType="numeric"
-                  editable={!isSubmitting}
-                  testID="picking-qty-input"
-                />
-                <Pressable
-                  onPress={() =>
-                    setQtyInput(
-                      String(
-                        Math.min(
-                          Math.max(1, getRemainingStepQty(nextStep)),
-                          parsedQty + 1,
-                        ),
-                      ),
-                    )
-                  }
-                  disabled={isSubmitting}
-                  style={styles.qtyStepBtn}
-                >
-                  <Text style={[styles.qtyStepBtnText, monoText]}>+1</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    setQtyInput(
-                      String(Math.max(1, getRemainingStepQty(nextStep))),
-                    )
-                  }
-                  disabled={isSubmitting}
-                  style={styles.qtyMaxBtn}
-                >
-                  <Text style={styles.qtyMaxBtnText}>Total parada</Text>
-                </Pressable>
-              </View>
-            </View>
+            <TaskQuantityControl
+              label={`Cantidad a recoger de ${nextStep.locationCode}:`}
+              value={qtyInput}
+              onChangeValue={setQtyInput}
+              onAdjust={(delta) =>
+                setQtyInput(
+                  String(
+                    Math.min(
+                      Math.max(1, getRemainingStepQty(nextStep)),
+                      Math.max(1, parsedQty + delta),
+                    ),
+                  ),
+                )
+              }
+              maxPendingQty={getRemainingStepQty(nextStep)}
+              onSelectMax={() =>
+                setQtyInput(String(Math.max(1, getRemainingStepQty(nextStep))))
+              }
+              disabled={isSubmitting}
+              inputTestID="picking-qty-input"
+            />
 
             <BarcodeScannerBox
               onScan={(code) => {
@@ -631,50 +603,26 @@ export default function PickingTaskScreen(): JSX.Element {
             />
 
             {/* Reporte de excepción en tiempo real (F3.2: Ubicación vacía / Rotura de stock) */}
-            <View style={styles.exceptionContainer}>
-              <Pressable
-                onPress={() => setShowExceptionForm((prev) => !prev)}
-                style={styles.toggleExceptionButton}
-              >
-                <Text style={styles.toggleExceptionText}>
-                  {showExceptionForm
-                    ? "Cancelar reporte de incidencia"
-                    : "⚠ Reportar rotura de stock / ubicación vacía"}
-                </Text>
-              </Pressable>
-
-              {showExceptionForm ? (
-                <View style={styles.exceptionForm}>
-                  <TextInput
-                    style={styles.exceptionInput}
-                    value={exceptionNote}
-                    onChangeText={setExceptionNote}
-                    placeholder="Motivo (ej. Stock dañado o ubicación vacía en A-01-01)..."
-                    placeholderTextColor={WMS_COLORS.muted}
-                    editable={!isSubmitting}
-                    testID="picking-exception-input"
-                  />
-                  <Pressable
-                    onPress={() => {
-                      void handleReportException();
-                    }}
-                    disabled={isSubmitting}
-                    style={styles.submitExceptionButton}
-                    testID="picking-submit-exception-btn"
-                  >
-                    <Text style={styles.submitExceptionButtonText}>
-                      Reportar excepción y solicitar re-asignación
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-            </View>
+            <TaskExceptionSection
+              isOpen={showExceptionForm}
+              onToggle={() => setShowExceptionForm((prev) => !prev)}
+              note={exceptionNote}
+              onChangeNote={setExceptionNote}
+              onSubmit={() => void handleReportException()}
+              isSubmitting={isSubmitting}
+              toggleLabelOpen="Cancelar reporte de incidencia"
+              toggleLabelClosed="⚠ Reportar rotura de stock / ubicación vacía"
+              placeholder="Motivo (ej. Stock dañado o ubicación vacía en A-01-01)..."
+              submitLabel="Reportar excepción y solicitar re-asignación"
+              inputTestID="picking-exception-input"
+              submitTestID="picking-submit-exception-btn"
+            />
           </View>
         )}
 
         {/* Recorrido completo de Picking ordenado por locationCode ASC */}
-        <View style={styles.stepsListSection}>
-          <Text style={styles.sectionTitle}>
+        <View style={commonTaskStyles.stepsListSection}>
+          <Text style={commonTaskStyles.sectionTitle}>
             Recorrido de Picking ({orderedSteps.length} paradas · orden{" "}
             locationCode ASC)
           </Text>
@@ -688,14 +636,14 @@ export default function PickingTaskScreen(): JSX.Element {
               <View
                 key={step.id}
                 style={[
-                  styles.stepRowCard,
+                  commonTaskStyles.stepRowCard,
                   isCurrent ? styles.stepRowCurrent : null,
                   isCompleted ? styles.stepRowCompleted : null,
                   isException ? styles.stepRowException : null,
                 ]}
               >
-                <View style={styles.stepRowHeader}>
-                  <Text style={[styles.stepSeqText, monoText]}>
+                <View style={commonTaskStyles.stepRowHeader}>
+                  <Text style={[commonTaskStyles.stepSeqText, monoText]}>
                     #{step.sequence} · Estantería {step.locationCode}
                   </Text>
                   <WmsTag
@@ -704,11 +652,11 @@ export default function PickingTaskScreen(): JSX.Element {
                     tone={stepVisual.tone}
                   />
                 </View>
-                <Text style={styles.stepProductName}>
+                <Text style={commonTaskStyles.stepProductName}>
                   <Text style={monoText}>{step.productSku}</Text> —{" "}
                   {step.productName}
                 </Text>
-                <Text style={[styles.stepUnitsBadge, monoText]}>
+                <Text style={[commonTaskStyles.stepUnitsBadge, monoText]}>
                   {step.scannedQty}/{step.expectedQty} uds
                 </Text>
               </View>
@@ -900,160 +848,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
-  productSummaryBox: {
-    backgroundColor: WMS_COLORS.bg,
-    borderRadius: WMS_RADII.md,
-    padding: WMS_SPACING.sm,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: 4,
-    marginTop: 4,
-  },
-  productNameText: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
-    fontWeight: "700",
-  },
-  productMetaText: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-  },
-  remainingHighlight: {
-    color: WMS_COLORS.success,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  qtyControlRow: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: WMS_SPACING.sm,
-  },
-  qtyControlLabel: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "600",
-  },
-  qtyButtonsGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: WMS_SPACING.sm,
-  },
-  qtyStepBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surfaceHover,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderRadius: WMS_RADII.md,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyStepBtnText: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
-    fontWeight: "800",
-  },
-  qtyInput: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surface,
-    color: WMS_COLORS.text,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    borderRadius: WMS_RADII.md,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: 6,
-    minWidth: 68,
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  qtyMaxBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.accentTint,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.accentBorder,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderRadius: WMS_RADII.md,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyMaxBtnText: {
-    color: WMS_COLORS.accent,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
-  },
-  exceptionContainer: {
-    gap: WMS_SPACING.sm,
-  },
-  toggleExceptionButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.warningTint,
-    borderRadius: WMS_RADII.md,
-    paddingVertical: WMS_SPACING.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: WMS_COLORS.warningBorder,
-  },
-  toggleExceptionText: {
-    color: WMS_COLORS.warning,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
-  },
-  exceptionForm: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.warningBorder,
-    gap: WMS_SPACING.sm,
-  },
-  exceptionInput: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.surface,
-    color: WMS_COLORS.text,
-    borderRadius: WMS_RADII.md,
-    paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: WMS_SPACING.sm,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
-    fontSize: 13,
-  },
-  submitExceptionButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
-    backgroundColor: WMS_COLORS.warning,
-    borderRadius: WMS_RADII.md,
-    paddingVertical: WMS_SPACING.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  submitExceptionButtonText: {
-    color: WMS_COLORS.accentContrast,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  stepsListSection: {
-    gap: WMS_SPACING.sm,
-  },
-  sectionTitle: {
-    color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.base,
-    fontWeight: "700",
-  },
-  stepRowCard: {
-    backgroundColor: WMS_COLORS.surfaceCard,
-    borderRadius: WMS_RADII.lg,
-    padding: WMS_SPACING.md,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.border,
-    gap: 4,
-  },
   stepRowCurrent: {
     borderColor: WMS_COLORS.accentBorder,
     backgroundColor: WMS_COLORS.surfaceHover,
@@ -1064,25 +858,5 @@ const styles = StyleSheet.create({
   },
   stepRowException: {
     borderColor: WMS_COLORS.warningBorder,
-  },
-  stepRowHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: WMS_SPACING.sm,
-  },
-  stepSeqText: {
-    color: WMS_COLORS.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  stepProductName: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-  },
-  stepUnitsBadge: {
-    color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
   },
 });
