@@ -320,7 +320,7 @@ describe.runIf(shouldRunPgIntegration)(
       });
 
       // 1. Envío inicial
-      const batchRes1 = await withTenantContext(db, tenantId, async () => {
+      const batchRes1 = await withTenantContext(db, tenantId, async (tx) => {
         return await syncTaskBatch({
           tenantId,
           items: [
@@ -337,6 +337,7 @@ describe.runIf(shouldRunPgIntegration)(
             },
           ],
           idempotencyStore: store,
+          tx,
         });
       });
 
@@ -344,7 +345,7 @@ describe.runIf(shouldRunPgIntegration)(
       expect(batchRes1.items[0]?.status).toBe("APPLIED");
 
       // 2. Reintento del mismo batch
-      const batchRes2 = await withTenantContext(db, tenantId, async () => {
+      const batchRes2 = await withTenantContext(db, tenantId, async (tx) => {
         return await syncTaskBatch({
           tenantId,
           items: [
@@ -361,6 +362,7 @@ describe.runIf(shouldRunPgIntegration)(
             },
           ],
           idempotencyStore: store,
+          tx,
         });
       });
 
@@ -369,7 +371,7 @@ describe.runIf(shouldRunPgIntegration)(
 
       // 3. Envío de nueva mutación sobre el paso que YA está completado (Server-Wins -> CONFLICT)
       const conflictKey = `idemp-key-conflict-${suffix}`;
-      const batchRes3 = await withTenantContext(db, tenantId, async () => {
+      const batchRes3 = await withTenantContext(db, tenantId, async (tx) => {
         return await syncTaskBatch({
           tenantId,
           items: [
@@ -386,6 +388,7 @@ describe.runIf(shouldRunPgIntegration)(
             },
           ],
           idempotencyStore: store,
+          tx,
         });
       });
 

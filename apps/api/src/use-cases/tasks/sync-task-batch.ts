@@ -13,9 +13,11 @@ import type {
   ConfirmTaskStepPayload,
   ConfirmReceiptLinePayload,
 } from "@wms/shared-types";
+import type { Prisma } from "@wms/db";
 import { WmsError } from "../../plugins/error-handler.js";
 import type { IdempotencyStore } from "../../ports/idempotency-store.js";
 import { PrismaIdempotencyStore } from "../../adapters/prisma-idempotency-store.js";
+import { getAmbientTenantScope } from "../security/tenant-context.js";
 import { confirmTaskStep } from "./confirm-task-step.js";
 import { confirmReceiptLine } from "./confirm-receipt-line.js";
 
@@ -26,6 +28,7 @@ export interface SyncTaskBatchParams {
   userId?: string | undefined;
   items: SyncTaskBatchItem[];
   idempotencyStore?: IdempotencyStore | undefined;
+  tx?: Prisma.TransactionClient | undefined;
 }
 
 /**
@@ -104,6 +107,8 @@ export async function syncTaskBatch(
   }
 
   const store = params.idempotencyStore ?? new PrismaIdempotencyStore();
+  const effectiveTx =
+    params.tx ?? getAmbientTenantScope<Prisma.TransactionClient>()?.scope;
 
   // Orden FIFO estricto: preserva el orden de ocurrencia en cliente (occurredAt ASC).
   // Si los timestamps son iguales, conserva el orden relativo original del array.
@@ -130,7 +135,7 @@ export async function syncTaskBatch(
     const receivedAt = new Date().toISOString();
 
     // 1. Verificación previa en IdempotencyStore
-    const existing = await store.find(tenantId, item.idempotencyKey);
+    const existing = await store.find(tenantId, item.idempotencyKey, effectiveTx);
     if (existing) {
       alreadyAppliedCount++;
       results.push({
@@ -168,6 +173,7 @@ export async function syncTaskBatch(
           idempotencyKey: item.idempotencyKey,
           occurredAt: item.occurredAt,
           idempotencyStore: store,
+          ...(effectiveTx ? { tx: effectiveTx } : {}),
         });
 
         if (confirmRes.idempotencyStatus === "ALREADY_APPLIED") {
@@ -211,6 +217,7 @@ export async function syncTaskBatch(
           idempotencyKey: item.idempotencyKey,
           occurredAt: item.occurredAt,
           idempotencyStore: store,
+          ...(effectiveTx ? { tx: effectiveTx } : {}),
         });
 
         if (receiptRes.idempotencyStatus === "ALREADY_APPLIED") {
@@ -272,14 +279,17 @@ export async function syncTaskBatch(
       // Persistir el resultado de conflicto/rechazo en IdempotencyStore para que
       // reintentos posteriores devuelvan el mismo resultado sin re-evaluar
       try {
-        await store.save({
-          tenantId,
-          idempotencyKey: item.idempotencyKey,
-          action: `SYNC_BATCH_${item.action}`,
-          responseStatus: statusCode,
-          responseBody: itemResult,
-          occurredAt: item.occurredAt,
-        });
+        await store.save(
+          {
+            tenantId,
+            idempotencyKey: item.idempotencyKey,
+            action: `SYNC_BATCH_${item.action}`,
+            responseStatus: statusCode,
+            responseBody: itemResult,
+            occurredAt: item.occurredAt,
+          },
+          effectiveTx,
+        );
       } catch {
         // Si el save de idempotencia falla (ej. carrera concurrente), se ignora
         // para asegurar que la respuesta del batch sea devuelta al cliente
