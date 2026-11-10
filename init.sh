@@ -21,16 +21,16 @@ echo "✓ Node: $(node -v) | pnpm: $(pnpm -v)"
 
 # 1b. Guarda anti-npm/yarn (KNOWLEDGE.md Bug #4): el único lockfile válido es pnpm-lock.yaml
 for lock in package-lock.json yarn.lock; do
-  if [ -f "$lock" ]; then
+  if [[ -f "$lock" ]]; then
     echo "❌ Error: se encontró '$lock' en la raíz. Este monorepo usa SOLO pnpm. Elimínalo (y node_modules si se instaló con npm/yarn) y ejecuta 'pnpm install'."
     exit 1
   fi
 done
 
 # 2. Verificar node_modules
-if [ ! -d "node_modules" ]; then
+if [[ ! -d "node_modules" ]]; then
   echo "📦 Instalando dependencias con pnpm install..."
-  pnpm install
+  pnpm install --ignore-scripts
 fi
 
 # 3. Generar cliente Prisma si hace falta
