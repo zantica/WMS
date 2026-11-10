@@ -138,6 +138,15 @@
 
 ---
 
+### Bug #7 — Aborto de transacción PostgreSQL (`25P02`) tras capturar violación RLS con `expect(...).rejects.toThrow` dentro de `withTenantContext`
+
+**Síntoma**: En CI (`integration-postgres`), `tenant-rls.integration.test.ts` fallaba en `tx.warehouse.create()` con `PostgresError { code: "25P02", message: "current transaction is aborted, commands ignored until end of transaction block" }`.  
+**Causa**: Dentro de una misma transacción interactiva `withTenantContext(db, tenantAId, async (tx) => { ... })`, se verificó primero un intento de spoofing (`await expect(tx.product.create({ tenantId: tenantBId })).rejects.toThrow(...)`) y luego se intentó continuar ejecutando queries en el mismo `tx`. En PostgreSQL, cualquier error SQL (incluido `42501: new row violates row-level security policy`) invalida el bloque transaccional activo hasta su `ROLLBACK`; capturar la excepción en JS no limpia el estado abortado de la transacción en PG. Además, en `afterAll`, borrar `tenants` sin limpiar antes `inventory_balances` / `locations` / `warehouses` / `products` dentro de `withTenantContext` fallaba por `ON DELETE RESTRICT` y RLS.  
+**Fix**: Ejecutar cada aserción de fallo SQL esperado en su propia invocación `await expect(withTenantContext(...)).rejects.toThrow(...)` (para que Prisma haga `ROLLBACK` limpio de esa transacción) y limpiar las entidades hijas por tenant con `withTenantContext` en `afterAll`.  
+**Lección**: En tests de integración contra PostgreSQL real, nunca continúes reutilizando un `tx` después de provocar deliberadamente un error SQL (`RLS`, `UNIQUE`, `FK`); aísla cada fallo esperado en su propia transacción.
+
+---
+
 ## Patrones establecidos (no romper)
 
 ### ❌ Nunca hacer esto

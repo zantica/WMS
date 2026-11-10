@@ -46,6 +46,14 @@ describe.runIf(shouldRunPgIntegration)(
     afterAll(async () => {
       if (db) {
         try {
+          for (const tenantId of [tenantAId, tenantBId]) {
+            await withTenantContext(db, tenantId, async (tx) => {
+              await tx.inventoryBalance.deleteMany();
+              await tx.location.deleteMany();
+              await tx.warehouse.deleteMany();
+              await tx.product.deleteMany();
+            });
+          }
           await db.tenant.deleteMany({
             where: { id: { in: [tenantAId, tenantBId] } },
           });
@@ -118,6 +126,21 @@ describe.runIf(shouldRunPgIntegration)(
         });
       });
 
+      // 3. Tenant A no puede insertar una fila falsificando tenantId = tenantBId (WITH CHECK).
+      // Se ejecuta en su propia transacción porque en PostgreSQL cualquier error SQL (42501 RLS)
+      // marca la transacción activa como abortada (25P02) e impide ejecutar más comandos en ese bloque.
+      await expect(
+        withTenantContext(db, tenantAId, async (tx) => {
+          await tx.product.create({
+            data: {
+              tenantId: tenantBId,
+              sku: `SKU-SPOOF-${suffix}`,
+              name: "Intento de spoofing",
+            },
+          });
+        }),
+      ).rejects.toThrow(/row-level security policy/i);
+
       await withTenantContext(
         db,
         tenantAId,
@@ -134,17 +157,6 @@ describe.runIf(shouldRunPgIntegration)(
             where: { id: productB.id },
           });
           expect(crossRead).toBeNull();
-
-          // 3. Tenant A no puede insertar una fila falsificando tenantId = tenantBId (WITH CHECK)
-          await expect(
-            tx.product.create({
-              data: {
-                tenantId: tenantBId,
-                sku: `SKU-SPOOF-${suffix}`,
-                name: "Intento de spoofing",
-              },
-            }),
-          ).rejects.toThrow(/row-level security policy/i);
 
           // 4. Crear almacén, ubicación y balance en Tenant A y verificar SELECT ... FOR UPDATE
           const warehouseA = await tx.warehouse.create({
