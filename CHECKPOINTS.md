@@ -51,7 +51,7 @@ Todo cambio de código evaluado por el subagente `reviewer` (o verificado tras u
 - [ ] **Sin código muerto nuevo**: No quedan funciones, archivos, rutas o tests deshabilitados (`it.skip`, código comentado) introducidos por la feature sin justificación escrita en el `impl_*.md`.
 - [ ] **Sin artefactos ajenos al toolchain**: No se versionan lockfiles de otros gestores (`package-lock.json`, `yarn.lock`); el único lockfile válido es `pnpm-lock.yaml`.
 
-## CP-7: Estándar de Calidad Pre-Commit (SOLID y Cero Variables de Entorno en Código)
+## CP-7: Estándar de Calidad Pre-Commit (SOLID, Cero Variables de Entorno y Reglas SonarCloud)
 - [ ] **Principios SOLID**:
   - **S (Single Responsibility)**: Cada caso de uso, adaptador o módulo tiene una única responsabilidad bien delimitada (las rutas HTTP solo validan entrada y delegan; los adaptadores solo traducen a infraestructura).
   - **O (Open/Closed)**: La lógica de negocio es extensible mediante nuevos adaptadores o estrategias sin modificar los casos de uso existentes.
@@ -61,3 +61,8 @@ Todo cambio de código evaluado por el subagente `reviewer` (o verificado tras u
 - [ ] **Cero Variables de Entorno (`process.env`) y Secretos en el Código**:
   - Ningún caso de uso (`use-cases/**`), puerto (`ports/**`), motor de dominio ni lógica de negocio de cliente lee `process.env.*` directamente; toda configuración se resuelve únicamente en el punto de entrada (*composition root*) y se inyecta de forma tipada.
   - No existen credenciales, API keys reales, tokens JWT ni cadenas de conexión hardcodeadas en el código fuente, ni archivos `.env` en staging de Git.
+- [ ] **Prevención de Vulnerabilidades y Code Smells de SonarCloud (`Zero Sonar Issues`)**:
+  - **Sin PRNG inseguro (`typescript:S2245`)**: Prohibido usar `Math.random()` en cualquier paquete (`api`, `web`, `mobile`); usar `crypto.randomUUID()`, `crypto.getRandomValues()` o contadores monotónicos deterministas.
+  - **Sin Regex super-lineales / ReDoS (`typescript:S8786`)**: Prohibidas las expresiones regulares con cuantificadores ambiguos o sin anclaje inicial (ej. `/\/+$/`); usar operaciones lineales de string (`endsWith`, `slice`, bucles $O(n)$).
+  - **Sin promesas flotantes (`typescript:S9383`)**: Toda promesa debe llevar `await`, `.catch(...)` o prefijo explícito `void`.
+  - **Higiene en Shell y GitHub Actions (`shell:S7688`, `S6505`, `githubactions:S7637`)**: En scripts Bash usar siempre `[[ ... ]]` en lugar de `[ ... ]`; en `pnpm install` de scripts/CI incluir `--ignore-scripts`; en GitHub Actions fijar acciones de terceros por su SHA completo de commit.

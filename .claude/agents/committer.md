@@ -39,11 +39,17 @@ Antes de ejecutar cualquier `git commit`, debes inspeccionar el `git diff` compl
   - Verifica que ningún archivo `.env`, `.env.local`, `.env.test` o `.env.production` esté en staging o por trackearse (únicamente se permite `.env.example` con valores ficticios/vacíos).
   - Verifica que no queden `console.log` de depuración accidental, `debugger`, ni tests marcados con `.only`.
 
-### Pilar 3: Arquitectura Hexagonal e Invariantes de Dominio (`CHECKPOINTS.md`)
+### Pilar 3: Arquitectura Hexagonal, Invariantes de Dominio y Reglas SonarCloud (`CHECKPOINTS.md`)
 - **Separación de capas**: Frontera clara entre `ports/` (contratos), `use-cases/` (aplicación/dominio) y `adapters/` + `routes/` (infraestructura).
 - **Fronteras del monorepo (CP-3)**: `@wms/shared-types` no importa `@prisma/client` ni `@wms/db`; todos los imports locales en TypeScript usan extensión `.js` (`NodeNext`).
 - **Inmutabilidad del Ledger y Multi-Tenancy (CP-1, CP-2)**: Ningún `update`/`delete` sobre `inventoryTransaction`, aislamiento `Serializable` + `SELECT ... FOR UPDATE` en movimientos de stock y filtro `tenantId` en toda consulta.
 - **Higiene del repositorio (CP-6)**: Sin código muerto, sin archivos duplicados o re-exports huérfanos, y sin lockfiles ajenos (`package-lock.json`, `yarn.lock`).
+- **Barrido Anti-SonarCloud (CP-7)**: Verifica activamente en el `git diff` que no se introduzcan:
+  - `Math.random()` (`typescript:S2245` — usar `crypto.randomUUID()` o contador monotónico).
+  - Regex con backtracking super-lineal como `/\/+$/` (`typescript:S8786` — usar manipulación lineal de strings).
+  - Promesas flotantes sin `await`, `.catch()` o `void` (`typescript:S9383`).
+  - Condicionales `[ ... ]` en lugar de `[[ ... ]]` en scripts `.sh` (`shell:S7688`), `pnpm install` sin `--ignore-scripts` en scripts/CI (`S6505`), o acciones de terceros en `.github/workflows/*.yml` sin SHA completo (`githubactions:S7637`).
+  - Reutilización de una misma transacción PostgreSQL (`tx`) después de provocar un error SQL deliberado en tests de integración (`25P02`).
 
 ### Pilar 4: Suite Completa de Compilación, Tests y Cobertura
 Ejecuta tú mismo los tres comandos siguientes y verifica que todos terminen con `exit code 0`:

@@ -28,9 +28,9 @@ Tu objetivo es llevar a cabo el desarrollo evolutivo de **WMS SaaS** manteniendo
 | Tipo de Solicitud | Acción del `leader` | ¿Requiere Subagentes? |
 | :--- | :--- | :--- |
 | **1. Consulta conceptual o duda sobre el código** | Lee los archivos relevantes (1–3 archivos) y responde directamente. | No |
-| **2. Fix menor (<20 líneas en 1–2 archivos, typo, docs, config, harness)** | Siempre que **no** toque `use-cases/inventory/`, Prisma schema/migraciones ni `@wms/shared-types`, edita directamente y corre `pnpm test`. | No (o `committer` si se solicita publicar) |
+| **2. Fix menor (<20 líneas en 1–2 archivos, typo, docs, config, harness)** | Siempre que **no** toque `use-cases/inventory/`, Prisma schema/migraciones ni `@wms/shared-types`, edita directamente, corre `pnpm test` y lanza al `committer` para auditar calidad/SonarCloud, commitear y publicar. | Sí (`committer` al finalizar) |
 | **3. Investigación / diseño transversal** | Lanza 1–3 subagentes de exploración en paralelo. Cada uno escribe en `progress/explore_<tema>.md` y devuelve solo la ruta. | Sí (`Explore` / `research`) |
-| **4. Nueva Feature de `feature_list.json` o cambio en Ledger/DB/contratos** | Ejecuta el ciclo completo **Leader → Implementer → Reviewer → Committer** detallado abajo. | Sí (`implementer` + `reviewer` + `committer`) |
+| **4. Nueva Feature de `feature_list.json` o cambio en Ledger/DB/contratos** | Ejecuta **siempre** el ciclo completo **Leader → Implementer → Reviewer → Committer** detallado abajo (incluyendo auditoría anti-SonarCloud en `reviewer` y `committer`). | Sí (`implementer` + `reviewer` + `committer`) |
 | **5. Revisión de calidad, empaquetado en commits atómicos y `git push` (bajo demanda)** | Invoca al subagente `committer` sobre el árbol de trabajo actual para validar los 4 Pilares de Calidad, correr toda la suite de tests, commitear por capas y subir al remoto. | Sí (`committer`) |
 
 ---
