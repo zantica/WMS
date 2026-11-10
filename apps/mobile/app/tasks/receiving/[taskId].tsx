@@ -18,12 +18,14 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { TaskStepDTO, WarehouseTaskDTO } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
+import { OfflineSyncStatusBar } from "../../../src/components/OfflineSyncStatusBar";
 import {
   WmsBanner,
   WmsProgressBar,
   WmsTag,
 } from "../../../src/components/WmsUiPrimitives";
 import { useSession } from "../../../src/context/session";
+import { useOfflineSync } from "../../../src/context/offline-sync";
 import { WmsApiClientError } from "../../../src/api/client";
 import {
   WMS_COLORS,
@@ -49,6 +51,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
   const params = useLocalSearchParams<{ taskId?: string }>();
   const taskId = typeof params.taskId === "string" ? params.taskId : "";
   const { client } = useSession();
+  const { cache, isOnline, enqueueReceiptLineConfirmation } = useOfflineSync();
 
   const [task, setTask] = useState<WarehouseTaskDTO | null>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
@@ -79,8 +82,34 @@ export default function ReceivingTaskScreen(): JSX.Element {
     }
 
     setIsLoading(true);
+
+    if (!isOnline) {
+      const cached = cache.getTask(taskId);
+      if (cached) {
+        setTask(cached);
+        const nextStep = getNextActiveStep(cached.steps);
+        if (nextStep) {
+          setSelectedStepId(nextStep.id);
+          setQtyInput(String(Math.max(1, getRemainingStepQty(nextStep))));
+        } else {
+          setSelectedStepId(null);
+        }
+      } else {
+        setDomainError({
+          title: "Tarea no disponible offline",
+          message: "Esta orden de recepción no se encuentra en caché local.",
+          actionHint: "Conecta la terminal a la red para descargar las órdenes de recepción.",
+          severity: "warning",
+          code: "OFFLINE_CACHE_MISS",
+        });
+      }
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const fetched = await client.getTask(taskId);
+      cache.upsertTask(fetched);
       setTask(fetched);
       const nextStep = getNextActiveStep(fetched.steps);
       if (nextStep) {
@@ -90,11 +119,23 @@ export default function ReceivingTaskScreen(): JSX.Element {
         setSelectedStepId(null);
       }
     } catch (err) {
-      setDomainError(formatDomainErrorBanner(err));
+      const cached = cache.getTask(taskId);
+      if (cached) {
+        setTask(cached);
+        const nextStep = getNextActiveStep(cached.steps);
+        if (nextStep) {
+          setSelectedStepId(nextStep.id);
+          setQtyInput(String(Math.max(1, getRemainingStepQty(nextStep))));
+        } else {
+          setSelectedStepId(null);
+        }
+      } else {
+        setDomainError(formatDomainErrorBanner(err));
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [client, taskId]);
+  }, [client, cache, isOnline, taskId]);
 
   useEffect(() => {
     void loadTask();
@@ -164,6 +205,47 @@ export default function ReceivingTaskScreen(): JSX.Element {
             ? Math.max(1, remaining)
             : parsedQty;
 
+        if (!isOnline) {
+          const val = cache.validateReceiptLine(
+            task.id,
+            targetStep.productId,
+            scannedCode,
+            qtyToConfirm,
+          );
+          if (!val.isValid) {
+            setDomainError(
+              formatDomainErrorBanner(
+                new WmsApiClientError(
+                  val.code ?? "INVALID_SCAN",
+                  val.message ?? "Error en validación de recepción offline.",
+                  422,
+                ),
+              ),
+            );
+            setIsSubmitting(false);
+            return;
+          }
+
+          await enqueueReceiptLineConfirmation({
+            taskId: task.id,
+            productId: targetStep.productId,
+            scannedQty: qtyToConfirm,
+            barcode: scannedCode,
+          });
+
+          const updated = cache.applyOptimisticReceiptLine(
+            task.id,
+            targetStep.productId,
+            qtyToConfirm,
+          );
+          setTask(updated);
+          setSuccessNote(
+            `[OFFLINE] Guardado en cola local: ${targetStep.productSku} (${qtyToConfirm} uds).`,
+          );
+          setIsSubmitting(false);
+          return;
+        }
+
         const response = await client.confirmReceiptLine(task.id, {
           productId: targetStep.productId,
           scannedQty: qtyToConfirm,
@@ -185,7 +267,16 @@ export default function ReceivingTaskScreen(): JSX.Element {
         setIsSubmitting(false);
       }
     },
-    [task, activeStep, parsedQty, client, loadTask],
+    [
+      task,
+      activeStep,
+      parsedQty,
+      isOnline,
+      cache,
+      enqueueReceiptLineConfirmation,
+      client,
+      loadTask,
+    ],
   );
 
   if (isLoading) {
@@ -205,6 +296,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <OfflineSyncStatusBar />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"

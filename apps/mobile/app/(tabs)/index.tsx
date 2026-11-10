@@ -17,7 +17,9 @@ import {
 import { useRouter } from "expo-router";
 import type { TaskType, WarehouseTaskDTO } from "@wms/shared-types";
 import { useSession } from "../../src/context/session";
+import { useOfflineSync } from "../../src/context/offline-sync";
 import { WmsApiClientError } from "../../src/api/client";
+import { OfflineSyncStatusBar } from "../../src/components/OfflineSyncStatusBar";
 import {
   WmsBanner,
   WmsEmptyState,
@@ -55,6 +57,7 @@ const TASK_FILTERS: { label: string; value: TaskFilter }[] = [
 export default function TasksListScreen(): JSX.Element {
   const router = useRouter();
   const { client, session } = useSession();
+  const { cache, isOnline } = useOfflineSync();
 
   const [selectedFilter, setSelectedFilter] = useState<TaskFilter>("ALL");
   const [tasks, setTasks] = useState<WarehouseTaskDTO[]>([]);
@@ -72,13 +75,36 @@ export default function TasksListScreen(): JSX.Element {
       }
       setErrorBanner(null);
 
+      if (!isOnline) {
+        // Modo offline: cargar desde LocalTaskCache
+        const cached = cache.getAllTasks();
+        const filtered =
+          selectedFilter === "ALL"
+            ? cached
+            : cached.filter((t) => t.type === selectedFilter);
+        setTasks(filtered);
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
       try {
         const result = await client.listTasks(
           selectedFilter === "ALL" ? undefined : { type: selectedFilter },
         );
+        cache.setTasks(result);
         setTasks(result);
       } catch (err) {
-        if (err instanceof WmsApiClientError) {
+        // Fallback a caché local si la red falla
+        const cached = cache.getAllTasks();
+        if (cached.length > 0) {
+          const filtered =
+            selectedFilter === "ALL"
+              ? cached
+              : cached.filter((t) => t.type === selectedFilter);
+          setTasks(filtered);
+          setErrorBanner("Modo offline activo: mostrando tareas guardadas en caché local.");
+        } else if (err instanceof WmsApiClientError) {
           setErrorBanner(`[${err.code}] ${err.message}`);
         } else if (err instanceof Error) {
           setErrorBanner(err.message);
@@ -90,7 +116,7 @@ export default function TasksListScreen(): JSX.Element {
         setIsRefreshing(false);
       }
     },
-    [client, selectedFilter],
+    [client, cache, isOnline, selectedFilter],
   );
 
   useEffect(() => {
@@ -136,6 +162,8 @@ export default function TasksListScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <OfflineSyncStatusBar showSimulateToggle />
+
       <View style={styles.operatorHeader}>
         <View>
           <Text style={styles.operatorEyebrow}>OPERARIO EN TURNO</Text>

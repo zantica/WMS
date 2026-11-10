@@ -23,12 +23,14 @@ import type {
   WarehouseTaskDTO,
 } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
+import { OfflineSyncStatusBar } from "../../../src/components/OfflineSyncStatusBar";
 import {
   WmsBanner,
   WmsProgressBar,
   WmsTag,
 } from "../../../src/components/WmsUiPrimitives";
 import { useSession } from "../../../src/context/session";
+import { useOfflineSync } from "../../../src/context/offline-sync";
 import { WmsApiClientError } from "../../../src/api/client";
 import {
   WMS_COLORS,
@@ -61,6 +63,7 @@ export default function PickingTaskScreen(): JSX.Element {
   const params = useLocalSearchParams<{ taskId?: string }>();
   const taskId = typeof params.taskId === "string" ? params.taskId : "";
   const { client } = useSession();
+  const { cache, isOnline } = useOfflineSync();
 
   const [task, setTask] = useState<WarehouseTaskDTO | null>(null);
   const [dualScan, setDualScan] = useState<DualScanState>(
@@ -96,6 +99,33 @@ export default function PickingTaskScreen(): JSX.Element {
     }
 
     setIsLoading(true);
+
+    if (!isOnline) {
+      const cached = cache.getTask(taskId);
+      if (cached) {
+        setTask(cached);
+        const next = getNextPickingStep(cached.steps);
+        if (next) {
+          setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
+          setDualScan((prev) =>
+            prev.stepId === next.id
+              ? prev
+              : createInitialDualScanState(next.id),
+          );
+        }
+      } else {
+        setDomainError({
+          title: "Tarea no disponible offline",
+          message: "Esta tarea no fue descargada previamente en la caché local.",
+          actionHint: "Conecta la terminal a la red para descargar las tareas de almacén.",
+          severity: "warning",
+          code: "OFFLINE_CACHE_MISS",
+        });
+      }
+      setIsLoading(false);
+      return;
+    }
+
     try {
       let fetched = await client.getTask(taskId);
       // Si la tarea PICKING aún está en PENDING, la iniciamos automáticamente
@@ -103,6 +133,7 @@ export default function PickingTaskScreen(): JSX.Element {
         await client.startTask(taskId);
         fetched = await client.getTask(taskId);
       }
+      cache.upsertTask(fetched);
       setTask(fetched);
 
       const next = getNextPickingStep(fetched.steps);
@@ -115,11 +146,25 @@ export default function PickingTaskScreen(): JSX.Element {
         );
       }
     } catch (err) {
-      setDomainError(formatDomainErrorBanner(err));
+      const cached = cache.getTask(taskId);
+      if (cached) {
+        setTask(cached);
+        const next = getNextPickingStep(cached.steps);
+        if (next) {
+          setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
+          setDualScan((prev) =>
+            prev.stepId === next.id
+              ? prev
+              : createInitialDualScanState(next.id),
+          );
+        }
+      } else {
+        setDomainError(formatDomainErrorBanner(err));
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [client, taskId]);
+  }, [client, cache, isOnline, taskId]);
 
   useEffect(() => {
     void loadTask();
@@ -292,6 +337,7 @@ export default function PickingTaskScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <OfflineSyncStatusBar />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"

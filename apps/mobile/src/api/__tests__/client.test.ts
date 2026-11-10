@@ -437,4 +437,58 @@ describe("WmsApiClient (@wms/mobile)", () => {
       correlationId: "mobile-header-fallback-2",
     });
   });
+
+  it("sends batch mutations via POST /api/v1/tasks/sync-batch and returns batch summary", async () => {
+    const mockBatchResult = {
+      total: 1,
+      appliedCount: 1,
+      alreadyAppliedCount: 0,
+      conflictCount: 0,
+      rejectedCount: 0,
+      processedAt: new Date().toISOString(),
+      items: [
+        {
+          idempotencyKey: "idem-sync-1",
+          action: "CONFIRM_STEP" as const,
+          status: "APPLIED" as const,
+          occurredAt: "2026-11-10T10:00:00.000Z",
+          receivedAt: "2026-11-10T10:00:01.000Z",
+        },
+      ],
+    };
+
+    const mockFetch = createMockFetch(200, {
+      success: true,
+      data: mockBatchResult,
+    });
+
+    const client = createWmsClient({
+      baseUrl: "http://localhost:3001",
+      apiKey: "demo-api-key-12345",
+      fetchImpl: mockFetch,
+    });
+
+    const res = await client.syncTaskBatch({
+      items: [
+        {
+          idempotencyKey: "idem-sync-1",
+          action: "CONFIRM_STEP",
+          occurredAt: "2026-11-10T10:00:00.000Z",
+          payload: {
+            taskId: "task-1",
+            stepId: "step-1",
+            scannedCode: "LOC-01",
+          },
+        },
+      ],
+    });
+
+    expect(res).toEqual(mockBatchResult);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3001/api/v1/tasks/sync-batch",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
 });

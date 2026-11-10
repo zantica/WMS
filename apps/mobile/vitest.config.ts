@@ -9,7 +9,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
-      include: ["src/api/**/*.ts", "src/workflows/**/*.ts"],
+      include: ["src/api/**/*.ts", "src/workflows/**/*.ts", "src/offline/**/*.ts"],
+      exclude: [
+        "src/**/__tests__/**",
+        "src/offline/ports/**",
+        "src/offline/types.ts",
+        "src/offline/index.ts",
+      ],
       thresholds: {
         lines: 80,
         functions: 80,

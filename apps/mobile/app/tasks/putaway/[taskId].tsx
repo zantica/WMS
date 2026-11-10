@@ -18,12 +18,14 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { TaskStepDTO, WarehouseTaskDTO } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
+import { OfflineSyncStatusBar } from "../../../src/components/OfflineSyncStatusBar";
 import {
   WmsBanner,
   WmsProgressBar,
   WmsTag,
 } from "../../../src/components/WmsUiPrimitives";
 import { useSession } from "../../../src/context/session";
+import { useOfflineSync } from "../../../src/context/offline-sync";
 import { WmsApiClientError } from "../../../src/api/client";
 import {
   WMS_COLORS,
@@ -48,6 +50,7 @@ export default function PutawayTaskScreen(): JSX.Element {
   const params = useLocalSearchParams<{ taskId?: string }>();
   const taskId = typeof params.taskId === "string" ? params.taskId : "";
   const { client } = useSession();
+  const { cache, isOnline, enqueueStepConfirmation } = useOfflineSync();
 
   const [task, setTask] = useState<WarehouseTaskDTO | null>(null);
   const [qtyInput, setQtyInput] = useState<string>("1");
@@ -76,6 +79,28 @@ export default function PutawayTaskScreen(): JSX.Element {
     }
 
     setIsLoading(true);
+
+    if (!isOnline) {
+      const cached = cache.getTask(taskId);
+      if (cached) {
+        setTask(cached);
+        const next = getNextActiveStep(cached.steps);
+        if (next) {
+          setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
+        }
+      } else {
+        setDomainError({
+          title: "Tarea no disponible offline",
+          message: "Esta tarea no fue descargada previamente en la caché local.",
+          actionHint: "Conecta la terminal a la red para descargar las tareas de almacén.",
+          severity: "warning",
+          code: "OFFLINE_CACHE_MISS",
+        });
+      }
+      setIsLoading(false);
+      return;
+    }
+
     try {
       let fetched = await client.getTask(taskId);
       // Si la tarea PUTAWAY aún está en PENDING, la iniciamos automáticamente para el operario
@@ -83,6 +108,7 @@ export default function PutawayTaskScreen(): JSX.Element {
         await client.startTask(taskId);
         fetched = await client.getTask(taskId);
       }
+      cache.upsertTask(fetched);
       setTask(fetched);
 
       const next = getNextActiveStep(fetched.steps);
@@ -90,11 +116,20 @@ export default function PutawayTaskScreen(): JSX.Element {
         setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
       }
     } catch (err) {
-      setDomainError(formatDomainErrorBanner(err));
+      const cached = cache.getTask(taskId);
+      if (cached) {
+        setTask(cached);
+        const next = getNextActiveStep(cached.steps);
+        if (next) {
+          setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
+        }
+      } else {
+        setDomainError(formatDomainErrorBanner(err));
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [client, taskId]);
+  }, [client, cache, isOnline, taskId]);
 
   useEffect(() => {
     void loadTask();
@@ -122,6 +157,68 @@ export default function PutawayTaskScreen(): JSX.Element {
       setSuccessNote(null);
       setIsSubmitting(true);
 
+      if (!isOnline) {
+        const val = cache.validateScan(
+          task.id,
+          nextStep.id,
+          scannedCode,
+          parsedQty,
+        );
+        if (!val.isValid) {
+          setDomainError(
+            formatDomainErrorBanner(
+              new WmsApiClientError(
+                val.code ?? "INVALID_SCAN",
+                val.message ?? "Error de validación offline.",
+                422,
+              ),
+            ),
+          );
+          setIsSubmitting(false);
+          return;
+        }
+
+        try {
+          await enqueueStepConfirmation({
+            taskId: task.id,
+            stepId: nextStep.id,
+            scannedCode,
+            quantity: parsedQty,
+          });
+
+          const updated = cache.applyOptimisticStep(
+            task.id,
+            nextStep.id,
+            parsedQty,
+          );
+          setTask(updated);
+          const next = getNextActiveStep(updated.steps);
+          if (next) {
+            setQtyInput(String(Math.max(1, getRemainingStepQty(next))));
+          }
+          setSuccessNote(
+            `[OFFLINE] Guardado en cola local: ${parsedQty} uds en ${nextStep.locationCode}.`,
+          );
+          setShowExceptionForm(false);
+          setExceptionNote("");
+        } catch (enqueueErr) {
+          setDomainError(
+            formatDomainErrorBanner(
+              new WmsApiClientError(
+                "OFFLINE_QUEUE_ERROR",
+                enqueueErr instanceof Error
+                  ? enqueueErr.message
+                  : "No se pudo guardar la mutación en la cola offline.",
+                500,
+              ),
+            ),
+          );
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
       try {
         const res = await client.confirmTaskStep(task.id, nextStep.id, {
           scannedCode,
@@ -140,7 +237,16 @@ export default function PutawayTaskScreen(): JSX.Element {
         setIsSubmitting(false);
       }
     },
-    [task, nextStep, parsedQty, client, loadTask],
+    [
+      task,
+      nextStep,
+      parsedQty,
+      isOnline,
+      cache,
+      enqueueStepConfirmation,
+      client,
+      loadTask,
+    ],
   );
 
   const handleReportException = useCallback(async () => {
@@ -191,6 +297,7 @@ export default function PutawayTaskScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <OfflineSyncStatusBar />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"

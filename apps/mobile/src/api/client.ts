@@ -14,6 +14,8 @@ import {
   type TaskType,
   type WarehouseTaskDTO,
   type WmsErrorCode,
+  type SyncTaskBatchRequest,
+  type SyncTaskBatchResult,
 } from "@wms/shared-types";
 
 export { CORRELATION_ID_HEADER };
@@ -45,6 +47,7 @@ export interface StartTaskResult {
 export interface ConfirmTaskStepInput extends ConfirmScanInput {
   reportException?: boolean | undefined;
   exceptionNote?: string | undefined;
+  idempotencyKey?: string | undefined;
 }
 
 export interface ReplacementStepSummary {
@@ -77,6 +80,7 @@ export interface ConfirmReceiptLineInput {
   productId: string;
   scannedQty: number;
   barcode?: string | undefined;
+  idempotencyKey?: string | undefined;
 }
 
 export interface ConfirmReceiptLineResponse {
@@ -520,6 +524,19 @@ export class WmsApiClient {
     return this.requestEnvelope<DispatchOrderResponse>(
       "POST",
       `/api/v1/orders/${encodeURIComponent(orderId)}/dispatch`,
+    );
+  }
+
+  /**
+   * POST /api/v1/tasks/sync-batch — Sincroniza un lote de mutaciones en orden FIFO (Offline-First).
+   */
+  public async syncTaskBatch(
+    request: SyncTaskBatchRequest,
+  ): Promise<SyncTaskBatchResult> {
+    return this.requestEnvelope<SyncTaskBatchResult>(
+      "POST",
+      "/api/v1/tasks/sync-batch",
+      { body: request },
     );
   }
 }
