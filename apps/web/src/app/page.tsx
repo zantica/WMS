@@ -14,6 +14,7 @@ import { useSupervisorSession } from "../context/supervisor-session";
 import type { KardexTransactionItem } from "../lib/api-client";
 import {
   computeInventoryKpis,
+  resolveOrderStatusVisual,
   summarizeOrdersByStatus,
   summarizeTasksMonitor,
 } from "../lib/dashboard-metrics";
@@ -293,53 +294,32 @@ export default function SupervisorOverviewPage(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>
-                    <span className="wms-tag wms-tag-slate">● PENDING</span>
-                  </td>
-                  <td className="wms-num">
-                    {ordersSummary.countsByStatus.PENDING}
-                  </td>
-                  <td className="wms-muted">Lanzar reserva ATP (Allocate)</td>
-                </tr>
-                <tr>
-                  <td>
-                    <span className="wms-tag wms-tag-blue">◆ ALLOCATED</span>
-                  </td>
-                  <td className="wms-num">
-                    {ordersSummary.countsByStatus.ALLOCATED}
-                  </td>
-                  <td className="wms-muted">En cola de picking móvil</td>
-                </tr>
-                <tr>
-                  <td>
-                    <span className="wms-tag wms-tag-amber">▲ PICKING</span>
-                  </td>
-                  <td className="wms-num">
-                    {ordersSummary.countsByStatus.PICKING}
-                  </td>
-                  <td className="wms-muted">Operario recolectando en pasillo</td>
-                </tr>
-                <tr>
-                  <td>
-                    <span className="wms-tag wms-tag-emerald">✓ PACKED</span>
-                  </td>
-                  <td className="wms-num">
-                    {ordersSummary.countsByStatus.PACKED}
-                  </td>
-                  <td className="wms-muted">Listos para confirmar despacho</td>
-                </tr>
-                <tr>
-                  <td>
-                    <span className="wms-tag wms-tag-rose">⚠ ON_HOLD</span>
-                  </td>
-                  <td className="wms-num">
-                    {ordersSummary.countsByStatus.ON_HOLD}
-                  </td>
-                  <td className="wms-muted">
-                    Ejecutar reabastecimiento o ajuste
-                  </td>
-                </tr>
+                {(
+                  [
+                    "PENDING",
+                    "ALLOCATED",
+                    "PICKING",
+                    "PACKED",
+                    "ON_HOLD",
+                  ] as const
+                ).map((status) => {
+                  const visual = resolveOrderStatusVisual(status);
+                  return (
+                    <tr key={status}>
+                      <td>
+                        <span
+                          className={`wms-tag ${visual.colors.webTagClass}`}
+                        >
+                          {visual.symbol} {visual.label}
+                        </span>
+                      </td>
+                      <td className="wms-num">
+                        {ordersSummary.countsByStatus[status]}
+                      </td>
+                      <td className="wms-muted">{visual.recommendedAction}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

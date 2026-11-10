@@ -3,6 +3,7 @@
 // Guía al operario según el recorrido óptimo (locationCode ASC), exige doble validación de escaneo
 // (1º Ubicación STORAGE -> 2º Producto Barcode/SKU), gestiona excepciones y re-asignaciones en vivo (F3.2),
 // y habilita el cierre en Mesa de Packing con confirmación de despacho del pedido.
+// Rediseñada con tokens S5 dark-data-dense (@wms/shared-types): cero hex crudos.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -22,8 +23,23 @@ import type {
   WarehouseTaskDTO,
 } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
+import {
+  WmsBanner,
+  WmsProgressBar,
+  WmsTag,
+} from "../../../src/components/WmsUiPrimitives";
 import { useSession } from "../../../src/context/session";
 import { WmsApiClientError } from "../../../src/api/client";
+import {
+  WMS_COLORS,
+  WMS_FONT_SIZES,
+  WMS_MIN_TOUCH_TARGET,
+  WMS_RADII,
+  WMS_SPACING,
+  monoText,
+  resolveStepStatusVisual,
+  resolveTaskStatusVisual,
+} from "../../../src/theme/tokens";
 import {
   calculateTaskProgress,
   formatDomainErrorBanner,
@@ -259,7 +275,7 @@ export default function PickingTaskScreen(): JSX.Element {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color="#38BDF8" />
+          <ActivityIndicator size="large" color={WMS_COLORS.accent} />
           <Text style={styles.loadingText}>
             Cargando ruta de Picking #{taskId}...
           </Text>
@@ -272,6 +288,7 @@ export default function PickingTaskScreen(): JSX.Element {
     nextStep !== null &&
     dualScan.stepId === nextStep.id &&
     dualScan.stage === "AWAITING_PRODUCT";
+  const taskStatusVisual = task ? resolveTaskStatusVisual(task.status) : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -282,97 +299,68 @@ export default function PickingTaskScreen(): JSX.Element {
         {/* Cabecera de la tarea de Picking & Packing */}
         <View style={styles.headerCard}>
           <View style={styles.headerTopRow}>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeBadgeText}>PICKING · PACKING</Text>
-            </View>
-            <Text style={styles.statusText}>{task?.status ?? "UNKNOWN"}</Text>
+            <WmsTag label="OUTBOUND · PICKING & PACKING" symbol="◆" tone="amber" />
+            {taskStatusVisual ? (
+              <WmsTag
+                label={taskStatusVisual.shortLabel}
+                symbol={taskStatusVisual.symbol}
+                tone={taskStatusVisual.tone}
+              />
+            ) : null}
           </View>
-          <Text style={styles.taskTitle}>
+          <Text style={[styles.taskTitle, monoText]}>
             Picking #{task?.id ?? taskId}
             {task?.orderId ? ` · Pedido #${task.orderId}` : ""}
           </Text>
           {progress ? (
-            <View style={styles.progressSection}>
-              <View style={styles.progressLabelsRow}>
-                <Text style={styles.progressLabel}>
-                  Paradas: {progress.completedSteps}/{progress.totalSteps}
-                </Text>
-                <Text style={styles.progressLabel}>
-                  Unidades recogidas: {progress.scannedUnits}/
-                  {progress.expectedUnits} ({progress.percent}%)
-                </Text>
-              </View>
-              <View style={styles.progressBarTrack}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    { width: `${progress.percent}%` },
-                  ]}
-                />
-              </View>
-            </View>
+            <WmsProgressBar
+              percent={progress.percent}
+              leftLabel={`Paradas: ${progress.completedSteps}/${progress.totalSteps}`}
+              rightLabel={`Unidades recogidas: ${progress.scannedUnits}/${progress.expectedUnits} (${progress.percent}%)`}
+              tone={task?.status === "EXCEPTION" ? "rose" : "amber"}
+            />
           ) : null}
         </View>
 
         {/* Banner de resultado de Excepción / Re-asignación en tiempo real (F3.2) */}
         {exceptionFeedback ? (
-          <View
-            style={[
-              styles.exceptionFeedbackBanner,
-              exceptionFeedback.reallocated
-                ? styles.reallocatedBanner
-                : styles.onHoldBanner,
-            ]}
+          <WmsBanner
+            title={exceptionFeedback.title}
+            codeBadge={`Pedido: ${exceptionFeedback.orderStatus}`}
+            message={exceptionFeedback.summary}
+            actionHint={exceptionFeedback.actionHint}
+            tone={exceptionFeedback.reallocated ? "blue" : "amber"}
             testID="picking-exception-feedback-banner"
           >
-            <View style={styles.errorHeaderRow}>
-              <Text style={styles.exceptionFeedbackTitle}>
-                {exceptionFeedback.title}
-              </Text>
-              <Text style={styles.exceptionOrderStatusBadge}>
-                Pedido: {exceptionFeedback.orderStatus}
-              </Text>
-            </View>
-            <Text style={styles.exceptionFeedbackSummary}>
-              {exceptionFeedback.summary}
-            </Text>
             {exceptionFeedback.replacementLocations.length > 0 ? (
-              <Text style={styles.replacementListText}>
+              <Text style={[styles.replacementListText, monoText]}>
                 Nuevas ubicaciones asignadas:{" "}
                 {exceptionFeedback.replacementLocations.join(" · ")}
               </Text>
             ) : null}
-            <Text style={styles.exceptionFeedbackHint}>
-              {exceptionFeedback.actionHint}
-            </Text>
-          </View>
+          </WmsBanner>
         ) : null}
 
         {/* Banner de error de dominio */}
         {domainError ? (
-          <View
-            style={[
-              styles.errorBanner,
-              domainError.severity === "warning"
-                ? styles.warningBanner
-                : styles.criticalBanner,
-            ]}
+          <WmsBanner
+            title={domainError.title}
+            codeBadge={domainError.code}
+            message={domainError.message}
+            actionHint={domainError.actionHint}
+            tone={domainError.severity === "warning" ? "amber" : "rose"}
             testID="picking-error-banner"
-          >
-            <View style={styles.errorHeaderRow}>
-              <Text style={styles.errorTitle}>{domainError.title}</Text>
-              <Text style={styles.errorCodeBadge}>{domainError.code}</Text>
-            </View>
-            <Text style={styles.errorMessage}>{domainError.message}</Text>
-            <Text style={styles.errorHint}>{domainError.actionHint}</Text>
-          </View>
+          />
         ) : null}
 
         {/* Banner de confirmación / avance */}
         {successNote ? (
-          <View style={styles.successBanner} testID="picking-success-banner">
-            <Text style={styles.successBannerText}>{successNote}</Text>
-          </View>
+          <WmsBanner
+            title="✓ Movimiento registrado"
+            message={successNote}
+            tone="emerald"
+            testID="picking-success-banner"
+          />
         ) : null}
 
         {/* Panel de Mesa de Packing y Despacho cuando no quedan pasos pendientes */}
@@ -386,10 +374,19 @@ export default function PickingTaskScreen(): JSX.Element {
             ]}
             testID="packing-station-panel"
           >
+            <WmsTag
+              label={
+                task?.status === "EXCEPTION"
+                  ? "ON_HOLD · FALTA DE STOCK"
+                  : "MESA DE PACKING Y DESPACHO"
+              }
+              symbol={task?.status === "EXCEPTION" ? "⚠" : "✓"}
+              tone={task?.status === "EXCEPTION" ? "amber" : "emerald"}
+            />
             <Text style={styles.packingTitle}>
               {task?.status === "EXCEPTION"
-                ? "Tarea de Picking Detenida por Falta de Stock (ON_HOLD)"
-                : "Mesa de Packing y Despacho Final"}
+                ? "Tarea de Picking detenida por falta de stock (ON_HOLD)"
+                : "Mesa de Packing y despacho final"}
             </Text>
             <Text style={styles.packingSubtitle}>
               {task?.status === "EXCEPTION"
@@ -400,8 +397,8 @@ export default function PickingTaskScreen(): JSX.Element {
             {task?.status === "COMPLETED" && task.orderId ? (
               <View style={styles.dispatchActionsBox}>
                 <Text style={styles.dispatchStatusLabel}>
-                  Estado de Despacho:{" "}
-                  <Text style={styles.dispatchStatusHighlight}>
+                  Estado de despacho:{" "}
+                  <Text style={[styles.dispatchStatusHighlight, monoText]}>
                     {dispatchedOrderStatus ?? "PACKED (Listo para envío)"}
                   </Text>
                 </Text>
@@ -416,8 +413,8 @@ export default function PickingTaskScreen(): JSX.Element {
                   >
                     <Text style={styles.dispatchButtonText}>
                       {isSubmitting
-                        ? "Confirmando Despacho..."
-                        : `Confirmar Cierre de Packing y Despachar Pedido #${task.orderId}`}
+                        ? "Confirmando despacho..."
+                        : `Confirmar cierre de Packing y despachar pedido #${task.orderId} →`}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -431,7 +428,7 @@ export default function PickingTaskScreen(): JSX.Element {
               style={styles.backToQueueButton}
             >
               <Text style={styles.backToQueueButtonText}>
-                Volver a la Cola de Tareas
+                Volver a la cola de tareas
               </Text>
             </Pressable>
           </View>
@@ -445,7 +442,7 @@ export default function PickingTaskScreen(): JSX.Element {
               <Text style={styles.destinationInstruction}>
                 1º Dirígete a la estantería STORAGE:
               </Text>
-              <Text style={styles.destinationCode}>
+              <Text style={[styles.destinationCode, monoText]}>
                 {nextStep.locationCode}
               </Text>
 
@@ -460,10 +457,10 @@ export default function PickingTaskScreen(): JSX.Element {
                   ]}
                   testID="dual-scan-location-badge"
                 >
-                  <Text style={styles.scanStepBadgeText}>
+                  <Text style={[styles.scanStepBadgeText, monoText]}>
                     {isLocationVerified
-                      ? `1. Ubicación Verificada ✓ (${dualScan.verifiedLocationCode})`
-                      : `1. Pendiente Escanear Ubicación (${nextStep.locationCode})`}
+                      ? `1. Ubicación verificada ✓ (${dualScan.verifiedLocationCode})`
+                      : `1. Pendiente escanear ubicación (${nextStep.locationCode})`}
                   </Text>
                 </View>
 
@@ -476,8 +473,8 @@ export default function PickingTaskScreen(): JSX.Element {
                   ]}
                   testID="dual-scan-product-badge"
                 >
-                  <Text style={styles.scanStepBadgeText}>
-                    2. Escanear Producto (
+                  <Text style={[styles.scanStepBadgeText, monoText]}>
+                    2. Escanear producto (
                     {nextStep.productBarcode ?? nextStep.productSku})
                   </Text>
                 </View>
@@ -491,20 +488,21 @@ export default function PickingTaskScreen(): JSX.Element {
                   testID="reset-location-scan-btn"
                 >
                   <Text style={styles.resetLocationBtnText}>
-                    Re-escanear Ubicación
+                    Re-escanear ubicación
                   </Text>
                 </Pressable>
               ) : null}
 
               <View style={styles.productSummaryBox}>
                 <Text style={styles.productNameText}>
-                  {nextStep.productSku} — {nextStep.productName}
+                  <Text style={monoText}>{nextStep.productSku}</Text> —{" "}
+                  {nextStep.productName}
                 </Text>
-                <Text style={styles.productMetaText}>
+                <Text style={[styles.productMetaText, monoText]}>
                   EAN/Barcode: {nextStep.productBarcode ?? "Sin EAN"} · Recogido:{" "}
                   {nextStep.scannedQty}/{nextStep.expectedQty} uds
                 </Text>
-                <Text style={styles.remainingHighlight}>
+                <Text style={[styles.remainingHighlight, monoText]}>
                   Cantidad a extraer ahora: {getRemainingStepQty(nextStep)}{" "}
                   unidades
                 </Text>
@@ -524,10 +522,10 @@ export default function PickingTaskScreen(): JSX.Element {
                   disabled={isSubmitting}
                   style={styles.qtyStepBtn}
                 >
-                  <Text style={styles.qtyStepBtnText}>-1</Text>
+                  <Text style={[styles.qtyStepBtnText, monoText]}>-1</Text>
                 </Pressable>
                 <TextInput
-                  style={styles.qtyInput}
+                  style={[styles.qtyInput, monoText]}
                   value={qtyInput}
                   onChangeText={setQtyInput}
                   keyboardType="numeric"
@@ -548,7 +546,7 @@ export default function PickingTaskScreen(): JSX.Element {
                   disabled={isSubmitting}
                   style={styles.qtyStepBtn}
                 >
-                  <Text style={styles.qtyStepBtnText}>+1</Text>
+                  <Text style={[styles.qtyStepBtnText, monoText]}>+1</Text>
                 </Pressable>
                 <Pressable
                   onPress={() =>
@@ -559,7 +557,7 @@ export default function PickingTaskScreen(): JSX.Element {
                   disabled={isSubmitting}
                   style={styles.qtyMaxBtn}
                 >
-                  <Text style={styles.qtyMaxBtnText}>Total Parada</Text>
+                  <Text style={styles.qtyMaxBtnText}>Total parada</Text>
                 </Pressable>
               </View>
             </View>
@@ -570,8 +568,8 @@ export default function PickingTaskScreen(): JSX.Element {
               }}
               label={
                 isLocationVerified
-                  ? `Paso 2/2: Escanear Producto ${nextStep.productSku}`
-                  : `Paso 1/2: Escanear Estantería ${nextStep.locationCode}`
+                  ? `Paso 2/2: Escanear producto ${nextStep.productSku}`
+                  : `Paso 1/2: Escanear estantería ${nextStep.locationCode}`
               }
               placeholder={
                 isLocationVerified
@@ -594,8 +592,8 @@ export default function PickingTaskScreen(): JSX.Element {
               >
                 <Text style={styles.toggleExceptionText}>
                   {showExceptionForm
-                    ? "Cancelar Reporte de Incidencia"
-                    : "Reportar Rotura de Stock / Ubicación Vacía"}
+                    ? "Cancelar reporte de incidencia"
+                    : "⚠ Reportar rotura de stock / ubicación vacía"}
                 </Text>
               </Pressable>
 
@@ -606,7 +604,7 @@ export default function PickingTaskScreen(): JSX.Element {
                     value={exceptionNote}
                     onChangeText={setExceptionNote}
                     placeholder="Motivo (ej. Stock dañado o ubicación vacía en A-01-01)..."
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={WMS_COLORS.muted}
                     editable={!isSubmitting}
                     testID="picking-exception-input"
                   />
@@ -619,7 +617,7 @@ export default function PickingTaskScreen(): JSX.Element {
                     testID="picking-submit-exception-btn"
                   >
                     <Text style={styles.submitExceptionButtonText}>
-                      Reportar Excepción y Solicitar Re-asignación
+                      Reportar excepción y solicitar re-asignación
                     </Text>
                   </Pressable>
                 </View>
@@ -638,6 +636,7 @@ export default function PickingTaskScreen(): JSX.Element {
             const isCurrent = nextStep?.id === step.id;
             const isCompleted = step.status === "COMPLETED";
             const isException = step.status === "EXCEPTION";
+            const stepVisual = resolveStepStatusVisual(step.status);
 
             return (
               <View
@@ -650,26 +649,20 @@ export default function PickingTaskScreen(): JSX.Element {
                 ]}
               >
                 <View style={styles.stepRowHeader}>
-                  <Text style={styles.stepSeqText}>
+                  <Text style={[styles.stepSeqText, monoText]}>
                     #{step.sequence} · Estantería {step.locationCode}
                   </Text>
-                  <Text
-                    style={[
-                      styles.stepStatusPill,
-                      isCompleted
-                        ? styles.stepStatusDone
-                        : isException
-                          ? styles.stepStatusException
-                          : styles.stepStatusPending,
-                    ]}
-                  >
-                    {step.status}
-                  </Text>
+                  <WmsTag
+                    label={stepVisual.label}
+                    symbol={stepVisual.symbol}
+                    tone={stepVisual.tone}
+                  />
                 </View>
                 <Text style={styles.stepProductName}>
-                  {step.productSku} — {step.productName}
+                  <Text style={monoText}>{step.productSku}</Text> —{" "}
+                  {step.productName}
                 </Text>
-                <Text style={styles.stepUnitsBadge}>
+                <Text style={[styles.stepUnitsBadge, monoText]}>
                   {step.scannedQty}/{step.expectedQty} uds
                 </Text>
               </View>
@@ -684,251 +677,140 @@ export default function PickingTaskScreen(): JSX.Element {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0F172A",
+    backgroundColor: WMS_COLORS.bg,
   },
   container: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 32,
+    padding: WMS_SPACING.lg,
+    gap: WMS_SPACING.md,
+    paddingBottom: WMS_SPACING.xxl,
   },
   centerBox: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
+    gap: WMS_SPACING.sm,
   },
   loadingText: {
-    color: "#94A3B8",
-    fontSize: 14,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.sm,
   },
   headerCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 8,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.sm,
   },
   headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  typeBadge: {
-    backgroundColor: "#38BDF8",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  typeBadgeText: {
-    color: "#082F49",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  statusText: {
-    color: "#38BDF8",
-    fontSize: 12,
-    fontWeight: "700",
+    gap: WMS_SPACING.sm,
   },
   taskTitle: {
-    color: "#F8FAFC",
-    fontSize: 17,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.lg,
     fontWeight: "800",
-  },
-  progressSection: {
-    gap: 6,
-    marginTop: 4,
-  },
-  progressLabelsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  progressLabel: {
-    color: "#CBD5E1",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  progressBarTrack: {
-    height: 8,
-    backgroundColor: "#0F172A",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#38BDF8",
-  },
-  exceptionFeedbackBanner: {
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    gap: 4,
-  },
-  reallocatedBanner: {
-    backgroundColor: "#0C4A6E",
-    borderColor: "#38BDF8",
-  },
-  onHoldBanner: {
-    backgroundColor: "#422006",
-    borderColor: "#F59E0B",
-  },
-  exceptionFeedbackTitle: {
-    color: "#F8FAFC",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  exceptionOrderStatusBadge: {
-    color: "#7DD3FC",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  exceptionFeedbackSummary: {
-    color: "#E2E8F0",
-    fontSize: 13,
   },
   replacementListText: {
-    color: "#34D399",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  exceptionFeedbackHint: {
-    color: "#BAE6FD",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  errorBanner: {
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    gap: 4,
-  },
-  criticalBanner: {
-    backgroundColor: "#450A0A",
-    borderColor: "#EF4444",
-  },
-  warningBanner: {
-    backgroundColor: "#422006",
-    borderColor: "#F59E0B",
-  },
-  errorHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  errorTitle: {
-    color: "#FECACA",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  errorCodeBadge: {
-    color: "#FCA5A5",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  errorMessage: {
-    color: "#FEE2E2",
-    fontSize: 13,
-  },
-  errorHint: {
-    color: "#F87171",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  successBanner: {
-    backgroundColor: "#064E3B",
-    borderColor: "#10B981",
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-  },
-  successBannerText: {
-    color: "#6EE7B7",
-    fontSize: 13,
+    color: WMS_COLORS.success,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
   packingStationCard: {
-    backgroundColor: "#064E3B",
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: WMS_COLORS.successTint,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.lg,
     borderWidth: 1,
-    borderColor: "#10B981",
-    gap: 12,
+    borderColor: WMS_COLORS.successBorder,
+    gap: WMS_SPACING.md,
   },
   packingExceptionCard: {
-    backgroundColor: "#422006",
-    borderColor: "#F59E0B",
+    backgroundColor: WMS_COLORS.warningTint,
+    borderColor: WMS_COLORS.warningBorder,
   },
   packingTitle: {
-    color: "#ECFDF5",
-    fontSize: 16,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.base,
     fontWeight: "800",
   },
   packingSubtitle: {
-    color: "#A7F3D0",
+    color: WMS_COLORS.muted,
     fontSize: 13,
+    lineHeight: 19,
   },
   dispatchActionsBox: {
-    backgroundColor: "#0F172A",
-    borderRadius: 10,
-    padding: 12,
-    gap: 10,
+    backgroundColor: WMS_COLORS.bg,
+    borderRadius: WMS_RADII.md,
+    padding: WMS_SPACING.md,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.sm,
   },
   dispatchStatusLabel: {
-    color: "#CBD5E1",
+    color: WMS_COLORS.muted,
     fontSize: 13,
     fontWeight: "600",
   },
   dispatchStatusHighlight: {
-    color: "#38BDF8",
+    color: WMS_COLORS.accent,
     fontWeight: "800",
   },
   dispatchButton: {
-    backgroundColor: "#38BDF8",
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accent,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
+    paddingHorizontal: WMS_SPACING.md,
     alignItems: "center",
+    justifyContent: "center",
   },
   dispatchButtonText: {
-    color: "#082F49",
+    color: WMS_COLORS.accentContrast,
     fontSize: 13,
     fontWeight: "800",
     textAlign: "center",
   },
   backToQueueButton: {
-    backgroundColor: "#10B981",
-    borderRadius: 8,
-    paddingVertical: 12,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: WMS_COLORS.borderStrong,
   },
   backToQueueButtonText: {
-    color: "#052E16",
-    fontSize: 14,
-    fontWeight: "800",
+    color: WMS_COLORS.text,
+    fontSize: 13,
+    fontWeight: "700",
   },
   guidedPanel: {
-    gap: 12,
+    gap: WMS_SPACING.md,
   },
   destinationCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: "#38BDF8",
-    gap: 8,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.lg,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.accentBorder,
+    gap: WMS_SPACING.sm,
   },
   stepSequenceLabel: {
-    color: "#94A3B8",
+    color: WMS_COLORS.muted,
     fontSize: 11,
     fontWeight: "800",
+    letterSpacing: 0.6,
   },
   destinationInstruction: {
-    color: "#CBD5E1",
+    color: WMS_COLORS.muted,
     fontSize: 13,
   },
   destinationCode: {
-    color: "#38BDF8",
-    fontSize: 28,
+    color: WMS_COLORS.accent,
+    fontSize: WMS_FONT_SIZES.display,
     fontWeight: "900",
   },
   dualScanChecklist: {
@@ -936,215 +818,225 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   scanStepBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.sm,
+    paddingVertical: WMS_SPACING.sm,
     borderWidth: 1,
   },
   scanStepVerified: {
-    backgroundColor: "#064E3B",
-    borderColor: "#10B981",
+    backgroundColor: WMS_COLORS.successTint,
+    borderColor: WMS_COLORS.successBorder,
   },
   scanStepActive: {
-    backgroundColor: "#0C4A6E",
-    borderColor: "#38BDF8",
+    backgroundColor: WMS_COLORS.accentTint,
+    borderColor: WMS_COLORS.accentBorder,
   },
   scanStepWaiting: {
-    backgroundColor: "#0F172A",
-    borderColor: "#334155",
+    backgroundColor: WMS_COLORS.bg,
+    borderColor: WMS_COLORS.border,
   },
   scanStepBadgeText: {
-    color: "#F8FAFC",
-    fontSize: 12,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
   resetLocationBtn: {
     alignSelf: "flex-start",
-    backgroundColor: "#334155",
-    paddingHorizontal: 10,
+    backgroundColor: WMS_COLORS.surfaceHover,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.borderStrong,
+    paddingHorizontal: WMS_SPACING.sm,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: WMS_RADII.sm,
   },
   resetLocationBtnText: {
-    color: "#CBD5E1",
+    color: WMS_COLORS.text,
     fontSize: 11,
     fontWeight: "700",
   },
   productSummaryBox: {
-    backgroundColor: "#0F172A",
-    borderRadius: 8,
-    padding: 10,
+    backgroundColor: WMS_COLORS.bg,
+    borderRadius: WMS_RADII.md,
+    padding: WMS_SPACING.sm,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
     gap: 4,
     marginTop: 4,
   },
   productNameText: {
-    color: "#F8FAFC",
-    fontSize: 14,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "700",
   },
   productMetaText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   remainingHighlight: {
-    color: "#34D399",
+    color: WMS_COLORS.success,
     fontSize: 13,
     fontWeight: "800",
   },
   qtyControlRow: {
-    backgroundColor: "#1E293B",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 8,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.sm,
   },
   qtyControlLabel: {
-    color: "#CBD5E1",
-    fontSize: 13,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "600",
   },
   qtyButtonsGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    flexWrap: "wrap",
+    gap: WMS_SPACING.sm,
   },
   qtyStepBtn: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surfaceHover,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.borderStrong,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
+    borderRadius: WMS_RADII.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   qtyStepBtnText: {
-    color: "#F8FAFC",
-    fontSize: 14,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "800",
   },
   qtyInput: {
-    backgroundColor: "#0F172A",
-    color: "#F8FAFC",
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surface,
+    color: WMS_COLORS.text,
     borderWidth: 1,
-    borderColor: "#475569",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderColor: WMS_COLORS.borderStrong,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.md,
     paddingVertical: 6,
-    minWidth: 64,
+    minWidth: 68,
     textAlign: "center",
     fontSize: 15,
     fontWeight: "700",
   },
   qtyMaxBtn: {
-    backgroundColor: "#2563EB",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accentTint,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.accentBorder,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
+    borderRadius: WMS_RADII.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   qtyMaxBtnText: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: WMS_COLORS.accent,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
   exceptionContainer: {
-    gap: 8,
+    gap: WMS_SPACING.sm,
   },
   toggleExceptionButton: {
-    backgroundColor: "#1E293B",
-    borderRadius: 8,
-    paddingVertical: 10,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.warningTint,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#F59E0B",
+    borderColor: WMS_COLORS.warningBorder,
   },
   toggleExceptionText: {
-    color: "#FBBF24",
-    fontSize: 12,
+    color: WMS_COLORS.warning,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
   exceptionForm: {
-    backgroundColor: "#1E293B",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#F59E0B",
-    gap: 8,
+    borderColor: WMS_COLORS.warningBorder,
+    gap: WMS_SPACING.sm,
   },
   exceptionInput: {
-    backgroundColor: "#0F172A",
-    color: "#F8FAFC",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surface,
+    color: WMS_COLORS.text,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
     borderWidth: 1,
-    borderColor: "#475569",
+    borderColor: WMS_COLORS.borderStrong,
     fontSize: 13,
   },
   submitExceptionButton: {
-    backgroundColor: "#F59E0B",
-    borderRadius: 8,
-    paddingVertical: 10,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.warning,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
   },
   submitExceptionButtonText: {
-    color: "#422006",
+    color: WMS_COLORS.accentContrast,
     fontSize: 13,
     fontWeight: "800",
   },
   stepsListSection: {
-    gap: 8,
+    gap: WMS_SPACING.sm,
   },
   sectionTitle: {
-    color: "#F8FAFC",
-    fontSize: 15,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.base,
     fontWeight: "700",
   },
   stepRowCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: WMS_COLORS.border,
     gap: 4,
   },
   stepRowCurrent: {
-    borderColor: "#38BDF8",
+    borderColor: WMS_COLORS.accentBorder,
+    backgroundColor: WMS_COLORS.surfaceHover,
   },
   stepRowCompleted: {
-    opacity: 0.7,
-    borderColor: "#065F46",
+    opacity: 0.72,
+    borderColor: WMS_COLORS.successBorder,
   },
   stepRowException: {
-    borderColor: "#F59E0B",
+    borderColor: WMS_COLORS.warningBorder,
   },
   stepRowHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: WMS_SPACING.sm,
   },
   stepSeqText: {
-    color: "#F8FAFC",
+    color: WMS_COLORS.text,
     fontSize: 13,
     fontWeight: "700",
   },
-  stepStatusPill: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  stepStatusDone: {
-    color: "#34D399",
-  },
-  stepStatusException: {
-    color: "#FBBF24",
-  },
-  stepStatusPending: {
-    color: "#38BDF8",
-  },
   stepProductName: {
-    color: "#CBD5E1",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   stepUnitsBadge: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
 });

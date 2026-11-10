@@ -2,6 +2,7 @@
 // Pantalla guiada de Recepción en Muelle (Inbound RECEIVING).
 // Consume GET /api/v1/tasks/:id y POST /api/v1/receipts/:taskId/confirm-line,
 // valida escaneos QR/EAN/SKU y permite saltar directamente a la tarea PUTAWAY generada.
+// Rediseñada con tokens S5 dark-data-dense (@wms/shared-types): cero hex crudos.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -17,8 +18,23 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { TaskStepDTO, WarehouseTaskDTO } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../../src/components/BarcodeScannerBox";
+import {
+  WmsBanner,
+  WmsProgressBar,
+  WmsTag,
+} from "../../../src/components/WmsUiPrimitives";
 import { useSession } from "../../../src/context/session";
 import { WmsApiClientError } from "../../../src/api/client";
+import {
+  WMS_COLORS,
+  WMS_FONT_SIZES,
+  WMS_MIN_TOUCH_TARGET,
+  WMS_RADII,
+  WMS_SPACING,
+  monoText,
+  resolveStepStatusVisual,
+  resolveTaskStatusVisual,
+} from "../../../src/theme/tokens";
 import {
   calculateTaskProgress,
   formatDomainErrorBanner,
@@ -176,7 +192,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color="#38BDF8" />
+          <ActivityIndicator size="large" color={WMS_COLORS.accent} />
           <Text style={styles.loadingText}>
             Cargando orden de recepción #{taskId}...
           </Text>
@@ -184,6 +200,8 @@ export default function ReceivingTaskScreen(): JSX.Element {
       </SafeAreaView>
     );
   }
+
+  const taskStatusVisual = task ? resolveTaskStatusVisual(task.status) : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -194,40 +212,34 @@ export default function ReceivingTaskScreen(): JSX.Element {
         {/* Cabecera y progreso de la recepción */}
         <View style={styles.headerCard}>
           <View style={styles.headerTopRow}>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeBadgeText}>RECEIVING · MUELLE</Text>
-            </View>
-            <Text style={styles.statusText}>{task?.status ?? "UNKNOWN"}</Text>
+            <WmsTag label="INBOUND · RECEIVING" symbol="↓" tone="blue" />
+            {taskStatusVisual ? (
+              <WmsTag
+                label={taskStatusVisual.shortLabel}
+                symbol={taskStatusVisual.symbol}
+                tone={taskStatusVisual.tone}
+              />
+            ) : null}
           </View>
-          <Text style={styles.taskTitle}>Recepción #{task?.id ?? taskId}</Text>
+          <Text style={[styles.taskTitle, monoText]}>
+            Recepción #{task?.id ?? taskId}
+          </Text>
           {progress ? (
-            <View style={styles.progressSection}>
-              <View style={styles.progressLabelsRow}>
-                <Text style={styles.progressLabel}>
-                  Líneas: {progress.completedSteps}/{progress.totalSteps}
-                </Text>
-                <Text style={styles.progressLabel}>
-                  Unidades: {progress.scannedUnits}/{progress.expectedUnits} (
-                  {progress.percent}%)
-                </Text>
-              </View>
-              <View style={styles.progressBarTrack}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    { width: `${progress.percent}%` },
-                  ]}
-                />
-              </View>
-            </View>
+            <WmsProgressBar
+              percent={progress.percent}
+              leftLabel={`Líneas: ${progress.completedSteps}/${progress.totalSteps}`}
+              rightLabel={`Unidades: ${progress.scannedUnits}/${progress.expectedUnits} (${progress.percent}%)`}
+              tone="emerald"
+            />
           ) : null}
         </View>
 
         {/* Banner de transición directa a PUTAWAY cuando la recepción finaliza */}
         {generatedPutawayTaskId || task?.status === "COMPLETED" ? (
           <View style={styles.completedCard}>
+            <WmsTag label="LEDGER INBOUND VERIFICADO" symbol="✓" tone="emerald" />
             <Text style={styles.completedTitle}>
-              Recepción Completada en Muelle
+              Recepción completada en muelle
             </Text>
             <Text style={styles.completedSubtitle}>
               {generatedPutawayTaskId
@@ -245,7 +257,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
                 testID="go-to-putaway-btn"
               >
                 <Text style={styles.putawayCtaButtonText}>
-                  Iniciar Putaway Generado (#{generatedPutawayTaskId})
+                  Iniciar Putaway generado (#{generatedPutawayTaskId}) →
                 </Text>
               </Pressable>
             ) : null}
@@ -256,7 +268,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
               style={styles.secondaryBackButton}
             >
               <Text style={styles.secondaryBackButtonText}>
-                Volver a Bandeja de Tareas
+                Volver a bandeja de tareas
               </Text>
             </Pressable>
           </View>
@@ -264,51 +276,47 @@ export default function ReceivingTaskScreen(): JSX.Element {
 
         {/* Banner de error de dominio */}
         {domainError ? (
-          <View
-            style={[
-              styles.errorBanner,
-              domainError.severity === "warning"
-                ? styles.warningBanner
-                : styles.criticalBanner,
-            ]}
+          <WmsBanner
+            title={domainError.title}
+            codeBadge={domainError.code}
+            message={domainError.message}
+            actionHint={domainError.actionHint}
+            tone={domainError.severity === "warning" ? "amber" : "rose"}
             testID="domain-error-banner"
-          >
-            <View style={styles.errorHeaderRow}>
-              <Text style={styles.errorTitle}>{domainError.title}</Text>
-              <Text style={styles.errorCodeBadge}>{domainError.code}</Text>
-            </View>
-            <Text style={styles.errorMessage}>{domainError.message}</Text>
-            <Text style={styles.errorHint}>{domainError.actionHint}</Text>
-          </View>
+          />
         ) : null}
 
         {/* Confirmación exitosa del último escaneo */}
         {successNote ? (
-          <View style={styles.successBanner} testID="receiving-success-banner">
-            <Text style={styles.successBannerText}>{successNote}</Text>
-          </View>
+          <WmsBanner
+            title="✓ Conteo registrado en muelle"
+            message={successNote}
+            tone="emerald"
+            testID="receiving-success-banner"
+          />
         ) : null}
 
         {/* Panel de escaneo y cantidad si aún hay pasos pendientes */}
         {activeStep && task?.status !== "COMPLETED" ? (
           <View style={styles.activeStepPanel}>
             <Text style={styles.sectionTitle}>
-              Línea Seleccionada (#{activeStep.sequence})
+              Línea activa seleccionada (#{activeStep.sequence})
             </Text>
             <View style={styles.stepDetailBox}>
-              <Text style={styles.locationBadge}>
+              <Text style={[styles.locationBadge, monoText]}>
                 Muelle: {activeStep.locationCode}
               </Text>
               <Text style={styles.productTitle}>
-                {activeStep.productSku} — {activeStep.productName}
+                <Text style={monoText}>{activeStep.productSku}</Text> —{" "}
+                {activeStep.productName}
               </Text>
               <Text style={styles.barcodeMeta}>
                 Barcode esperado:{" "}
-                <Text style={styles.barcodeHighlight}>
+                <Text style={[styles.barcodeHighlight, monoText]}>
                   {activeStep.productBarcode ?? activeStep.productSku}
                 </Text>
               </Text>
-              <Text style={styles.qtyCounterText}>
+              <Text style={[styles.qtyCounterText, monoText]}>
                 Recibido: {activeStep.scannedQty} / {activeStep.expectedQty} uds
                 (Pendiente: {getRemainingStepQty(activeStep)} uds)
               </Text>
@@ -316,17 +324,19 @@ export default function ReceivingTaskScreen(): JSX.Element {
 
             {/* Selector de cantidad a confirmar en este escaneo */}
             <View style={styles.qtyControlRow}>
-              <Text style={styles.qtyControlLabel}>Cantidad a confirmar:</Text>
+              <Text style={styles.qtyControlLabel}>
+                Cantidad a confirmar en este escaneo:
+              </Text>
               <View style={styles.qtyButtonsGroup}>
                 <Pressable
                   onPress={() => handleAdjustQty(-1)}
                   disabled={isSubmitting}
                   style={styles.qtyStepBtn}
                 >
-                  <Text style={styles.qtyStepBtnText}>-1</Text>
+                  <Text style={[styles.qtyStepBtnText, monoText]}>-1</Text>
                 </Pressable>
                 <TextInput
-                  style={styles.qtyInput}
+                  style={[styles.qtyInput, monoText]}
                   value={qtyInput}
                   onChangeText={setQtyInput}
                   keyboardType="numeric"
@@ -338,7 +348,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
                   disabled={isSubmitting}
                   style={styles.qtyStepBtn}
                 >
-                  <Text style={styles.qtyStepBtnText}>+1</Text>
+                  <Text style={[styles.qtyStepBtnText, monoText]}>+1</Text>
                 </Pressable>
                 <Pressable
                   onPress={() =>
@@ -349,7 +359,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
                   disabled={isSubmitting}
                   style={styles.qtyMaxBtn}
                 >
-                  <Text style={styles.qtyMaxBtnText}> Total Restante</Text>
+                  <Text style={styles.qtyMaxBtnText}>Total restante</Text>
                 </Pressable>
               </View>
             </View>
@@ -358,7 +368,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
               onScan={(code) => {
                 void handleConfirmScan(code);
               }}
-              label={`Escanear Producto (${activeStep.productSku})`}
+              label={`Escanear producto (${activeStep.productSku})`}
               placeholder="Escanea EAN/QR o escribe el código del producto..."
               expectedCodeHint={
                 activeStep.productBarcode ?? activeStep.productSku
@@ -371,11 +381,12 @@ export default function ReceivingTaskScreen(): JSX.Element {
         {/* Lista completa de líneas de la recepción */}
         <View style={styles.stepsListSection}>
           <Text style={styles.sectionTitle}>
-            Líneas de Entrada ({task?.steps.length ?? 0})
+            Líneas de entrada ({task?.steps.length ?? 0})
           </Text>
           {task?.steps.map((step) => {
             const isSelected = activeStep?.id === step.id;
             const isCompleted = step.status === "COMPLETED";
+            const stepVisual = resolveStepStatusVisual(step.status);
 
             return (
               <Pressable
@@ -388,27 +399,22 @@ export default function ReceivingTaskScreen(): JSX.Element {
                 ]}
               >
                 <View style={styles.stepRowHeader}>
-                  <Text style={styles.stepSeqText}>
+                  <Text style={[styles.stepSeqText, monoText]}>
                     Línea #{step.sequence} · {step.productSku}
                   </Text>
-                  <Text
-                    style={[
-                      styles.stepStatusPill,
-                      isCompleted
-                        ? styles.stepStatusDone
-                        : styles.stepStatusPending,
-                    ]}
-                  >
-                    {step.status}
-                  </Text>
+                  <WmsTag
+                    label={stepVisual.label}
+                    symbol={stepVisual.symbol}
+                    tone={stepVisual.tone}
+                  />
                 </View>
                 <Text style={styles.stepProductName}>{step.productName}</Text>
                 <View style={styles.stepFooterRow}>
-                  <Text style={styles.stepBarcodeSmall}>
+                  <Text style={[styles.stepBarcodeSmall, monoText]}>
                     EAN: {step.productBarcode ?? "N/A"} · Muelle:{" "}
                     {step.locationCode}
                   </Text>
-                  <Text style={styles.stepUnitsBadge}>
+                  <Text style={[styles.stepUnitsBadge, monoText]}>
                     {step.scannedQty}/{step.expectedQty} uds
                   </Text>
                 </View>
@@ -424,308 +430,228 @@ export default function ReceivingTaskScreen(): JSX.Element {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0F172A",
+    backgroundColor: WMS_COLORS.bg,
   },
   container: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 32,
+    padding: WMS_SPACING.lg,
+    gap: WMS_SPACING.md,
+    paddingBottom: WMS_SPACING.xxl,
   },
   centerBox: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
+    gap: WMS_SPACING.sm,
   },
   loadingText: {
-    color: "#94A3B8",
-    fontSize: 14,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.sm,
   },
   headerCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 8,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.sm,
   },
   headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  typeBadge: {
-    backgroundColor: "#0EA5E9",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  typeBadgeText: {
-    color: "#082F49",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  statusText: {
-    color: "#38BDF8",
-    fontSize: 12,
-    fontWeight: "700",
+    gap: WMS_SPACING.sm,
   },
   taskTitle: {
-    color: "#F8FAFC",
-    fontSize: 17,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.lg,
     fontWeight: "800",
   },
-  progressSection: {
-    gap: 6,
-    marginTop: 4,
-  },
-  progressLabelsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  progressLabel: {
-    color: "#CBD5E1",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  progressBarTrack: {
-    height: 8,
-    backgroundColor: "#0F172A",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#10B981",
-  },
   completedCard: {
-    backgroundColor: "#064E3B",
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: WMS_COLORS.successTint,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.lg,
     borderWidth: 1,
-    borderColor: "#10B981",
-    gap: 10,
+    borderColor: WMS_COLORS.successBorder,
+    gap: WMS_SPACING.sm,
   },
   completedTitle: {
-    color: "#ECFDF5",
-    fontSize: 16,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.base,
     fontWeight: "800",
   },
   completedSubtitle: {
-    color: "#A7F3D0",
+    color: WMS_COLORS.muted,
     fontSize: 13,
+    lineHeight: 19,
   },
   putawayCtaButton: {
-    backgroundColor: "#10B981",
-    borderRadius: 8,
-    paddingVertical: 12,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accent,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
+    marginTop: WMS_SPACING.xs,
   },
   putawayCtaButtonText: {
-    color: "#052E16",
-    fontSize: 14,
+    color: WMS_COLORS.accentContrast,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "800",
   },
   secondaryBackButton: {
-    backgroundColor: "#0F172A",
-    borderRadius: 8,
-    paddingVertical: 10,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#34D399",
+    borderColor: WMS_COLORS.borderStrong,
   },
   secondaryBackButtonText: {
-    color: "#6EE7B7",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  errorBanner: {
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    gap: 4,
-  },
-  criticalBanner: {
-    backgroundColor: "#450A0A",
-    borderColor: "#EF4444",
-  },
-  warningBanner: {
-    backgroundColor: "#422006",
-    borderColor: "#F59E0B",
-  },
-  errorHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  errorTitle: {
-    color: "#FECACA",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  errorCodeBadge: {
-    color: "#FCA5A5",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  errorMessage: {
-    color: "#FEE2E2",
-    fontSize: 13,
-  },
-  errorHint: {
-    color: "#F87171",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  successBanner: {
-    backgroundColor: "#064E3B",
-    borderColor: "#10B981",
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-  },
-  successBannerText: {
-    color: "#6EE7B7",
+    color: WMS_COLORS.text,
     fontSize: 13,
     fontWeight: "700",
   },
   activeStepPanel: {
-    gap: 12,
+    gap: WMS_SPACING.md,
   },
   sectionTitle: {
-    color: "#F8FAFC",
-    fontSize: 15,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.base,
     fontWeight: "700",
   },
   stepDetailBox: {
-    backgroundColor: "#1E293B",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
     borderLeftWidth: 4,
-    borderLeftColor: "#38BDF8",
+    borderLeftColor: WMS_COLORS.accent,
     gap: 4,
   },
   locationBadge: {
-    color: "#38BDF8",
+    color: WMS_COLORS.accent,
     fontSize: 13,
     fontWeight: "800",
   },
   productTitle: {
-    color: "#F8FAFC",
+    color: WMS_COLORS.text,
     fontSize: 15,
     fontWeight: "700",
   },
   barcodeMeta: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   barcodeHighlight: {
-    color: "#E2E8F0",
+    color: WMS_COLORS.text,
     fontWeight: "700",
   },
   qtyCounterText: {
-    color: "#34D399",
+    color: WMS_COLORS.success,
     fontSize: 13,
     fontWeight: "700",
   },
   qtyControlRow: {
-    backgroundColor: "#1E293B",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 8,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.sm,
   },
   qtyControlLabel: {
-    color: "#CBD5E1",
-    fontSize: 13,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "600",
   },
   qtyButtonsGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    flexWrap: "wrap",
+    gap: WMS_SPACING.sm,
   },
   qtyStepBtn: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surfaceHover,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.borderStrong,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
+    borderRadius: WMS_RADII.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   qtyStepBtnText: {
-    color: "#F8FAFC",
-    fontSize: 14,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "800",
   },
   qtyInput: {
-    backgroundColor: "#0F172A",
-    color: "#F8FAFC",
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surface,
+    color: WMS_COLORS.text,
     borderWidth: 1,
-    borderColor: "#475569",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderColor: WMS_COLORS.borderStrong,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.md,
     paddingVertical: 6,
-    minWidth: 64,
+    minWidth: 68,
     textAlign: "center",
     fontSize: 15,
     fontWeight: "700",
   },
   qtyMaxBtn: {
-    backgroundColor: "#2563EB",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accentTint,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.accentBorder,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
+    borderRadius: WMS_RADII.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   qtyMaxBtnText: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: WMS_COLORS.accent,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
   stepsListSection: {
-    gap: 8,
+    gap: WMS_SPACING.sm,
   },
   stepRowCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: WMS_COLORS.border,
     gap: 4,
   },
   stepRowSelected: {
-    borderColor: "#38BDF8",
-    backgroundColor: "#1E293B",
+    borderColor: WMS_COLORS.accentBorder,
+    backgroundColor: WMS_COLORS.surfaceHover,
   },
   stepRowCompleted: {
-    opacity: 0.75,
-    borderColor: "#065F46",
+    opacity: 0.72,
+    borderColor: WMS_COLORS.successBorder,
   },
   stepRowHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: WMS_SPACING.sm,
   },
   stepSeqText: {
-    color: "#F8FAFC",
+    color: WMS_COLORS.text,
     fontSize: 13,
     fontWeight: "700",
   },
-  stepStatusPill: {
-    fontSize: 11,
-    fontWeight: "800",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  stepStatusDone: {
-    color: "#34D399",
-  },
-  stepStatusPending: {
-    color: "#38BDF8",
-  },
   stepProductName: {
-    color: "#CBD5E1",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   stepFooterRow: {
     flexDirection: "row",
@@ -734,12 +660,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   stepBarcodeSmall: {
-    color: "#94A3B8",
+    color: WMS_COLORS.muted,
     fontSize: 11,
   },
   stepUnitsBadge: {
-    color: "#F8FAFC",
-    fontSize: 12,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
 });

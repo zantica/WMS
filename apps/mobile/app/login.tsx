@@ -1,5 +1,6 @@
 // apps/mobile/app/login.tsx
 // Pantalla de configuración de servidor API, API Key multi-tenant y diagnóstico de conexión (/health).
+// Diseñada bajo el sistema S5 dark-data-dense / P2 Refinada / T3 (@wms/shared-types): cero hex crudos.
 
 import { useCallback, useState } from "react";
 import {
@@ -15,6 +16,15 @@ import {
 import { useRouter } from "expo-router";
 import { useSession } from "../src/context/session";
 import { WmsApiClientError } from "../src/api/client";
+import { WmsBanner, WmsTag } from "../src/components/WmsUiPrimitives";
+import {
+  WMS_COLORS,
+  WMS_FONT_SIZES,
+  WMS_MIN_TOUCH_TARGET,
+  WMS_RADII,
+  WMS_SPACING,
+  monoText,
+} from "../src/theme/tokens";
 
 export default function LoginScreen(): JSX.Element {
   const router = useRouter();
@@ -79,20 +89,29 @@ export default function LoginScreen(): JSX.Element {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.card}>
-          <Text style={styles.title}>Configuración del Terminal</Text>
+          <View style={styles.headerRow}>
+            <WmsTag label="TERMINAL HANDHELD" symbol="◆" tone="blue" />
+            <WmsTag
+              label={session.isConnected ? "ONLINE" : "PENDIENTE SYNC"}
+              symbol={session.isConnected ? "●" : "○"}
+              tone={session.isConnected ? "emerald" : "amber"}
+            />
+          </View>
+
+          <Text style={styles.title}>Configuración del terminal móvil</Text>
           <Text style={styles.subtitle}>
-            Configura el endpoint de @wms/api y la credencial multi-tenant del
-            operario.
+            Enlaza el lector con el endpoint de @wms/api y define la credencial
+            multi-tenant (x-api-key) del operario en turno.
           </Text>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>URL Base de API (@wms/api)</Text>
+            <Text style={styles.label}>URL base de API (@wms/api)</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, monoText]}
               value={apiBaseUrl}
               onChangeText={setApiBaseUrl}
               placeholder="http://localhost:3001"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={WMS_COLORS.muted}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
@@ -102,52 +121,58 @@ export default function LoginScreen(): JSX.Element {
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Tenant API Key (x-api-key)</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, monoText]}
               value={apiKey}
               onChangeText={setApiKey}
               placeholder="demo-api-key-12345"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={WMS_COLORS.muted}
               autoCapitalize="none"
               autoCorrect={false}
             />
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>ID de Almacén (Warehouse)</Text>
+            <Text style={styles.label}>ID de almacén (Warehouse)</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, monoText]}
               value={warehouseId}
               onChangeText={setWarehouseId}
               placeholder="warehouse-demo"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={WMS_COLORS.muted}
               autoCapitalize="none"
               autoCorrect={false}
             />
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Identificador de Operario</Text>
+            <Text style={styles.label}>Identificador de operario</Text>
             <TextInput
               style={styles.input}
               value={operatorName}
               onChangeText={setOperatorName}
               placeholder="Operario Turno A"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={WMS_COLORS.muted}
             />
           </View>
 
           {errorMessage ? (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{errorMessage}</Text>
-            </View>
+            <WmsBanner
+              title="⚠ Fallo de verificación de enlace"
+              message={errorMessage}
+              actionHint="Verifica que el servidor Fastify esté activo y que la red Wi-Fi del almacén alcance el host."
+              tone="rose"
+            />
           ) : null}
 
           {statusMessage ? (
-            <View style={styles.successBanner}>
-              <Text style={styles.successText}>{statusMessage}</Text>
-            </View>
+            <WmsBanner
+              title="✓ Enlace verificado"
+              message={statusMessage}
+              tone="emerald"
+            />
           ) : null}
 
+          {/* Único CTA primario en la vista */}
           <Pressable
             onPress={() => {
               void handleSaveAndTest();
@@ -159,10 +184,10 @@ export default function LoginScreen(): JSX.Element {
             ]}
           >
             {isTesting ? (
-              <ActivityIndicator size="small" color="#052E16" />
+              <ActivityIndicator size="small" color={WMS_COLORS.accentContrast} />
             ) : (
               <Text style={styles.primaryButtonText}>
-                Verificar /health y Guardar
+                Verificar /health y guardar sesión
               </Text>
             )}
           </Pressable>
@@ -180,7 +205,7 @@ export default function LoginScreen(): JSX.Element {
             style={styles.secondaryButton}
           >
             <Text style={styles.secondaryButtonText}>
-              Guardar sin verificar y continuar
+              Guardar parámetros sin verificar
             </Text>
           </Pressable>
         </View>
@@ -192,95 +217,83 @@ export default function LoginScreen(): JSX.Element {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0F172A",
+    backgroundColor: WMS_COLORS.bg,
   },
   container: {
-    padding: 16,
+    padding: WMS_SPACING.lg,
   },
   card: {
-    backgroundColor: "#1E293B",
-    borderRadius: 14,
-    padding: 18,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.lg,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 14,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.md,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: WMS_SPACING.sm,
   },
   title: {
-    color: "#F8FAFC",
-    fontSize: 20,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.xl,
     fontWeight: "800",
   },
   subtitle: {
-    color: "#94A3B8",
+    color: WMS_COLORS.muted,
     fontSize: 13,
+    lineHeight: 19,
   },
   fieldGroup: {
     gap: 6,
   },
   label: {
-    color: "#CBD5E1",
-    fontSize: 13,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "600",
   },
   input: {
-    backgroundColor: "#0F172A",
-    color: "#F8FAFC",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surface,
+    color: WMS_COLORS.text,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
+    fontSize: WMS_FONT_SIZES.sm,
     borderWidth: 1,
-    borderColor: "#475569",
-  },
-  errorBanner: {
-    backgroundColor: "#450A0A",
-    borderColor: "#EF4444",
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-  },
-  errorText: {
-    color: "#FCA5A5",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  successBanner: {
-    backgroundColor: "#064E3B",
-    borderColor: "#10B981",
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-  },
-  successText: {
-    color: "#6EE7B7",
-    fontSize: 13,
-    fontWeight: "600",
+    borderColor: WMS_COLORS.borderStrong,
   },
   primaryButton: {
-    backgroundColor: "#10B981",
-    borderRadius: 10,
-    paddingVertical: 14,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accent,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.md,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
+    marginTop: WMS_SPACING.xs,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.55,
   },
   primaryButtonText: {
-    color: "#052E16",
-    fontSize: 15,
+    color: WMS_COLORS.accentContrast,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "800",
   },
   secondaryButton: {
-    borderRadius: 10,
-    paddingVertical: 10,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: WMS_COLORS.surfaceHover,
     borderWidth: 1,
-    borderColor: "#475569",
+    borderColor: WMS_COLORS.borderStrong,
   },
   secondaryButtonText: {
-    color: "#CBD5E1",
+    color: WMS_COLORS.text,
     fontSize: 13,
     fontWeight: "600",
   },

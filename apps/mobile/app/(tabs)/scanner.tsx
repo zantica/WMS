@@ -2,6 +2,7 @@
 // Pantalla de escáner rápido para:
 // 1. Ejecutar la tarea activa seleccionada desde la bandeja (RECEIVING / PUTAWAY / PICKING)
 // 2. Consultar saldos en vivo (ATP / onHand / allocated) escaneando código de ubicación o SKU/barcode
+// Rediseñada con el HUD contable S5 dark-data-dense (@wms/shared-types): cero hex crudos.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -16,8 +17,23 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import type { InventoryBalanceDTO, WarehouseTaskDTO } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../src/components/BarcodeScannerBox";
+import {
+  WmsBanner,
+  WmsEmptyState,
+  WmsTag,
+} from "../../src/components/WmsUiPrimitives";
 import { useSession } from "../../src/context/session";
 import { WmsApiClientError } from "../../src/api/client";
+import {
+  WMS_COLORS,
+  WMS_FONT_SIZES,
+  WMS_MIN_TOUCH_TARGET,
+  WMS_RADII,
+  WMS_SPACING,
+  monoText,
+  resolveTaskStatusVisual,
+  resolveTaskTypeVisual,
+} from "../../src/theme/tokens";
 
 export default function ScannerScreen(): JSX.Element {
   const params = useLocalSearchParams<{ taskId?: string }>();
@@ -148,33 +164,42 @@ export default function ScannerScreen(): JSX.Element {
         {activeTask ? (
           <View style={styles.activeTaskCard}>
             <View style={styles.activeTaskHeader}>
-              <Text style={styles.activeTaskTitle}>
-                Tarea Activa: {activeTask.type} (#{activeTask.id})
-              </Text>
+              <View style={styles.activeTaskBadges}>
+                <WmsTag
+                  label={resolveTaskTypeVisual(activeTask.type).code}
+                  symbol={resolveTaskTypeVisual(activeTask.type).symbol}
+                  tone={resolveTaskTypeVisual(activeTask.type).tone}
+                />
+                <WmsTag
+                  label={`#${activeTask.id}`}
+                  tone={resolveTaskStatusVisual(activeTask.status).tone}
+                />
+              </View>
               <Pressable
                 onPress={() => setActiveTask(null)}
                 style={styles.clearTaskButton}
               >
-                <Text style={styles.clearTaskButtonText}>Modo Consulta</Text>
+                <Text style={styles.clearTaskButtonText}>Modo consulta</Text>
               </Pressable>
             </View>
             {nextPendingStep ? (
               <View style={styles.stepPrompt}>
-                <Text style={styles.stepPromptLocation}>
+                <Text style={[styles.stepPromptLocation, monoText]}>
                   Dirigirse a ubicación: {nextPendingStep.locationCode}
                 </Text>
                 <Text style={styles.stepPromptProduct}>
-                  Producto: {nextPendingStep.productSku} —{" "}
+                  Producto:{" "}
+                  <Text style={monoText}>{nextPendingStep.productSku}</Text> —{" "}
                   {nextPendingStep.productName}
                 </Text>
-                <Text style={styles.stepPromptQty}>
+                <Text style={[styles.stepPromptQty, monoText]}>
                   Progreso: {nextPendingStep.scannedQty} /{" "}
                   {nextPendingStep.expectedQty} unidades
                 </Text>
               </View>
             ) : (
               <Text style={styles.taskCompletedBanner}>
-                Tarea completada ({activeTask.status}).
+                ✓ Tarea completada ({activeTask.status}).
               </Text>
             )}
           </View>
@@ -186,8 +211,8 @@ export default function ScannerScreen(): JSX.Element {
           }}
           label={
             nextPendingStep
-              ? `Escanear ${nextPendingStep.productSku} o Ubicación ${nextPendingStep.locationCode}`
-              : "Consulta Rápida de Ubicación (ej. A-01-01) o SKU"
+              ? `Escanear ${nextPendingStep.productSku} o ubicación ${nextPendingStep.locationCode}`
+              : "Consulta rápida de ubicación (ej. A-01-01) o SKU"
           }
           expectedCodeHint={
             nextPendingStep
@@ -199,58 +224,69 @@ export default function ScannerScreen(): JSX.Element {
 
         {isBusy ? (
           <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color="#38BDF8" />
+            <ActivityIndicator size="small" color={WMS_COLORS.accent} />
             <Text style={styles.loadingText}>Procesando lectura...</Text>
           </View>
         ) : null}
 
         {feedbackBanner ? (
-          <View
-            style={[
-              styles.feedbackBox,
+          <WmsBanner
+            title={
               feedbackBanner.type === "error"
-                ? styles.feedbackError
-                : styles.feedbackSuccess,
-            ]}
-          >
-            <Text
-              style={
-                feedbackBanner.type === "error"
-                  ? styles.feedbackErrorText
-                  : styles.feedbackSuccessText
-              }
-            >
-              {feedbackBanner.text}
-            </Text>
-          </View>
+                ? "⚠ Lectura rechazada"
+                : "✓ Lectura procesada"
+            }
+            message={feedbackBanner.text}
+            tone={feedbackBanner.type === "error" ? "rose" : "emerald"}
+          />
         ) : null}
 
         {!activeTask && lastScannedCode ? (
           <View style={styles.resultsSection}>
             <Text style={styles.sectionTitle}>
-              Saldos en vivo para &quot;{lastScannedCode}&quot;
+              Saldos contables en vivo para &quot;{lastScannedCode}&quot;
             </Text>
-            {matchingBalances.map((b) => (
-              <View
-                key={`${b.locationId}-${b.productId}`}
-                style={styles.balanceCard}
-              >
-                <View style={styles.balanceHeader}>
-                  <Text style={styles.locationBadge}>{b.locationCode}</Text>
-                  <Text style={styles.skuText}>{b.productSku}</Text>
+            {matchingBalances.length === 0 ? (
+              <WmsEmptyState
+                title="Sin stock registrado para el código"
+                subtitle="Escanea otra ubicación (ej. A-01-01) o verifica el SKU en el catálogo."
+              />
+            ) : (
+              matchingBalances.map((b) => (
+                <View
+                  key={`${b.locationId}-${b.productId}`}
+                  style={styles.balanceCard}
+                >
+                  <View style={styles.balanceHeader}>
+                    <WmsTag label={b.locationCode} symbol="◆" tone="blue" />
+                    <Text style={[styles.skuText, monoText]}>
+                      {b.productSku}
+                    </Text>
+                  </View>
+                  <Text style={styles.productNameText}>{b.productName}</Text>
+                  <View style={styles.metricsRow}>
+                    <View style={styles.metricBlock}>
+                      <Text style={styles.metricLabel}>ON HAND</Text>
+                      <Text style={[styles.metricValue, monoText]}>
+                        {b.onHandQty} uds
+                      </Text>
+                    </View>
+                    <View style={styles.metricBlock}>
+                      <Text style={styles.metricLabel}>ALLOCATED</Text>
+                      <Text style={[styles.metricWarning, monoText]}>
+                        {b.allocatedQty} uds
+                      </Text>
+                    </View>
+                    <View style={styles.metricBlock}>
+                      <Text style={styles.metricLabel}>ATP (PROMETIBLE)</Text>
+                      <Text style={[styles.metricAtp, monoText]}>
+                        {b.atpQty} uds
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <Text style={styles.productNameText}>{b.productName}</Text>
-                <View style={styles.metricsRow}>
-                  <Text style={styles.metricItem}>
-                    Físico (OnHand): {b.onHandQty}
-                  </Text>
-                  <Text style={styles.metricItem}>
-                    Reservado: {b.allocatedQty}
-                  </Text>
-                  <Text style={styles.metricAtp}>ATP: {b.atpQty}</Text>
-                </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         ) : null}
       </ScrollView>
@@ -261,142 +297,145 @@ export default function ScannerScreen(): JSX.Element {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0F172A",
+    backgroundColor: WMS_COLORS.bg,
   },
   container: {
-    padding: 16,
-    gap: 14,
+    padding: WMS_SPACING.lg,
+    gap: WMS_SPACING.md,
   },
   activeTaskCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#38BDF8",
-    gap: 8,
+    borderColor: WMS_COLORS.accentBorder,
+    gap: WMS_SPACING.sm,
   },
   activeTaskHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: WMS_SPACING.sm,
   },
-  activeTaskTitle: {
-    color: "#38BDF8",
-    fontSize: 14,
-    fontWeight: "800",
+  activeTaskBadges: {
+    flexDirection: "row",
+    gap: WMS_SPACING.xs,
+    flexWrap: "wrap",
   },
   clearTaskButton: {
-    backgroundColor: "#334155",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    minHeight: 36,
+    backgroundColor: WMS_COLORS.surfaceHover,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.borderStrong,
+    paddingHorizontal: WMS_SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: WMS_RADII.sm,
+    justifyContent: "center",
   },
   clearTaskButtonText: {
-    color: "#E2E8F0",
+    color: WMS_COLORS.text,
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   stepPrompt: {
+    backgroundColor: WMS_COLORS.bg,
+    borderRadius: WMS_RADII.md,
+    padding: WMS_SPACING.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: WMS_COLORS.accent,
     gap: 3,
   },
   stepPromptLocation: {
-    color: "#F8FAFC",
-    fontSize: 16,
+    color: WMS_COLORS.accent,
+    fontSize: WMS_FONT_SIZES.base,
     fontWeight: "800",
   },
   stepPromptProduct: {
-    color: "#CBD5E1",
+    color: WMS_COLORS.text,
     fontSize: 13,
   },
   stepPromptQty: {
-    color: "#34D399",
+    color: WMS_COLORS.success,
     fontSize: 13,
     fontWeight: "700",
   },
   taskCompletedBanner: {
-    color: "#34D399",
-    fontSize: 14,
+    color: WMS_COLORS.success,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "700",
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: WMS_SPACING.sm,
   },
   loadingText: {
-    color: "#94A3B8",
+    color: WMS_COLORS.muted,
     fontSize: 13,
-  },
-  feedbackBox: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  feedbackError: {
-    backgroundColor: "#450A0A",
-    borderColor: "#EF4444",
-  },
-  feedbackSuccess: {
-    backgroundColor: "#064E3B",
-    borderColor: "#10B981",
-  },
-  feedbackErrorText: {
-    color: "#FCA5A5",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  feedbackSuccessText: {
-    color: "#6EE7B7",
-    fontSize: 13,
-    fontWeight: "700",
   },
   resultsSection: {
-    gap: 10,
+    gap: WMS_SPACING.sm,
   },
   sectionTitle: {
-    color: "#F8FAFC",
-    fontSize: 15,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.base,
     fontWeight: "700",
   },
   balanceCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 6,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.xs,
   },
   balanceHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  locationBadge: {
-    color: "#38BDF8",
-    fontSize: 14,
-    fontWeight: "800",
-  },
   skuText: {
-    color: "#E2E8F0",
+    color: WMS_COLORS.text,
     fontSize: 13,
     fontWeight: "700",
   },
   productNameText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   metricsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingTop: 4,
+    backgroundColor: WMS_COLORS.bg,
+    borderRadius: WMS_RADII.md,
+    padding: WMS_SPACING.sm,
+    marginTop: WMS_SPACING.xs,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
   },
-  metricItem: {
-    color: "#CBD5E1",
-    fontSize: 12,
+  metricBlock: {
+    gap: 2,
+  },
+  metricLabel: {
+    color: WMS_COLORS.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  metricValue: {
+    color: WMS_COLORS.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  metricWarning: {
+    color: WMS_COLORS.warning,
+    fontSize: 13,
+    fontWeight: "700",
   },
   metricAtp: {
-    color: "#34D399",
-    fontSize: 12,
+    color: WMS_COLORS.success,
+    fontSize: 13,
     fontWeight: "800",
   },
 });

@@ -1,8 +1,9 @@
 // apps/mobile/app/(tabs)/index.tsx
 // Bandeja principal de tareas operativas del almacén (RECEIVING, PUTAWAY, PICKING, PACKING).
 // Consume GET /api/v1/tasks y POST /api/v1/tasks/:id/start mediante el cliente HTTP tipado.
+// Rediseñada con el HUD de telemetría S5 dark-data-dense (@wms/shared-types): cero hex crudos.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -18,6 +19,25 @@ import type { TaskType, WarehouseTaskDTO } from "@wms/shared-types";
 import { useSession } from "../../src/context/session";
 import { WmsApiClientError } from "../../src/api/client";
 import {
+  WmsBanner,
+  WmsEmptyState,
+  WmsKpiCard,
+  WmsProgressBar,
+  WmsTag,
+} from "../../src/components/WmsUiPrimitives";
+import {
+  WMS_COLORS,
+  WMS_FONT_SIZES,
+  WMS_MIN_TOUCH_TARGET,
+  WMS_RADII,
+  WMS_SPACING,
+  monoText,
+  resolveTaskStatusVisual,
+  resolveTaskTypeVisual,
+  tabularNums,
+} from "../../src/theme/tokens";
+import {
+  calculateTaskProgress,
   getNextActiveStep,
   resolveTaskExecutionRoute,
 } from "../../src/workflows/inbound-putaway";
@@ -77,6 +97,18 @@ export default function TasksListScreen(): JSX.Element {
     void loadTasks(false);
   }, [loadTasks]);
 
+  const queueMetrics = useMemo(() => {
+    let pendingCount = 0;
+    let inProgressCount = 0;
+    let exceptionCount = 0;
+    for (const task of tasks) {
+      if (task.status === "PENDING") pendingCount += 1;
+      else if (task.status === "IN_PROGRESS") inProgressCount += 1;
+      else if (task.status === "EXCEPTION") exceptionCount += 1;
+    }
+    return { pendingCount, inProgressCount, exceptionCount };
+  }, [tasks]);
+
   const handleStartOrOpenTask = useCallback(
     async (task: WarehouseTaskDTO) => {
       setErrorBanner(null);
@@ -105,10 +137,38 @@ export default function TasksListScreen(): JSX.Element {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.operatorHeader}>
-        <Text style={styles.operatorText}>
-          Operario: <Text style={styles.operatorHighlight}>{session.operatorName}</Text>
-        </Text>
-        <Text style={styles.warehouseText}>{session.warehouseId}</Text>
+        <View>
+          <Text style={styles.operatorEyebrow}>OPERARIO EN TURNO</Text>
+          <Text style={styles.operatorHighlight}>{session.operatorName}</Text>
+        </View>
+        <WmsTag label={session.warehouseId} symbol="◆" tone="blue" mono />
+      </View>
+
+      {/* HUD compacto de cola operativa móvil */}
+      <View style={styles.kpiRow}>
+        <WmsKpiCard
+          label="En curso"
+          value={queueMetrics.inProgressCount}
+          unit="tareas"
+          tone="amber"
+          tagLabel="▲ PISO"
+        />
+        <WmsKpiCard
+          label="Pendientes"
+          value={queueMetrics.pendingCount}
+          unit="tareas"
+          tone="blue"
+          tagLabel="● COLA"
+        />
+        {queueMetrics.exceptionCount > 0 ? (
+          <WmsKpiCard
+            label="Excepciones"
+            value={queueMetrics.exceptionCount}
+            unit="alertas"
+            tone="rose"
+            tagLabel="⚠ REVISAR"
+          />
+        ) : null}
       </View>
 
       <View style={styles.filterRow}>
@@ -137,23 +197,25 @@ export default function TasksListScreen(): JSX.Element {
       </View>
 
       {errorBanner ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorBoxText}>{errorBanner}</Text>
-          <Pressable
-            onPress={() => {
+        <View style={styles.bannerWrap}>
+          <WmsBanner
+            title="⚠ Error de sincronización con @wms/api"
+            message={errorBanner}
+            tone="rose"
+            actionLabel="Reintentar ahora"
+            onAction={() => {
               void loadTasks(false);
             }}
-            style={styles.retryButton}
-          >
-            <Text style={styles.retryButtonText}>Reintentar</Text>
-          </Pressable>
+          />
         </View>
       ) : null}
 
       {isLoading ? (
         <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color="#38BDF8" />
-          <Text style={styles.loadingText}>Cargando cola de tareas...</Text>
+          <ActivityIndicator size="large" color={WMS_COLORS.accent} />
+          <Text style={styles.loadingText}>
+            Sincronizando cola de tareas operativas...
+          </Text>
         </View>
       ) : (
         <ScrollView
@@ -164,71 +226,85 @@ export default function TasksListScreen(): JSX.Element {
               onRefresh={() => {
                 void loadTasks(true);
               }}
-              tintColor="#38BDF8"
+              tintColor={WMS_COLORS.accent}
             />
           }
         >
           {tasks.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>Sin tareas pendientes</Text>
-              <Text style={styles.emptySubtitle}>
-                No hay tareas activas para el filtro seleccionado. Desliza hacia
-                abajo para actualizar.
-              </Text>
-            </View>
+            <WmsEmptyState
+              title="Sin tareas operativas en cola"
+              subtitle="No hay órdenes asignadas para el filtro activo. Desliza hacia abajo o pulsa sincronizar para consultar @wms/api."
+              actionLabel="Sincronizar bandeja"
+              onAction={() => {
+                void loadTasks(true);
+              }}
+            />
           ) : (
             tasks.map((task) => {
-              const completedSteps = task.steps.filter(
-                (s) => s.status === "COMPLETED",
-              ).length;
-              const totalSteps = task.steps.length;
+              const progress = calculateTaskProgress(task);
               const nextStep = getNextActiveStep(task.steps);
               const isStarting = startingTaskId === task.id;
+              const typeVisual = resolveTaskTypeVisual(task.type);
+              const statusVisual = resolveTaskStatusVisual(task.status);
 
               return (
                 <View key={task.id} style={styles.taskCard}>
                   <View style={styles.cardTopRow}>
                     <View style={styles.badgeGroup}>
-                      <View style={styles.typeBadge}>
-                        <Text style={styles.typeBadgeText}>{task.type}</Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          task.status === "IN_PROGRESS"
-                            ? styles.statusInProgress
-                            : styles.statusPending,
-                        ]}
-                      >
-                        <Text style={styles.statusBadgeText}>{task.status}</Text>
-                      </View>
+                      <WmsTag
+                        label={typeVisual.code}
+                        symbol={typeVisual.symbol}
+                        tone={typeVisual.tone}
+                      />
+                      <WmsTag
+                        label={statusVisual.shortLabel}
+                        symbol={statusVisual.symbol}
+                        tone={statusVisual.tone}
+                      />
                     </View>
-                    <Text style={styles.stepsCounter}>
-                      {completedSteps}/{totalSteps} pasos
+                    <Text style={[styles.stepsCounter, monoText]}>
+                      {progress.completedSteps}/{progress.totalSteps} pasos
                     </Text>
                   </View>
 
-                  <Text style={styles.taskIdText} numberOfLines={1}>
+                  <Text
+                    style={[styles.taskIdText, monoText]}
+                    numberOfLines={1}
+                  >
                     Tarea #{task.id}
-                    {task.orderId ? ` · Pedido ${task.orderId}` : ""}
+                    {task.orderId ? ` · Pedido #${task.orderId}` : ""}
                   </Text>
+
+                  <WmsProgressBar
+                    percent={progress.percent}
+                    leftLabel={`Unidades: ${progress.scannedUnits}/${progress.expectedUnits} uds`}
+                    rightLabel={`${progress.percent}%`}
+                    tone={
+                      task.status === "EXCEPTION"
+                        ? "rose"
+                        : task.status === "COMPLETED"
+                          ? "emerald"
+                          : "blue"
+                    }
+                  />
 
                   {nextStep ? (
                     <View style={styles.nextStepBox}>
                       <Text style={styles.nextStepLabel}>
-                        Siguiente paso (#{nextStep.sequence}):
+                        SIGUIENTE PARADA (#{nextStep.sequence})
                       </Text>
-                      <Text style={styles.nextStepLocation}>
+                      <Text style={[styles.nextStepLocation, monoText]}>
                         Ubicación: {nextStep.locationCode}
                       </Text>
-                      <Text style={styles.nextStepProduct}>
-                        {nextStep.productSku} — {nextStep.productName} (
-                        {nextStep.scannedQty}/{nextStep.expectedQty} uds)
+                      <Text style={[styles.nextStepProduct, tabularNums]}>
+                        <Text style={monoText}>{nextStep.productSku}</Text> —{" "}
+                        {nextStep.productName} ({nextStep.scannedQty}/
+                        {nextStep.expectedQty} uds)
                       </Text>
                     </View>
                   ) : (
                     <Text style={styles.allCompletedText}>
-                      Todos los pasos listos para confirmar.
+                      ✓ Todos los pasos verificados en el recorrido.
                     </Text>
                   )}
 
@@ -237,14 +313,26 @@ export default function TasksListScreen(): JSX.Element {
                       void handleStartOrOpenTask(task);
                     }}
                     disabled={isStarting}
-                    style={styles.actionButton}
+                    style={[
+                      styles.actionButton,
+                      task.status === "IN_PROGRESS"
+                        ? styles.actionButtonPrimary
+                        : styles.actionButtonSecondary,
+                    ]}
                   >
-                    <Text style={styles.actionButtonText}>
+                    <Text
+                      style={[
+                        styles.actionButtonText,
+                        task.status === "IN_PROGRESS"
+                          ? styles.actionButtonTextPrimary
+                          : styles.actionButtonTextSecondary,
+                      ]}
+                    >
                       {isStarting
-                        ? "Iniciando..."
+                        ? "Iniciando tarea..."
                         : task.status === "PENDING"
-                          ? "Tomar e Iniciar Tarea"
-                          : "Continuar Escaneo"}
+                          ? "Tomar e iniciar tarea →"
+                          : "Continuar escaneo en piso →"}
                     </Text>
                   </Pressable>
                 </View>
@@ -260,210 +348,164 @@ export default function TasksListScreen(): JSX.Element {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0F172A",
+    backgroundColor: WMS_COLORS.bg,
   },
   operatorHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: "#1E293B",
+    paddingHorizontal: WMS_SPACING.lg,
+    paddingVertical: WMS_SPACING.sm,
+    backgroundColor: WMS_COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#334155",
+    borderBottomColor: WMS_COLORS.border,
   },
-  operatorText: {
-    color: "#94A3B8",
-    fontSize: 13,
+  operatorEyebrow: {
+    color: WMS_COLORS.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.7,
   },
   operatorHighlight: {
-    color: "#F8FAFC",
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "700",
   },
-  warehouseText: {
-    color: "#38BDF8",
-    fontSize: 12,
-    fontWeight: "700",
+  kpiRow: {
+    flexDirection: "row",
+    gap: WMS_SPACING.sm,
+    paddingHorizontal: WMS_SPACING.lg,
+    paddingTop: WMS_SPACING.md,
   },
   filterRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: WMS_SPACING.sm,
+    paddingHorizontal: WMS_SPACING.lg,
+    paddingVertical: WMS_SPACING.md,
   },
   filterChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: WMS_SPACING.md,
     paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: "#1E293B",
+    borderRadius: WMS_RADII.sm,
+    backgroundColor: WMS_COLORS.surfaceCard,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: WMS_COLORS.border,
   },
   filterChipActive: {
-    backgroundColor: "#2563EB",
-    borderColor: "#3B82F6",
+    backgroundColor: WMS_COLORS.accentTint,
+    borderColor: WMS_COLORS.accentBorder,
   },
   filterChipText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "600",
   },
   filterChipTextActive: {
-    color: "#FFFFFF",
-  },
-  errorBox: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#450A0A",
-    borderWidth: 1,
-    borderColor: "#EF4444",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  errorBoxText: {
-    color: "#FCA5A5",
-    fontSize: 12,
-    flex: 1,
-  },
-  retryButton: {
-    backgroundColor: "#EF4444",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  retryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: WMS_COLORS.accent,
     fontWeight: "700",
+  },
+  bannerWrap: {
+    paddingHorizontal: WMS_SPACING.lg,
+    marginBottom: WMS_SPACING.sm,
   },
   centerBox: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
+    gap: WMS_SPACING.sm,
   },
   loadingText: {
-    color: "#94A3B8",
-    fontSize: 14,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.sm,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    gap: 12,
-  },
-  emptyCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#334155",
-    alignItems: "center",
-    gap: 6,
-  },
-  emptyTitle: {
-    color: "#F8FAFC",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  emptySubtitle: {
-    color: "#94A3B8",
-    fontSize: 13,
-    textAlign: "center",
+    paddingHorizontal: WMS_SPACING.lg,
+    paddingBottom: WMS_SPACING.xxl,
+    gap: WMS_SPACING.md,
   },
   taskCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 10,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.sm,
   },
   cardTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: WMS_SPACING.sm,
   },
   badgeGroup: {
     flexDirection: "row",
-    gap: 8,
-  },
-  typeBadge: {
-    backgroundColor: "#0EA5E9",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  typeBadgeText: {
-    color: "#082F49",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statusPending: {
-    backgroundColor: "#334155",
-  },
-  statusInProgress: {
-    backgroundColor: "#065F46",
-  },
-  statusBadgeText: {
-    color: "#F8FAFC",
-    fontSize: 11,
-    fontWeight: "700",
+    flexWrap: "wrap",
+    gap: WMS_SPACING.xs,
   },
   stepsCounter: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "700",
   },
   taskIdText: {
-    color: "#CBD5E1",
-    fontSize: 12,
-  },
-  nextStepBox: {
-    backgroundColor: "#0F172A",
-    borderRadius: 8,
-    padding: 10,
-    gap: 2,
-    borderLeftWidth: 3,
-    borderLeftColor: "#38BDF8",
-  },
-  nextStepLabel: {
-    color: "#94A3B8",
-    fontSize: 11,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "600",
   },
+  nextStepBox: {
+    backgroundColor: WMS_COLORS.bg,
+    borderRadius: WMS_RADII.md,
+    padding: WMS_SPACING.sm,
+    gap: 3,
+    borderLeftWidth: 3,
+    borderLeftColor: WMS_COLORS.accent,
+  },
+  nextStepLabel: {
+    color: WMS_COLORS.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+  },
   nextStepLocation: {
-    color: "#38BDF8",
-    fontSize: 14,
+    color: WMS_COLORS.accent,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "800",
   },
   nextStepProduct: {
-    color: "#F8FAFC",
+    color: WMS_COLORS.text,
     fontSize: 13,
   },
   allCompletedText: {
-    color: "#34D399",
+    color: WMS_COLORS.success,
     fontSize: 13,
     fontWeight: "600",
   },
   actionButton: {
-    backgroundColor: "#10B981",
-    borderRadius: 8,
-    paddingVertical: 11,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    borderRadius: WMS_RADII.md,
+    paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  actionButtonPrimary: {
+    backgroundColor: WMS_COLORS.accent,
+    borderColor: WMS_COLORS.accent,
+  },
+  actionButtonSecondary: {
+    backgroundColor: WMS_COLORS.surfaceHover,
+    borderColor: WMS_COLORS.borderStrong,
   },
   actionButtonText: {
-    color: "#052E16",
-    fontSize: 14,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "800",
+  },
+  actionButtonTextPrimary: {
+    color: WMS_COLORS.accentContrast,
+  },
+  actionButtonTextSecondary: {
+    color: WMS_COLORS.text,
   },
 });

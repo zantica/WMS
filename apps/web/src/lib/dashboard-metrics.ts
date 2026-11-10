@@ -2,16 +2,53 @@
 // Funciones puras y deterministas de agregación, cálculo de KPIs y filtrado para el Dashboard Web (@wms/web).
 // Respeta las fronteras del monorepo: depende únicamente de @wms/shared-types y tipos locales.
 
-import type {
-  InventoryBalanceDTO,
-  LocationDTO,
-  LocationType,
-  OrderStatus,
-  SalesOrderDTO,
-  TxReason,
-  WarehouseTaskDTO,
+import {
+  WMS_COLORS,
+  WMS_DESIGN_TOKENS,
+  WMS_FONT_SIZES,
+  WMS_RADII,
+  WMS_SPACING,
+  buildWmsCssVariables,
+  resolveOrderStatusVisual,
+  resolveStepStatusVisual,
+  resolveTaskStatusVisual,
+  resolveTaskTypeVisual,
+  resolveToneColors,
+  type InventoryBalanceDTO,
+  type LocationDTO,
+  type LocationType,
+  type OrderStatus,
+  type SalesOrderDTO,
+  type TxReason,
+  type WarehouseTaskDTO,
+  type WmsOrderStatusVisual,
+  type WmsStepStatusVisual,
+  type WmsTaskStatusVisual,
+  type WmsTaskTypeVisual,
+  type WmsTone,
+  type WmsToneColors,
 } from "@wms/shared-types";
 import type { KardexTransactionItem } from "./api-client.js";
+
+export {
+  WMS_COLORS,
+  WMS_DESIGN_TOKENS,
+  WMS_FONT_SIZES,
+  WMS_RADII,
+  WMS_SPACING,
+  buildWmsCssVariables,
+  resolveOrderStatusVisual,
+  resolveStepStatusVisual,
+  resolveTaskStatusVisual,
+  resolveTaskTypeVisual,
+  resolveToneColors,
+  type WmsOrderStatusVisual,
+  type WmsStepStatusVisual,
+  type WmsTaskStatusVisual,
+  type WmsTaskTypeVisual,
+  type WmsTone,
+  type WmsToneColors,
+};
 
 export const LOCATION_ZONE_ORDER: readonly LocationType[] = [
   "RECEIVING",

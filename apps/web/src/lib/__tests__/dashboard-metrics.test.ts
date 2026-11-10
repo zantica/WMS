@@ -10,9 +10,18 @@ import type {
 } from "@wms/shared-types";
 import type { KardexTransactionItem } from "../api-client.js";
 import {
+  WMS_COLORS,
+  WMS_DESIGN_TOKENS,
+  WMS_RADII,
+  buildWmsCssVariables,
   computeInventoryKpis,
   filterKardexTransactions,
   groupLocationsByZone,
+  resolveOrderStatusVisual,
+  resolveStepStatusVisual,
+  resolveTaskStatusVisual,
+  resolveTaskTypeVisual,
+  resolveToneColors,
   summarizeOrdersByStatus,
   summarizeTasksMonitor,
 } from "../dashboard-metrics.js";
@@ -307,5 +316,41 @@ describe("dashboard-metrics (@wms/web)", () => {
     expect(
       filterKardexTransactions(txs, { search: "inexistente-xyz" }),
     ).toHaveLength(0);
+  });
+
+  it("verifies shared S5/P2/T3 design tokens, CSS variables, and visual resolvers from @wms/shared-types", () => {
+    expect(WMS_DESIGN_TOKENS.style).toBe("S5 dark-data-dense");
+    expect(WMS_DESIGN_TOKENS.palette).toBe("P2 Refinada");
+    expect(WMS_DESIGN_TOKENS.typography).toBe("T3 DM Sans + JetBrains Mono");
+    expect(WMS_COLORS.bg).toBe("#0B1120");
+    expect(WMS_COLORS.surface).toBe("#111A2E");
+    expect(WMS_COLORS.surfaceCard).toBe("#162238");
+    expect(WMS_COLORS.accent).toBe("#38BDF8");
+    expect(WMS_COLORS.accentContrast).toBe("#08172A");
+    expect(WMS_COLORS.support).toBe("#34D399");
+    expect(WMS_COLORS.warning).toBe("#FBBF24");
+    expect(WMS_COLORS.danger).toBe("#F43F5E");
+
+    const cssVars = buildWmsCssVariables();
+    expect(cssVars["--bg"]).toBe(WMS_COLORS.bg);
+    expect(cssVars["--surface-card"]).toBe(WMS_COLORS.surfaceCard);
+    expect(cssVars["--accent"]).toBe(WMS_COLORS.accent);
+    expect(cssVars["--radius-sm"]).toBe(`${WMS_RADII.sm}px`);
+    expect(cssVars["--radius-md"]).toBe(`${WMS_RADII.md}px`);
+    expect(cssVars["--radius-lg"]).toBe(`${WMS_RADII.lg}px`);
+
+    expect(resolveToneColors("emerald").webTagClass).toBe("wms-tag-emerald");
+    expect(resolveToneColors("blue").webTagClass).toBe("wms-tag-blue");
+    expect(resolveToneColors("amber").webTagClass).toBe("wms-tag-amber");
+    expect(resolveToneColors("rose").webTagClass).toBe("wms-tag-rose");
+    expect(resolveToneColors("slate").webTagClass).toBe("wms-tag-slate");
+
+    expect(resolveTaskStatusVisual("IN_PROGRESS").tone).toBe("amber");
+    expect(resolveTaskStatusVisual("EXCEPTION").symbol).toBe("⚠");
+    expect(resolveTaskTypeVisual("RECEIVING").code).toBe("INBOUND · RECEIVING");
+    expect(resolveStepStatusVisual("COMPLETED").tone).toBe("emerald");
+    expect(resolveOrderStatusVisual("ON_HOLD").recommendedAction).toContain(
+      "reabastecimiento",
+    );
   });
 });

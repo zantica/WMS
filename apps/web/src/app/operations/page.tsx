@@ -20,6 +20,8 @@ import type {
 import { useSupervisorSession } from "../../context/supervisor-session";
 import {
   ORDER_STATUS_LIST,
+  resolveOrderStatusVisual,
+  resolveTaskStatusVisual,
   summarizeOrdersByStatus,
   summarizeTasksMonitor,
 } from "../../lib/dashboard-metrics";
@@ -391,17 +393,18 @@ export default function OperationsMonitorPage(): JSX.Element {
                       <strong className="wms-mono">{row.task.type}</strong> ·{" "}
                       <span className="wms-mono wms-muted">{row.task.id}</span>
                     </div>
-                    <span
-                      className={`wms-tag ${
-                        row.hasException
-                          ? "wms-tag-rose"
-                          : row.task.status === "IN_PROGRESS"
-                            ? "wms-tag-amber"
-                            : "wms-tag-blue"
-                      }`}
-                    >
-                      {row.hasException ? `⚠ ${row.task.status}` : row.task.status}
-                    </span>
+                    {(() => {
+                      const taskVisual = resolveTaskStatusVisual(
+                        row.hasException ? "EXCEPTION" : row.task.status,
+                      );
+                      return (
+                        <span
+                          className={`wms-tag ${taskVisual.colors.webTagClass}`}
+                        >
+                          {taskVisual.symbol} {row.task.status}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="wms-progress-track">
@@ -540,19 +543,16 @@ export default function OperationsMonitorPage(): JSX.Element {
                         </span>
                       </td>
                       <td>
-                        <span
-                          className={`wms-tag ${
-                            order.status === "ON_HOLD" ||
-                            order.status === "CANCELLED"
-                              ? "wms-tag-rose"
-                              : order.status === "PACKED" ||
-                                  order.status === "SHIPPED"
-                                ? "wms-tag-emerald"
-                                : "wms-tag-blue"
-                          }`}
-                        >
-                          {order.status}
-                        </span>
+                        {(() => {
+                          const visual = resolveOrderStatusVisual(order.status);
+                          return (
+                            <span
+                              className={`wms-tag ${visual.colors.webTagClass}`}
+                            >
+                              {visual.symbol} {visual.label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td>
                         {order.lines.map((line) => (

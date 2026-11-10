@@ -1,6 +1,7 @@
 // apps/mobile/src/components/BarcodeScannerBox.tsx
 // Componente reutilizable de escaneo para terminales de almacén:
 // Soporta cámara (expo-camera) y entrada rápida por teclado/lector láser HID (Zebra/Honeywell).
+// Alineado con el Design System S5 dark-data-dense (@wms/shared-types): cero hex crudos y targets >= 44px.
 
 import { useCallback, useState } from "react";
 import {
@@ -15,6 +16,15 @@ import {
   useCameraPermissions,
   type BarcodeScanningResult,
 } from "expo-camera";
+import {
+  WMS_COLORS,
+  WMS_FONT_SIZES,
+  WMS_MIN_TOUCH_TARGET,
+  WMS_RADII,
+  WMS_SPACING,
+  monoText,
+} from "../theme/tokens";
+import { WmsTag } from "./WmsUiPrimitives";
 
 export interface BarcodeScannerBoxProps {
   onScan: (scannedCode: string) => void;
@@ -37,7 +47,7 @@ const SUPPORTED_BARCODE_TYPES = [
 
 export function BarcodeScannerBox({
   onScan,
-  label = "Escanear Código de Ubicación o Producto",
+  label = "Escanear código de ubicación o producto",
   placeholder = "Escanea con gatillo láser o escribe el código...",
   expectedCodeHint,
   disabled = false,
@@ -81,7 +91,10 @@ export function BarcodeScannerBox({
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.label}>{label}</Text>
+        <View style={styles.labelGroup}>
+          <WmsTag label="HID / QR" symbol="◆" tone="blue" />
+          <Text style={styles.label}>{label}</Text>
+        </View>
         <View style={styles.modeSwitch}>
           <Pressable
             onPress={() => setMode("manual")}
@@ -124,7 +137,8 @@ export function BarcodeScannerBox({
       {expectedCodeHint ? (
         <View style={styles.hintBanner}>
           <Text style={styles.hintText}>
-            Esperado: <Text style={styles.hintCode}>{expectedCodeHint}</Text>
+            Objetivo esperado:{" "}
+            <Text style={[styles.hintCode, monoText]}>{expectedCodeHint}</Text>
           </Text>
         </View>
       ) : null}
@@ -132,12 +146,12 @@ export function BarcodeScannerBox({
       {mode === "manual" ? (
         <View style={styles.manualContainer}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, monoText]}
             value={manualCode}
             onChangeText={setManualCode}
             onSubmitEditing={handleManualSubmit}
             placeholder={placeholder}
-            placeholderTextColor="#64748B"
+            placeholderTextColor={WMS_COLORS.muted}
             autoCapitalize="characters"
             autoCorrect={false}
             returnKeyType="done"
@@ -155,7 +169,16 @@ export function BarcodeScannerBox({
             ]}
             testID="barcode-submit-btn"
           >
-            <Text style={styles.confirmButtonText}>Confirmar</Text>
+            <Text
+              style={[
+                styles.confirmButtonText,
+                disabled || manualCode.trim().length === 0
+                  ? styles.confirmButtonTextDisabled
+                  : null,
+              ]}
+            >
+              Confirmar
+            </Text>
           </Pressable>
         </View>
       ) : (
@@ -176,7 +199,7 @@ export function BarcodeScannerBox({
                 style={styles.permissionButton}
               >
                 <Text style={styles.permissionButtonText}>
-                  Habilitar Cámara
+                  Habilitar cámara
                 </Text>
               </Pressable>
             </View>
@@ -192,15 +215,15 @@ export function BarcodeScannerBox({
               />
               {cameraLocked ? (
                 <View style={styles.cameraOverlay}>
-                  <Text style={styles.overlayText}>
-                    Código capturado: {lastScanned}
+                  <Text style={[styles.overlayText, monoText]}>
+                    ✓ Código capturado: {lastScanned}
                   </Text>
                   <Pressable
                     onPress={() => setCameraLocked(false)}
                     style={styles.rescanButton}
                   >
                     <Text style={styles.rescanButtonText}>
-                      Escanear Otro Código
+                      Escanear otro código
                     </Text>
                   </Pressable>
                 </View>
@@ -212,7 +235,8 @@ export function BarcodeScannerBox({
 
       {lastScanned ? (
         <Text style={styles.lastScannedText}>
-          Última lectura: <Text style={styles.lastScannedCode}>{lastScanned}</Text>
+          Última lectura:{" "}
+          <Text style={[styles.lastScannedCode, monoText]}>{lastScanned}</Text>
         </Text>
       ) : null}
     </View>
@@ -221,98 +245,119 @@ export function BarcodeScannerBox({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 10,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.sm,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 8,
+    gap: WMS_SPACING.sm,
+  },
+  labelGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: WMS_SPACING.sm,
+    flex: 1,
   },
   label: {
-    color: "#F8FAFC",
-    fontSize: 14,
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "700",
+    flexShrink: 1,
   },
   modeSwitch: {
     flexDirection: "row",
-    backgroundColor: "#0F172A",
-    borderRadius: 8,
+    backgroundColor: WMS_COLORS.bg,
+    borderRadius: WMS_RADII.md,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
     padding: 2,
   },
   modeButton: {
-    paddingHorizontal: 10,
+    paddingHorizontal: WMS_SPACING.sm,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: WMS_RADII.sm,
   },
   modeButtonActive: {
-    backgroundColor: "#2563EB",
+    backgroundColor: WMS_COLORS.accentTint,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.accentBorder,
   },
   modeButtonText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
     fontWeight: "600",
   },
   modeButtonTextActive: {
-    color: "#FFFFFF",
+    color: WMS_COLORS.accent,
+    fontWeight: "700",
   },
   hintBanner: {
-    backgroundColor: "#0F172A",
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    backgroundColor: WMS_COLORS.bg,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.sm,
     paddingVertical: 6,
     borderLeftWidth: 3,
-    borderLeftColor: "#38BDF8",
+    borderLeftColor: WMS_COLORS.accent,
   },
   hintText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   hintCode: {
-    color: "#38BDF8",
+    color: WMS_COLORS.accent,
     fontWeight: "700",
   },
   manualContainer: {
     flexDirection: "row",
-    gap: 8,
+    gap: WMS_SPACING.sm,
   },
   input: {
     flex: 1,
-    backgroundColor: "#0F172A",
-    color: "#F8FAFC",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.surface,
+    color: WMS_COLORS.text,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
+    fontSize: WMS_FONT_SIZES.sm,
     borderWidth: 1,
-    borderColor: "#475569",
+    borderColor: WMS_COLORS.borderStrong,
   },
   confirmButton: {
-    backgroundColor: "#10B981",
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accent,
+    borderRadius: WMS_RADII.md,
+    paddingHorizontal: WMS_SPACING.lg,
     justifyContent: "center",
     alignItems: "center",
   },
   confirmButtonDisabled: {
-    backgroundColor: "#334155",
+    backgroundColor: WMS_COLORS.surfaceHover,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
   },
   confirmButtonText: {
-    color: "#052E16",
+    color: WMS_COLORS.accentContrast,
     fontWeight: "800",
-    fontSize: 14,
+    fontSize: WMS_FONT_SIZES.sm,
+  },
+  confirmButtonTextDisabled: {
+    color: WMS_COLORS.muted,
   },
   cameraWrapper: {
     minHeight: 180,
-    borderRadius: 10,
+    borderRadius: WMS_RADII.md,
     overflow: "hidden",
-    backgroundColor: "#0F172A",
+    backgroundColor: WMS_COLORS.bg,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -331,55 +376,61 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(15, 23, 42, 0.85)",
+    backgroundColor: WMS_COLORS.scannerFrameBg,
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
-    padding: 12,
+    gap: WMS_SPACING.sm,
+    padding: WMS_SPACING.md,
   },
   overlayText: {
-    color: "#34D399",
-    fontSize: 14,
+    color: WMS_COLORS.success,
+    fontSize: WMS_FONT_SIZES.sm,
     fontWeight: "700",
   },
   rescanButton: {
-    backgroundColor: "#2563EB",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accent,
+    paddingHorizontal: WMS_SPACING.lg,
+    paddingVertical: WMS_SPACING.sm,
+    borderRadius: WMS_RADII.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   rescanButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: WMS_COLORS.accentContrast,
+    fontWeight: "800",
     fontSize: 13,
   },
   permissionBox: {
-    padding: 16,
+    padding: WMS_SPACING.lg,
     alignItems: "center",
-    gap: 10,
+    gap: WMS_SPACING.sm,
   },
   permissionText: {
-    color: "#CBD5E1",
+    color: WMS_COLORS.muted,
     fontSize: 13,
     textAlign: "center",
   },
   permissionButton: {
-    backgroundColor: "#2563EB",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    backgroundColor: WMS_COLORS.accent,
+    paddingHorizontal: WMS_SPACING.lg,
+    paddingVertical: WMS_SPACING.sm,
+    borderRadius: WMS_RADII.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   permissionButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: WMS_COLORS.accentContrast,
+    fontWeight: "800",
     fontSize: 13,
   },
   lastScannedText: {
-    color: "#94A3B8",
-    fontSize: 12,
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   lastScannedCode: {
-    color: "#F8FAFC",
+    color: WMS_COLORS.text,
     fontWeight: "700",
   },
 });
