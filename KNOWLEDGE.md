@@ -198,16 +198,24 @@ const product = await prisma.product.findUnique({
 });
 ```
 
-### Patrón de error: lanzar `WmsError` desde use-cases, Zod desde validación de input
+### Patrón de error: `DomainError` en dominio, `WmsError` en casos de uso/borde y Zod en rutas
 
 ```typescript
-// En use-cases: WmsError con código de dominio
+// En @wms/domain: invariantes puros lanzan DomainError tipado (sin HTTP/WmsError)
+// En use-cases (@wms/api): capturar con domainErrorToWmsError() (apps/api/src/shared/domain-error-mapper.ts)
+// para mapear a WmsError conservando los códigos públicos WmsErrorCode y HTTP status
 throw new WmsError('INSUFFICIENT_STOCK', 'Not enough stock', 409, { missing: 3 });
 
 // En rutas: Zod para validar el body antes de llegar al use-case
 const body = CreateOrderSchema.parse(request.body);
 // Si falla, el error-handler lo convierte en ApiError { code: 'VALIDATION_ERROR' }
 ```
+
+### Patrón hexagonal en Ledger y Tasks: `UnitOfWork` + `@wms/domain`
+
+- Los casos de uso críticos (`move-stock`, `allocate-order`, `cancel-order`, `confirm-task-step`, `handle-picking-exception`) orquestan agregados de `@wms/domain` dentro de `UnitOfWork.execute(tenantId, async ({ inventory, orders, tasks }) => ...)` sin importar `@wms/db` ni Prisma (ver ADR 007).
+- `PrismaUnitOfWork` envuelve `withTenantContext` (RLS) e `IsolationLevel.Serializable`; `PrismaInventoryRepository` preserva `SELECT ... FOR UPDATE` (`ORDER BY l.code ASC`).
+- No volver a introducir `SELECT ...` o mutaciones directas de Prisma dentro de esos casos de uso.
 
 ---
 
@@ -226,8 +234,8 @@ const body = CreateOrderSchema.parse(request.body);
 
 ### Tests
 - Un archivo de test por use case, en `__tests__/` junto al use case.
-- Los tests unitarios mockean Prisma completo.
-- Los tests de integración (Hito 2+) usarán una base de datos real de test.
+- Los tests unitarios de casos de uso con puertos usan repositorios `InMemory*` + `InMemoryUnitOfWork` (con rollback) en suites *Happy Path* y *"Romper a propósito"*, evitando `vi.mock("@wms/db")`.
+- Los tests de integración (`*.integration.test.ts`) validan RLS, idempotencia y locking `SELECT ... FOR UPDATE` contra PostgreSQL real en CI.
 
 ### UI/UX y Sistema de Diseño (React + Tailwind)
 - **Activación**: Toda modificación o creación de UI en `apps/web` o `apps/mobile` debe seguir [`docs/design/SKILL.md`](./docs/design/SKILL.md) (y la skill `.agents/skills/uiux-design-system/SKILL.md`).
