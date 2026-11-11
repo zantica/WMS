@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
-- **Última actualización**: 2026-11-10
-- **Estado General**: ✅ **Remediación de código duplicado SonarCloud (FIX-SONAR-DUP) completada y publicada — Listo para F5.1**
+- **Última actualización**: 2026-11-11
+- **Estado General**: ✅ **`DOM-2` (Adopción de `@wms/domain` en `@wms/api`) aprobada y lista para publicación — Siguiente: `DOM-3` (opcional) o `F5.1`**
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
@@ -17,9 +17,10 @@
   5. ✅ **`FIX-SONAR-DUP`** — Remediación de duplicación SonarCloud: `.sonarcloud.properties` + refactorización DRY en tareas móviles (`done`)
   6. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`)
   7. ⏳ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`pending`)
-- **Sesión (2026-11-10)**: ✅ **`DOM-1`** (`done`, review `APPROVED`; pendiente Quality Gate/commit) — Paquete `@wms/domain` (TS puro, compartido API/Web/Mobile): primitivas DDD, `InventoryBalance`, máquinas de estado `WarehouseTask`/`TaskStep`/`SalesOrder`, tests happy path + "romper a propósito". Se ejecuta **antes** de `F5.1`. Alcance: solo el paquete nuevo + wiring Turborepo; **no** se refactorizan casos de uso de `@wms/api` (eso será `DOM-2`, tras revisión).
-  - Archivos relevantes: `apps/api/src/use-cases/inventory/{move-stock,allocate-order,cancel-order,handle-picking-exception}.ts`, `apps/api/src/use-cases/tasks/confirm-task-step.ts`, `packages/db/prisma/schema.prisma` (enums reales), `docs/architecture.md`.
-- **Siguiente Feature en Cola**: `F5.1` — *Carga masiva (Bulk Import) desacoplada con modo `dryRun`, normalización y estrategia `ColumnMapper`*
+- **Sesión (2026-11-10 / 2026-11-11 — Hito 8 `@wms/domain`)**:
+  - ✅ **`DOM-1`** (`done`, publicada) — Paquete `@wms/domain` (TS puro, compartido API/Web/Mobile): primitivas DDD, `InventoryBalance`, máquinas de estado `WarehouseTask`/`TaskStep`/`SalesOrder`, 81 tests (happy path + "romper a propósito"), ADR 006.
+  - ✅ **`DOM-2`** (`done`, review `APPROVED` en [`progress/review_DOM-2.md`](./review_DOM-2.md)) — Adopción de `@wms/domain` en `@wms/api`: puertos (`InventoryRepository`, `OrderRepository`, `TaskRepository`, `UnitOfWork`) + adaptadores Prisma (`FOR UPDATE`, `Serializable`, RLS) e `InMemory`, refactor de `move-stock`, `allocate-order`, `cancel-order`, `confirm-task-step` y `handle-picking-exception`, mapeo `DomainError -> WmsError`, paridad de enums, suite PG `ledger-locking.integration.test.ts` y ADR 007. Opcionales pendientes: `create-putaway-task`, `confirm-receipt-line`, `sync-task-batch`.
+- **Siguiente Feature en Cola**: `DOM-3` (consumo de `@wms/domain` en `@wms/mobile` / `@wms/web`, opcional) o `F5.1` — *Carga masiva (Bulk Import) desacoplada con modo `dryRun`, normalización y estrategia `ColumnMapper`*
 
 ---
 

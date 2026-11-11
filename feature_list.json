@@ -230,6 +230,19 @@
         "Máquinas de estado puras de TaskStatus/StepStatus (agregado WarehouseTask con TaskStep: completar solo con todos los pasos resueltos, prohibido operar sobre tarea COMPLETED/CANCELLED) y de OrderStatus (cancelación vs SHIPPED, liberación de stock en ALLOCATED/PICKING), derivadas de los estados REALES del schema Prisma y del comportamiento actual de confirm-task-step.ts, handle-picking-exception.ts y cancel-order.ts",
         "Tests unitarios por agregado con DOS suites obligatorias: happy path y 'romper a propósito' (saldo negativo, sobre-asignación, cantidades NaN/Infinity/negativas/decimales inválidos, transiciones ilegales/retroceso, operar sobre estados terminales, doble confirmación); cobertura >= 80% (objetivo >= 95% en el dominio) y cero cambios de comportamiento en @wms/api (suite existente intacta)"
       ]
+    },
+    {
+      "id": "DOM-2",
+      "milestone": "Hito 8 — Capa de Dominio Compartida (DDD)",
+      "title": "Adopción de @wms/domain en @wms/api: puertos InventoryRepository/TaskRepository/OrderRepository/UnitOfWork + adaptadores Prisma (FOR UPDATE, RLS) y refactor de move-stock, allocate-order, cancel-order, confirm-task-step y handle-picking-exception",
+      "boundedContext": "Inventory Ledger / Fulfillment & Tasks",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Puertos en ports/ y adaptadores Prisma en adapters/ que preservan SELECT ... FOR UPDATE, aislamiento Serializable, withTenantContext/RLS y filtro tenantId; los use-cases dejan de importar Prisma directamente y orquestan agregados de @wms/domain dentro de un UnitOfWork",
+        "Decisiones de comportamiento aprobadas: moveStock respeta available (qty <= available); confirm-task-step usa consume (EXCEEDS_ALLOCATED) y cancel/exception usan releaseUpTo; se rechazan re-escaneos en EXCEPTION/SKIPPED (STEP_ALREADY_RESOLVED) y sobre-escaneo (SCAN_EXCEEDS_EXPECTED); tarea pasa a IN_PROGRESS al primer escaneo; paso resuelto = no PENDING; PICKING no se escribe",
+        "DomainError se mapea a WmsError en el borde conservando los códigos HTTP/error públicos existentes (sin cambio de contrato, CP-3); test de paridad enums @wms/domain <-> Prisma",
+        "Tests con repositorios in-memory (sustituyen vi.mock de @wms/db donde aplique) en suites happy path y 'romper a propósito', más tests de integración contra PostgreSQL real para locking y concurrencia (sin mocks de BD); cobertura use-cases >= 80%; ADR si hay decisiones no obvias; suite global verde"
+      ]
     }
   ]
 }

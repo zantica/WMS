@@ -209,3 +209,18 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
 - **Reportes**: progress/impl_DOM-1.md, progress/review_DOM-1.md; ADR: docs/adr/006-shared-domain-package.md
 - **Cambios clave**: nuevo paquete TS puro packages/domain (primitivas DDD, Quantity, InventoryBalance, WarehouseTask/TaskStep, maquinas de estado Task/Step/Order, 11 DomainError con code estable) + guarda de pureza por test. 81 tests (happy path + romper a proposito), 100% lineas / 97.67% ramas. apps/api, web, mobile y Prisma sin tocar.
 - **Pendiente (DOM-2)**: adoptar el dominio en la API; resolver las 8 inconsistencias codigo-esquema listadas en impl_DOM-1.md.
+
+---
+
+## [2026-11-11] Feature `DOM-2` — Adopción de `@wms/domain` en `@wms/api`
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_DOM-2.md`](./impl_DOM-2.md)
+  - Revisión: [`progress/review_DOM-2.md`](./review_DOM-2.md)
+  - ADR: [`docs/adr/007-api-domain-adoption-uow.md`](../docs/adr/007-api-domain-adoption-uow.md)
+- **Cambios clave**:
+  - Puertos hexagonales en `apps/api/src/ports/` (`InventoryRepository`, `OrderRepository`, `TaskRepository`, `UnitOfWork`) con adaptadores duales `Prisma*` (preservando `SELECT ... FOR UPDATE`, `Serializable`, `withTenantContext`/RLS y filtro `tenantId`) e `InMemory*` (snapshot + rollback para tests sin `vi.mock("@wms/db")`).
+  - Refactorización de `move-stock`, `allocate-order`, `cancel-order`, `confirm-task-step` y `handle-picking-exception` sobre agregados de `@wms/domain` dentro de `UnitOfWork`, sin importar Prisma ni `@wms/db`.
+  - Aplicadas las 8 decisiones aprobadas (`moveStock` respeta `available`, `consume` vs `releaseUpTo`, rechazo de re-escaneos y sobre-escaneo, `IN_PROGRESS` en primer escaneo, `ALLOCATED -> PACKED` directo, mapeo `domainErrorToWmsError` preservando códigos públicos/HTTP y test bidireccional de paridad de enums `domain-prisma-parity.test.ts`).
+  - Nueva suite de integración PostgreSQL `ledger-locking.integration.test.ts`; `pnpm build --force` (6/6) y `pnpm --filter @wms/api test:coverage` (197 passed, 8 skipped PG, `92.36%` líneas global y `>= 82%` en cada use-case).
+- **Opcionales pendientes**: `create-putaway-task.ts`, `confirm-receipt-line.ts` y `sync-task-batch.ts` conservan su integración directa actual (`confirm-receipt-line` delega en `moveStock` vía compatibilidad `tx`).
