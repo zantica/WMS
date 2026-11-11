@@ -14,9 +14,11 @@ const mockPrisma = vi.hoisted(() => ({
     findFirst: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   taskStep: {
     update: vi.fn(),
+    updateMany: vi.fn(),
     findMany: vi.fn(),
   },
   salesOrder: {
@@ -38,7 +40,12 @@ const mockPrisma = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@wms/db", () => ({ prisma: mockPrisma }));
+vi.mock("@wms/db", () => ({
+  prisma: mockPrisma,
+  getActiveTenantStore: () => undefined,
+  withTenantContext: async (_client: unknown, _tenantId: string, fn: (tx: typeof mockPrisma) => Promise<unknown>) =>
+    fn(mockPrisma),
+}));
 
 const mockMoveStock = vi.fn();
 vi.mock("../../use-cases/inventory/move-stock.js", () => ({
@@ -82,6 +89,8 @@ describe("POST /api/v1/tasks/sync-batch y Idempotency-Key en Tasks", () => {
       role: "OPERATOR",
       isActive: true,
     });
+    mockPrisma.warehouseTask.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.taskStep.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.idempotencyRecord.findUnique.mockResolvedValue(null);
     mockPrisma.idempotencyRecord.create.mockImplementation((args: { data: Record<string, unknown> }) =>
       Promise.resolve({

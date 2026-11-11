@@ -1,39 +1,17 @@
 // apps/api/src/use-cases/inventory/__tests__/move-stock.test.ts
-// Tests del caso de uso más crítico del sistema.
-// Validan las garantías de seguridad del Ledger:
-// 1. No se puede dejar una ubicación en saldo negativo
-// 2. Dos peticiones simultáneas no duplican reservas
-// 3. Cada movimiento deja rastro inmutable en el Ledger
+// Tests del caso de uso más crítico del sistema usando InMemoryUnitOfWork + @wms/domain.
+// Suites: Happy Path y "Romper a propósito" (available, saldos negativos, decimales,
+// aislamiento multi-tenant y rollback transaccional).
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { WmsError } from "../../../plugins/error-handler.js";
+import { InMemoryUnitOfWork } from "../../../adapters/in-memory-unit-of-work.js";
+import { runWithAmbientTenantScope } from "../../security/tenant-context.js";
 import { moveStock } from "../move-stock.js";
 
-// ── Mock de Prisma para tests unitarios rápidos ──────────────────────────────
-// En tests de integración reales usarías una DB de test real (ej. con testcontainers)
-const mockTx = {
-  $queryRaw: vi.fn(),
-  inventoryBalance: {
-    update: vi.fn(),
-    upsert: vi.fn(),
-  },
-  inventoryTransaction: {
-    create: vi.fn(),
-  },
-};
+describe("moveStock — Inventory Ledger Use Case (InMemoryUnitOfWork + @wms/domain)", () => {
+  let uow: InMemoryUnitOfWork;
 
-vi.mock("@wms/db", () => ({
-  prisma: {
-    $transaction: vi.fn((callback: (tx: typeof mockTx) => Promise<unknown>) =>
-      callback(mockTx),
-    ),
-  },
-  Prisma: {
-    TransactionIsolationLevel: { Serializable: "Serializable" },
-  },
-}));
-
-describe("moveStock — Inventory Ledger Use Case", () => {
   const BASE_PARAMS = {
     tenantId: "tenant-1",
     productId: "product-1",
@@ -44,191 +22,236 @@ describe("moveStock — Inventory Ledger Use Case", () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    uow = new InMemoryUnitOfWork({
+      balances: [
+        {
+          id: "bal-rec-1",
+          tenantId: "tenant-1",
+          locationId: "loc-receiving",
+          productId: "product-1",
+          onHandQty: 10,
+          allocatedQty: 0,
+        },
+        {
+          id: "bal-stor-1",
+          tenantId: "tenant-1",
+          locationId: "loc-storage",
+          productId: "product-1",
+          onHandQty: 10,
+          allocatedQty: 6, // available = 4
+        },
+        {
+          id: "bal-other-tenant",
+          tenantId: "tenant-2",
+          locationId: "loc-receiving",
+          productId: "product-1",
+          onHandQty: 50,
+          allocatedQty: 0,
+        },
+      ],
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  describe("Validaciones de entrada", () => {
-    it("lanza WmsError si quantity es 0", async () => {
-      await expect(
-        moveStock({ ...BASE_PARAMS, quantity: 0 }),
-      ).rejects.toThrow(WmsError);
-
-      await expect(
-        moveStock({ ...BASE_PARAMS, quantity: 0 }),
-      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    });
-
-    it("lanza WmsError si quantity es negativa", async () => {
-      await expect(
-        moveStock({ ...BASE_PARAMS, quantity: -1 }),
-      ).rejects.toThrow(WmsError);
-    });
-  });
-
-  // ────────────────────────────────────────────────────────────────────────────
-  describe("Movimiento sin origen (INBOUND_RECEIPT → RECEIVING)", () => {
-    it("crea balance en toLocation sin verificar saldo origen", async () => {
-      mockTx.inventoryBalance.upsert.mockResolvedValue({});
-      mockTx.inventoryTransaction.create.mockResolvedValue({});
-
+  describe("Happy Path", () => {
+    it("crea balance en toLocation sin origen (INBOUND_RECEIPT → RECEIVING)", async () => {
       await moveStock({
         ...BASE_PARAMS,
         fromLocationId: undefined,
-        toLocationId: "loc-receiving",
+        toLocationId: "loc-new-receiving",
         reason: "INBOUND_RECEIPT",
+        unitOfWork: uow,
       });
 
-      // No debe hacer SELECT FOR UPDATE (no hay origen)
-      expect(mockTx.$queryRaw).not.toHaveBeenCalled();
-
-      // Debe hacer upsert en destino
-      expect(mockTx.inventoryBalance.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { locationId_productId: { locationId: "loc-receiving", productId: "product-1" } },
-          update: { onHandQty: { increment: 5 } },
-        }),
+      const dest = uow.state.balances.find(
+        (b) => b.locationId === "loc-new-receiving" && b.tenantId === "tenant-1",
       );
+      expect(dest?.onHandQty).toBe(5);
+      expect(dest?.allocatedQty).toBe(0);
 
-      // Debe registrar en el Ledger
-      expect(mockTx.inventoryTransaction.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            reason: "INBOUND_RECEIPT",
-            quantity: 5,
-            toLocationId: "loc-receiving",
-          }),
-        }),
-      );
+      expect(uow.state.transactions).toHaveLength(1);
+      expect(uow.state.transactions[0]).toMatchObject({
+        tenantId: "tenant-1",
+        productId: "product-1",
+        fromLocationId: null,
+        toLocationId: "loc-new-receiving",
+        quantity: 5,
+        reason: "INBOUND_RECEIPT",
+      });
+    });
+
+    it("mueve stock de origen a destino actualizando ambos saldos y registrando Ledger", async () => {
+      await moveStock({
+        ...BASE_PARAMS,
+        fromLocationId: "loc-receiving",
+        toLocationId: "loc-storage",
+        quantity: 5,
+        reason: "PUTAWAY",
+        notes: "Putaway completo",
+        unitOfWork: uow,
+      });
+
+      const fromBal = uow.state.balances.find((b) => b.id === "bal-rec-1");
+      const toBal = uow.state.balances.find((b) => b.id === "bal-stor-1");
+      expect(fromBal?.onHandQty).toBe(5);
+      expect(toBal?.onHandQty).toBe(15);
+
+      expect(uow.state.transactions).toHaveLength(1);
+      expect(uow.state.transactions[0]).toMatchObject({
+        tenantId: "tenant-1",
+        fromLocationId: "loc-receiving",
+        toLocationId: "loc-storage",
+        quantity: 5,
+        reason: "PUTAWAY",
+        notes: "Putaway completo",
+      });
+    });
+
+    it("permite mover exactamente el saldo disponible (onHand - allocated)", async () => {
+      await moveStock({
+        ...BASE_PARAMS,
+        fromLocationId: "loc-storage",
+        toLocationId: "loc-receiving",
+        quantity: 4, // onHand 10 - allocated 6 = 4
+        reason: "ADJUSTMENT",
+        unitOfWork: uow,
+      });
+
+      const stor = uow.state.balances.find((b) => b.id === "bal-stor-1");
+      expect(stor?.onHandQty).toBe(6);
+      expect(stor?.allocatedQty).toBe(6);
     });
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  describe("🔒 Regla de Oro: Saldo nunca negativo", () => {
-    it("lanza INSUFFICIENT_STOCK si la ubicación no tiene balance registrado", async () => {
-      // SELECT FOR UPDATE devuelve array vacío = no hay stock
-      mockTx.$queryRaw.mockResolvedValue([]);
+  describe("Romper a propósito — Validaciones, Invariantes, Rollback y Multi-Tenant", () => {
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.12345])(
+      "rechaza cantidad inválida (%s) con VALIDATION_ERROR (422)",
+      async (badQty) => {
+        await expect(
+          moveStock({
+            ...BASE_PARAMS,
+            quantity: badQty,
+            fromLocationId: "loc-receiving",
+            unitOfWork: uow,
+          }),
+        ).rejects.toMatchObject({
+          code: "VALIDATION_ERROR",
+          statusCode: 422,
+        });
 
+        expect(uow.state.transactions).toHaveLength(0);
+      },
+    );
+
+    it("lanza INSUFFICIENT_STOCK (409) si la ubicación origen no tiene balance", async () => {
       await expect(
         moveStock({
           ...BASE_PARAMS,
-          fromLocationId: "loc-storage",
-          toLocationId: "loc-packing",
-          quantity: 3,
-          reason: "PICK",
+          fromLocationId: "loc-empty",
+          toLocationId: "loc-receiving",
+          quantity: 1,
+          unitOfWork: uow,
         }),
       ).rejects.toThrow(WmsError);
 
       await expect(
         moveStock({
           ...BASE_PARAMS,
-          fromLocationId: "loc-storage",
-          toLocationId: "loc-packing",
-          quantity: 3,
-          reason: "PICK",
+          fromLocationId: "loc-empty",
+          toLocationId: "loc-receiving",
+          quantity: 1,
+          unitOfWork: uow,
         }),
-      ).rejects.toMatchObject({ code: "INSUFFICIENT_STOCK" });
+      ).rejects.toMatchObject({ code: "INSUFFICIENT_STOCK", statusCode: 409 });
+
+      expect(uow.state.transactions).toHaveLength(0);
     });
 
-    it("lanza INSUFFICIENT_STOCK si la cantidad supera el saldo disponible", async () => {
-      // Balance existente: solo 2 unidades
-      mockTx.$queryRaw.mockResolvedValue([
-        { id: "bal-1", on_hand_qty: 2, allocated_qty: 0 },
-      ]);
-
+    it("respeta available: rechaza retirar stock reservado (onHand=10, allocated=6, pide 5)", async () => {
       await expect(
         moveStock({
           ...BASE_PARAMS,
           fromLocationId: "loc-storage",
-          toLocationId: "loc-packing",
-          quantity: 5, // Más de lo que hay
-          reason: "PICK",
+          toLocationId: "loc-receiving",
+          quantity: 5, // available es solo 4
+          reason: "PUTAWAY",
+          unitOfWork: uow,
         }),
       ).rejects.toMatchObject({
         code: "INSUFFICIENT_STOCK",
+        statusCode: 409,
       });
 
-      // Jamás debe haber actualizado el balance si no hay stock suficiente
-      expect(mockTx.inventoryBalance.update).not.toHaveBeenCalled();
-      expect(mockTx.inventoryTransaction.create).not.toHaveBeenCalled();
+      const stor = uow.state.balances.find((b) => b.id === "bal-stor-1");
+      expect(stor?.onHandQty).toBe(10);
+      expect(uow.state.transactions).toHaveLength(0);
     });
 
-    it("permite mover exactamente el saldo disponible (edge case)", async () => {
-      mockTx.$queryRaw.mockResolvedValue([
-        { id: "bal-1", on_hand_qty: 5, allocated_qty: 0 },
-      ]);
-      mockTx.inventoryBalance.update.mockResolvedValue({});
-      mockTx.inventoryBalance.upsert.mockResolvedValue({});
-      mockTx.inventoryTransaction.create.mockResolvedValue({});
+    it("hace rollback completo de saldos si falla el registro en el Ledger", async () => {
+      const failingUow = new InMemoryUnitOfWork({
+        balances: uow.state.balances,
+      });
+      const origExecute = failingUow.execute.bind(failingUow);
+      failingUow.execute = (tid, work, opts) =>
+        origExecute(
+          tid,
+          async (repos) => {
+            repos.inventory.recordTransaction = async () => {
+              throw new Error("DB constraint violation");
+            };
+            return work(repos);
+          },
+          opts,
+        );
 
-      // No debe lanzar — mover exactamente lo disponible es válido
       await expect(
         moveStock({
           ...BASE_PARAMS,
-          fromLocationId: "loc-storage",
-          toLocationId: "loc-packing",
+          fromLocationId: "loc-receiving",
+          toLocationId: "loc-storage",
           quantity: 5,
-          reason: "PICK",
-        }),
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  // ────────────────────────────────────────────────────────────────────────────
-  describe("📒 Ledger inmutable", () => {
-    it("SIEMPRE registra la transacción antes de retornar", async () => {
-      mockTx.$queryRaw.mockResolvedValue([
-        { id: "bal-1", on_hand_qty: 10, allocated_qty: 0 },
-      ]);
-      mockTx.inventoryBalance.update.mockResolvedValue({});
-      mockTx.inventoryBalance.upsert.mockResolvedValue({});
-      mockTx.inventoryTransaction.create.mockResolvedValue({ id: "tx-1" });
-
-      await moveStock({
-        ...BASE_PARAMS,
-        fromLocationId: "loc-a",
-        toLocationId: "loc-b",
-        reason: "PUTAWAY",
-        notes: "Test move",
-      });
-
-      expect(mockTx.inventoryTransaction.create).toHaveBeenCalledTimes(1);
-      expect(mockTx.inventoryTransaction.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            tenantId: "tenant-1",
-            productId: "product-1",
-            fromLocationId: "loc-a",
-            toLocationId: "loc-b",
-            quantity: 5,
-            reason: "PUTAWAY",
-            notes: "Test move",
-          }),
-        }),
-      );
-    });
-
-    it("si el Ledger falla, el balance NO se actualiza (rollback implícito por transacción)", async () => {
-      mockTx.$queryRaw.mockResolvedValue([
-        { id: "bal-1", on_hand_qty: 10, allocated_qty: 0 },
-      ]);
-      mockTx.inventoryBalance.update.mockResolvedValue({});
-      mockTx.inventoryBalance.upsert.mockResolvedValue({});
-      // Simular fallo al escribir en el Ledger
-      mockTx.inventoryTransaction.create.mockRejectedValue(
-        new Error("DB constraint violation"),
-      );
-
-      await expect(
-        moveStock({
-          ...BASE_PARAMS,
-          fromLocationId: "loc-a",
-          toLocationId: "loc-b",
+          unitOfWork: failingUow,
         }),
       ).rejects.toThrow("DB constraint violation");
 
-      // La transacción hizo rollback — los balances quedan intactos
-      // (esto lo garantiza Prisma.$transaction internamente)
+      // Rollback intacto: el saldo en origen y destino no cambió
+      expect(
+        failingUow.state.balances.find((b) => b.id === "bal-rec-1")?.onHandQty,
+      ).toBe(10);
+      expect(
+        failingUow.state.balances.find((b) => b.id === "bal-stor-1")?.onHandQty,
+      ).toBe(10);
+    });
+
+    it("aísla tenants: tenant-1 no puede mover stock perteneciente a tenant-2", async () => {
+      await expect(
+        moveStock({
+          ...BASE_PARAMS,
+          tenantId: "tenant-1",
+          fromLocationId: "loc-receiving",
+          quantity: 20, // tenant-1 solo tiene 10, tenant-2 tiene 50
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "INSUFFICIENT_STOCK", statusCode: 409 });
+
+      expect(
+        uow.state.balances.find((b) => b.id === "bal-other-tenant")?.onHandQty,
+      ).toBe(50);
+    });
+
+    it("rechaza cruce de tenant activo en AsyncLocalStorage (TENANT_MISMATCH 403)", async () => {
+      await expect(
+        runWithAmbientTenantScope({ tenantId: "tenant-2", scope: {} }, () =>
+          moveStock({
+            ...BASE_PARAMS,
+            tenantId: "tenant-1",
+            fromLocationId: "loc-receiving",
+            quantity: 1,
+            unitOfWork: uow,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "TENANT_MISMATCH", statusCode: 403 });
     });
   });
 });

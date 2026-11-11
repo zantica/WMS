@@ -1,599 +1,177 @@
 // apps/api/src/use-cases/tasks/__tests__/confirm-task-step.test.ts
-// Tests unitarios para confirmTaskStep (F2.2).
-// Verifica aislamiento multi-tenant, validación de código escaneado (INVALID_SCAN),
-// pasos ya completados (VALIDATION_ERROR), reporte de excepciones (EXCEPTION),
-// ejecución de PUTAWAY (RECEIVING -> STORAGE) y PICKING (STORAGE -> PACKING,
-// liberación de allocatedQty, incremento de pickedQty y transición de SalesOrder a PACKED).
+// Tests unitarios para confirmTaskStep usando InMemoryUnitOfWork + @wms/domain.
+// Suites: Happy Path (PUTAWAY, PICKING parcial y total, IN_PROGRESS al primer escaneo,
+// paso resuelto = no PENDING, excepciones, idempotencia) y "Romper a propósito"
+// (sobre-escaneo SCAN_EXCEEDS_EXPECTED, re-escaneo en EXCEPTION/SKIPPED,
+// EXCEEDS_ALLOCATED en consume, rollback y aislamiento multi-tenant).
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { WmsError } from "../../../plugins/error-handler.js";
-import { confirmTaskStep } from "../confirm-task-step.js";
-import { handlePickingException } from "../../inventory/handle-picking-exception.js";
-import { moveStock } from "../../inventory/move-stock.js";
 import { InMemoryIdempotencyStore } from "../../../adapters/in-memory-idempotency-store.js";
+import { InMemoryUnitOfWork } from "../../../adapters/in-memory-unit-of-work.js";
+import { confirmTaskStep } from "../confirm-task-step.js";
 
-const mockPrisma = {
-  warehouseTask: {
-    findFirst: vi.fn(),
-    update: vi.fn(),
-  },
-  taskStep: {
-    update: vi.fn(),
-    findMany: vi.fn(),
-  },
-  salesOrder: {
-    findFirst: vi.fn(),
-    update: vi.fn(),
-  },
-  location: {
-    findFirst: vi.fn(),
-  },
-  inventoryBalance: {
-    updateMany: vi.fn(),
-  },
-  orderLine: {
-    updateMany: vi.fn(),
-  },
-};
+describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING (InMemoryUnitOfWork + @wms/domain)", () => {
+  let uow: InMemoryUnitOfWork;
+  let idempotencyStore: InMemoryIdempotencyStore;
 
-vi.mock("@wms/db", () => ({
-  prisma: {
-    warehouseTask: {
-      findFirst: (...args: unknown[]) => mockPrisma.warehouseTask.findFirst(...args),
-      update: (...args: unknown[]) => mockPrisma.warehouseTask.update(...args),
-    },
-    taskStep: {
-      update: (...args: unknown[]) => mockPrisma.taskStep.update(...args),
-      findMany: (...args: unknown[]) => mockPrisma.taskStep.findMany(...args),
-    },
-    salesOrder: {
-      findFirst: (...args: unknown[]) => mockPrisma.salesOrder.findFirst(...args),
-      update: (...args: unknown[]) => mockPrisma.salesOrder.update(...args),
-    },
-    location: {
-      findFirst: (...args: unknown[]) => mockPrisma.location.findFirst(...args),
-    },
-    inventoryBalance: {
-      updateMany: (...args: unknown[]) => mockPrisma.inventoryBalance.updateMany(...args),
-    },
-    orderLine: {
-      updateMany: (...args: unknown[]) => mockPrisma.orderLine.updateMany(...args),
-    },
-  },
-}));
-
-vi.mock("../../inventory/move-stock.js", () => ({
-  moveStock: vi.fn(),
-}));
-
-vi.mock("../../inventory/handle-picking-exception.js", () => ({
-  handlePickingException: vi.fn(),
-}));
-
-const BASE_PUTAWAY_TASK = {
-  id: "task-put-1",
-  tenantId: "tenant-1",
-  orderId: null,
-  receiptRef: "receipt-1001",
-  type: "PUTAWAY" as const,
-  status: "IN_PROGRESS" as const,
-  steps: [
-    {
-      id: "step-put-1",
-      taskId: "task-put-1",
-      sequence: 1,
-      locationId: "loc-storage-a01",
-      productId: "product-1",
-      expectedQty: 5,
-      scannedQty: 0,
-      status: "PENDING" as const,
-      location: {
-        id: "loc-storage-a01",
-        tenantId: "tenant-1",
-        warehouseId: "warehouse-1",
-        code: "A-01-01",
-        type: "STORAGE" as const,
-        isActive: true,
-      },
-      product: {
-        id: "product-1",
-        tenantId: "tenant-1",
-        sku: "SKU-001",
-        name: "Monitor 27\"",
-        barcode: "7509998887776",
-      },
-    },
-  ],
-};
-
-const BASE_PICKING_TASK = {
-  id: "task-pick-1",
-  tenantId: "tenant-1",
-  orderId: "order-1",
-  receiptRef: null,
-  type: "PICKING" as const,
-  status: "IN_PROGRESS" as const,
-  steps: [
-    {
-      id: "step-pick-1",
-      taskId: "task-pick-1",
-      sequence: 1,
-      locationId: "loc-storage-a01",
-      productId: "product-1",
-      expectedQty: 3,
-      scannedQty: 0,
-      status: "PENDING" as const,
-      location: {
-        id: "loc-storage-a01",
-        tenantId: "tenant-1",
-        warehouseId: "warehouse-1",
-        code: "A-01-01",
-        type: "STORAGE" as const,
-        isActive: true,
-      },
-      product: {
-        id: "product-1",
-        tenantId: "tenant-1",
-        sku: "SKU-001",
-        name: "Monitor 27\"",
-        barcode: "7509998887776",
-      },
-    },
-  ],
-};
-
-describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(moveStock).mockResolvedValue(undefined);
-    mockPrisma.taskStep.update.mockResolvedValue({});
-    mockPrisma.warehouseTask.update.mockResolvedValue({});
-    mockPrisma.salesOrder.update.mockResolvedValue({});
-    mockPrisma.inventoryBalance.updateMany.mockResolvedValue({ count: 1 });
-    mockPrisma.orderLine.updateMany.mockResolvedValue({ count: 1 });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  describe("Validaciones de existencia, pertenencia multi-tenant y estados previos", () => {
-    it("lanza TASK_NOT_FOUND (404) si la tarea no existe o pertenece a otro tenant", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(null);
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-inexistente",
-          stepId: "step-1",
+    idempotencyStore = new InMemoryIdempotencyStore();
+    uow = new InMemoryUnitOfWork({
+      products: [
+        {
+          id: "product-1",
           tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toThrow(WmsError);
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-inexistente",
-          stepId: "step-1",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toMatchObject({
-        code: "TASK_NOT_FOUND",
-        statusCode: 404,
-      });
-
-      expect(mockPrisma.warehouseTask.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: "task-inexistente", tenantId: "tenant-1" },
-        }),
-      );
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("lanza TASK_NOT_FOUND (404) si el stepId no existe dentro de la tarea", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PUTAWAY_TASK,
-        steps: [],
-      });
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-put-1",
-          stepId: "step-inexistente",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toMatchObject({
-        code: "TASK_NOT_FOUND",
-        statusCode: 404,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("lanza VALIDATION_ERROR (409) si la tarea ya está COMPLETED o CANCELLED", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PUTAWAY_TASK,
-        status: "COMPLETED",
-      });
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-put-1",
-          stepId: "step-put-1",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toMatchObject({
-        code: "VALIDATION_ERROR",
-        statusCode: 409,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("lanza VALIDATION_ERROR (409) si el paso ya fue COMPLETED previamente", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PUTAWAY_TASK,
-        steps: [
-          {
-            ...BASE_PUTAWAY_TASK.steps[0]!,
-            scannedQty: 5,
-            status: "COMPLETED",
-          },
-        ],
-      });
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-put-1",
-          stepId: "step-put-1",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toMatchObject({
-        code: "VALIDATION_ERROR",
-        statusCode: 409,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("lanza VALIDATION_ERROR (422) si quantity es menor o igual a 0", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PUTAWAY_TASK);
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-put-1",
-          stepId: "step-put-1",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-          quantity: 0,
-        }),
-      ).rejects.toMatchObject({
-        code: "VALIDATION_ERROR",
-        statusCode: 422,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("lanza INVALID_SCAN (422) cuando scannedCode no coincide con barcode, SKU ni código de ubicación", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PUTAWAY_TASK);
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-put-1",
-          stepId: "step-put-1",
-          tenantId: "tenant-1",
-          scannedCode: "CODIGO-ERRONEO-999",
-          quantity: 1,
-        }),
-      ).rejects.toMatchObject({
-        code: "INVALID_SCAN",
-        statusCode: 422,
-        details: {
-          expected: "7509998887776",
-          expectedLocation: "A-01-01",
-          scanned: "CODIGO-ERRONEO-999",
+          sku: "SKU-001",
+          name: "Monitor 27\"",
+          barcode: "7509998887776",
         },
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
+        {
+          id: "product-1",
+          tenantId: "tenant-2",
+          sku: "SKU-001",
+          name: "Monitor 27\"",
+          barcode: "7509998887776",
+        },
+      ],
+      locations: [
+        { id: "loc-rec-1", tenantId: "tenant-1", warehouseId: "warehouse-1", code: "REC-01", type: "RECEIVING", isActive: true },
+        { id: "loc-storage-a01", tenantId: "tenant-1", warehouseId: "warehouse-1", code: "A-01-01", type: "STORAGE", isActive: true },
+        { id: "loc-storage-b02", tenantId: "tenant-1", warehouseId: "warehouse-1", code: "B-02-01", type: "STORAGE", isActive: true },
+        { id: "loc-packing-1", tenantId: "tenant-1", warehouseId: "warehouse-1", code: "PACK-01", type: "PACKING", isActive: true },
+        { id: "loc-t2", tenantId: "tenant-2", warehouseId: "wh-t2", code: "A-01-01", type: "STORAGE", isActive: true },
+      ],
+      balances: [
+        { id: "bal-rec-1", tenantId: "tenant-1", locationId: "loc-rec-1", productId: "product-1", onHandQty: 10, allocatedQty: 0 },
+        { id: "bal-stor-a01", tenantId: "tenant-1", locationId: "loc-storage-a01", productId: "product-1", onHandQty: 5, allocatedQty: 3 },
+        { id: "bal-stor-b02", tenantId: "tenant-1", locationId: "loc-storage-b02", productId: "product-1", onHandQty: 10, allocatedQty: 0 },
+      ],
+      orders: [
+        {
+          id: "order-1",
+          tenantId: "tenant-1",
+          warehouseId: "warehouse-1",
+          status: "ALLOCATED",
+          externalRef: "#1001",
+          lines: [{ id: "line-1", productId: "product-1", requestedQty: 3, pickedQty: 0 }],
+        },
+      ],
+      tasks: [
+        {
+          id: "task-put-1",
+          tenantId: "tenant-1",
+          orderId: null,
+          receiptRef: "receipt-1001",
+          type: "PUTAWAY",
+          status: "PENDING",
+          assignedTo: null,
+          steps: [
+            {
+              id: "step-put-1",
+              taskId: "task-put-1",
+              sequence: 1,
+              locationId: "loc-storage-a01",
+              productId: "product-1",
+              expectedQty: 5,
+              scannedQty: 0,
+              status: "PENDING",
+            },
+          ],
+        },
+        {
+          id: "task-pick-1",
+          tenantId: "tenant-1",
+          orderId: "order-1",
+          receiptRef: null,
+          type: "PICKING",
+          status: "PENDING",
+          assignedTo: null,
+          steps: [
+            {
+              id: "step-pick-1",
+              taskId: "task-pick-1",
+              sequence: 1,
+              locationId: "loc-storage-a01",
+              productId: "product-1",
+              expectedQty: 3,
+              scannedQty: 0,
+              status: "PENDING",
+            },
+          ],
+        },
+        {
+          id: "task-t2",
+          tenantId: "tenant-2",
+          orderId: null,
+          receiptRef: "rec-t2",
+          type: "PUTAWAY",
+          status: "PENDING",
+          assignedTo: null,
+          steps: [
+            {
+              id: "step-t2",
+              taskId: "task-t2",
+              sequence: 1,
+              locationId: "loc-t2",
+              productId: "product-1",
+              expectedQty: 5,
+              scannedQty: 0,
+              status: "PENDING",
+            },
+          ],
+        },
+      ],
     });
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  describe("Reporte de excepciones de operario (reportException / exceptionNote)", () => {
-    it("en tareas PICKING delega en handlePickingException y devuelve la información de re-asignación", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
-      vi.mocked(handlePickingException).mockResolvedValue({
-        stepId: "step-pick-1",
-        taskId: "task-pick-1",
-        orderId: "order-1",
-        stepStatus: "EXCEPTION",
-        taskStatus: "IN_PROGRESS",
-        orderStatus: "PICKING",
-        reallocated: true,
-        releasedOriginalQty: 3,
-        replacementSteps: [
-          {
-            id: "step-pick-2",
-            sequence: 2,
-            locationId: "loc-storage-b02",
-            locationCode: "B-02-01",
-            expectedQty: 3,
-          },
-        ],
-        note: "Producto dañado en estantería",
-      });
-
-      const result = await confirmTaskStep({
-        taskId: "task-pick-1",
-        stepId: "step-pick-1",
-        tenantId: "tenant-1",
-        scannedCode: "A-01-01",
-        reportException: true,
-        exceptionNote: "Producto dañado en estantería",
-        userId: "user-op-1",
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-      expect(handlePickingException).toHaveBeenCalledWith({
-        taskId: "task-pick-1",
-        stepId: "step-pick-1",
-        tenantId: "tenant-1",
-        exceptionNote: "Producto dañado en estantería",
-        userId: "user-op-1",
-      });
-
-      expect(result).toEqual({
-        stepId: "step-pick-1",
-        scannedQty: 0,
-        expectedQty: 3,
-        remainingQty: 3,
-        stepStatus: "EXCEPTION",
-        taskStatus: "IN_PROGRESS",
-        taskComplete: false,
-        note: "Producto dañado en estantería",
-        reallocated: true,
-        orderStatus: "PICKING",
-        replacementSteps: [
-          {
-            id: "step-pick-2",
-            sequence: 2,
-            locationId: "loc-storage-b02",
-            locationCode: "B-02-01",
-            expectedQty: 3,
-          },
-        ],
-      });
-    });
-
-    it("en tareas PUTAWAY usa nota por defecto y marca paso y tarea como EXCEPTION sin mover stock", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PUTAWAY_TASK);
-
+  describe("Happy Path — PUTAWAY, PICKING, Transiciones e Idempotencia", () => {
+    it("PUTAWAY parcial: pasa tarea PENDING → IN_PROGRESS al primer escaneo y mueve stock RECEIVING → STORAGE", async () => {
       const result = await confirmTaskStep({
         taskId: "task-put-1",
         stepId: "step-put-1",
-        tenantId: "tenant-1",
-        scannedCode: "A-01-01",
-        reportException: true,
-      });
-
-      expect(result.stepStatus).toBe("EXCEPTION");
-      expect(result.taskStatus).toBe("EXCEPTION");
-      expect(result.note).toBe("Operator reported exception");
-      expect(handlePickingException).not.toHaveBeenCalled();
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  describe("Flujo PUTAWAY (RECEIVING -> STORAGE)", () => {
-    it("lanza LOCATION_NOT_FOUND (409) si el almacén no tiene ubicación RECEIVING activa", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PUTAWAY_TASK);
-      mockPrisma.location.findFirst.mockResolvedValue(null);
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-put-1",
-          stepId: "step-put-1",
-          tenantId: "tenant-1",
-          scannedCode: "7509998887776",
-          quantity: 5,
-        }),
-      ).rejects.toMatchObject({
-        code: "LOCATION_NOT_FOUND",
-        statusCode: 409,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("mueve stock de RECEIVING a STORAGE (PUTAWAY) y completa paso y tarea al alcanzar expectedQty", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PUTAWAY_TASK);
-      mockPrisma.location.findFirst.mockResolvedValue({
-        id: "loc-receiving-1",
-        tenantId: "tenant-1",
-        warehouseId: "warehouse-1",
-        code: "REC-01",
-        type: "RECEIVING",
-        isActive: true,
-      });
-      mockPrisma.taskStep.findMany.mockResolvedValue([
-        { id: "step-put-1", status: "COMPLETED" },
-      ]);
-
-      const result = await confirmTaskStep({
-        taskId: "task-put-1",
-        stepId: "step-put-1",
-        tenantId: "tenant-1",
-        scannedCode: "A-01-01", // Escaneo por código QR de ubicación destino
-        quantity: 5,
-        userId: "user-op-1",
-      });
-
-      expect(moveStock).toHaveBeenCalledTimes(1);
-      expect(moveStock).toHaveBeenCalledWith({
-        tenantId: "tenant-1",
-        productId: "product-1",
-        fromLocationId: "loc-receiving-1",
-        toLocationId: "loc-storage-a01",
-        quantity: 5,
-        reason: "PUTAWAY",
-        referenceId: "task-put-1",
-        userId: "user-op-1",
-      });
-
-      expect(mockPrisma.taskStep.update).toHaveBeenCalledWith({
-        where: { id: "step-put-1" },
-        data: {
-          scannedQty: 5,
-          status: "COMPLETED",
-          completedAt: expect.any(Date),
-        },
-      });
-
-      expect(mockPrisma.warehouseTask.update).toHaveBeenCalledWith({
-        where: { id: "task-put-1" },
-        data: { status: "COMPLETED", completedAt: expect.any(Date) },
-      });
-
-      expect(result).toEqual({
-        stepId: "step-put-1",
-        scannedQty: 5,
-        expectedQty: 5,
-        remainingQty: 0,
-        stepStatus: "COMPLETED",
-        taskStatus: "COMPLETED",
-        taskComplete: true,
-      });
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  describe("Flujo PICKING (STORAGE -> PACKING + liberación de allocatedQty + OrderLine.pickedQty)", () => {
-    it("lanza ORDER_NOT_FOUND (404) si la tarea PICKING no tiene orderId asociado", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PICKING_TASK,
-        orderId: null,
-      });
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-pick-1",
-          stepId: "step-pick-1",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toMatchObject({
-        code: "ORDER_NOT_FOUND",
-        statusCode: 404,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("lanza ORDER_NOT_FOUND (404) si el pedido asociado no existe en el tenant", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
-      mockPrisma.salesOrder.findFirst.mockResolvedValue(null);
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-pick-1",
-          stepId: "step-pick-1",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toMatchObject({
-        code: "ORDER_NOT_FOUND",
-        statusCode: 404,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("lanza LOCATION_NOT_FOUND (409) si el almacén del pedido no tiene ubicación PACKING activa", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
-      mockPrisma.salesOrder.findFirst.mockResolvedValue({
-        id: "order-1",
-        warehouseId: "warehouse-1",
-      });
-      mockPrisma.location.findFirst.mockResolvedValue(null);
-
-      await expect(
-        confirmTaskStep({
-          taskId: "task-pick-1",
-          stepId: "step-pick-1",
-          tenantId: "tenant-1",
-          scannedCode: "SKU-001",
-        }),
-      ).rejects.toMatchObject({
-        code: "LOCATION_NOT_FOUND",
-        statusCode: 409,
-      });
-
-      expect(moveStock).not.toHaveBeenCalled();
-    });
-
-    it("ejecuta picking parcial: mueve stock a PACKING, decrementa allocatedQty e incrementa pickedQty sin cerrar tarea ni pedido", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
-      mockPrisma.salesOrder.findFirst.mockResolvedValue({
-        id: "order-1",
-        warehouseId: "warehouse-1",
-      });
-      mockPrisma.location.findFirst.mockResolvedValue({
-        id: "loc-packing-1",
-        tenantId: "tenant-1",
-        warehouseId: "warehouse-1",
-        code: "PACK-01",
-        type: "PACKING",
-        isActive: true,
-      });
-      mockPrisma.taskStep.findMany.mockResolvedValue([
-        { id: "step-pick-1", status: "PENDING" },
-      ]);
-
-      const result = await confirmTaskStep({
-        taskId: "task-pick-1",
-        stepId: "step-pick-1",
         tenantId: "tenant-1",
         scannedCode: "7509998887776",
-        quantity: 1, // Parcial: 1 de 3
+        quantity: 2,
+        userId: "user-op-1",
+        unitOfWork: uow,
       });
 
-      expect(moveStock).toHaveBeenCalledWith({
+      expect(result).toEqual({
+        stepId: "step-put-1",
+        scannedQty: 2,
+        expectedQty: 5,
+        remainingQty: 3,
+        stepStatus: "PENDING",
+        taskStatus: "IN_PROGRESS",
+        taskComplete: false,
+      });
+
+      // Persistido en el repo (antes no se persistía IN_PROGRESS)
+      const task = uow.state.tasks.find((t) => t.id === "task-put-1")!;
+      expect(task.status).toBe("IN_PROGRESS");
+      expect(task.steps[0]?.scannedQty).toBe(2);
+
+      // Stock movido
+      expect(uow.state.balances.find((b) => b.id === "bal-rec-1")?.onHandQty).toBe(8);
+      expect(uow.state.balances.find((b) => b.id === "bal-stor-a01")?.onHandQty).toBe(7);
+      expect(uow.state.transactions[0]).toMatchObject({
+        reason: "PUTAWAY",
+        fromLocationId: "loc-rec-1",
+        toLocationId: "loc-storage-a01",
+        quantity: 2,
+      });
+    });
+
+    it("PICKING parcial: pasa tarea a IN_PROGRESS, usa consume() en origen, recibe en PACKING e incrementa pickedQty", async () => {
+      const result = await confirmTaskStep({
+        taskId: "task-pick-1",
+        stepId: "step-pick-1",
         tenantId: "tenant-1",
-        productId: "product-1",
-        fromLocationId: "loc-storage-a01",
-        toLocationId: "loc-packing-1",
+        scannedCode: "A-01-01",
         quantity: 1,
-        reason: "PICK",
-        referenceId: "order-1",
+        unitOfWork: uow,
       });
-
-      expect(mockPrisma.inventoryBalance.updateMany).toHaveBeenCalledWith({
-        where: {
-          tenantId: "tenant-1",
-          locationId: "loc-storage-a01",
-          productId: "product-1",
-        },
-        data: {
-          allocatedQty: { decrement: 1 },
-        },
-      });
-
-      expect(mockPrisma.orderLine.updateMany).toHaveBeenCalledWith({
-        where: {
-          orderId: "order-1",
-          productId: "product-1",
-          order: { tenantId: "tenant-1" },
-        },
-        data: {
-          pickedQty: { increment: 1 },
-        },
-      });
-
-      expect(mockPrisma.warehouseTask.update).not.toHaveBeenCalled();
-      expect(mockPrisma.salesOrder.update).not.toHaveBeenCalled();
 
       expect(result).toEqual({
         stepId: "step-pick-1",
@@ -604,27 +182,22 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
         taskStatus: "IN_PROGRESS",
         taskComplete: false,
       });
+
+      const srcBal = uow.state.balances.find((b) => b.id === "bal-stor-a01")!;
+      expect(srcBal.onHandQty).toBe(4);
+      expect(srcBal.allocatedQty).toBe(2);
+
+      const packBal = uow.state.balances.find((b) => b.locationId === "loc-packing-1")!;
+      expect(packBal.onHandQty).toBe(1);
+      expect(packBal.allocatedQty).toBe(0);
+
+      const order = uow.state.orders[0]!;
+      expect(order.lines[0]?.pickedQty).toBe(1);
+      // Pedido se mantiene ALLOCATED (no se escribe PICKING)
+      expect(order.status).toBe("ALLOCATED");
     });
 
-    it("completa todos los pasos de PICKING, marca la tarea COMPLETED y avanza SalesOrder a PACKED", async () => {
-      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
-      mockPrisma.salesOrder.findFirst.mockResolvedValue({
-        id: "order-1",
-        warehouseId: "warehouse-1",
-      });
-      mockPrisma.location.findFirst.mockResolvedValue({
-        id: "loc-packing-1",
-        tenantId: "tenant-1",
-        warehouseId: "warehouse-1",
-        code: "PACK-01",
-        type: "PACKING",
-        isActive: true,
-      });
-      mockPrisma.taskStep.findMany.mockResolvedValue([
-        { id: "step-pick-1", status: "COMPLETED" },
-        { id: "step-pick-2", status: "COMPLETED" },
-      ]);
-
+    it("PICKING total: completa la tarea y transiciona SalesOrder directamente de ALLOCATED → PACKED", async () => {
       const result = await confirmTaskStep({
         taskId: "task-pick-1",
         stepId: "step-pick-1",
@@ -632,49 +205,7 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
         scannedCode: "SKU-001",
         quantity: 3,
         userId: "user-op-2",
-      });
-
-      expect(moveStock).toHaveBeenCalledWith({
-        tenantId: "tenant-1",
-        productId: "product-1",
-        fromLocationId: "loc-storage-a01",
-        toLocationId: "loc-packing-1",
-        quantity: 3,
-        reason: "PICK",
-        referenceId: "order-1",
-        userId: "user-op-2",
-      });
-
-      expect(mockPrisma.inventoryBalance.updateMany).toHaveBeenCalledWith({
-        where: {
-          tenantId: "tenant-1",
-          locationId: "loc-storage-a01",
-          productId: "product-1",
-        },
-        data: {
-          allocatedQty: { decrement: 3 },
-        },
-      });
-
-      expect(mockPrisma.orderLine.updateMany).toHaveBeenCalledWith({
-        where: {
-          orderId: "order-1",
-          productId: "product-1",
-          order: { tenantId: "tenant-1" },
-        },
-        data: {
-          pickedQty: { increment: 3 },
-        },
-      });
-
-      expect(mockPrisma.warehouseTask.update).toHaveBeenCalledWith({
-        where: { id: "task-pick-1" },
-        data: { status: "COMPLETED", completedAt: expect.any(Date) },
-      });
-
-      expect(mockPrisma.salesOrder.update).toHaveBeenCalledWith({
-        where: { id: "order-1" },
-        data: { status: "PACKED" },
+        unitOfWork: uow,
       });
 
       expect(result).toEqual({
@@ -686,78 +217,287 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING", () => {
         taskStatus: "COMPLETED",
         taskComplete: true,
       });
+
+      expect(uow.state.tasks.find((t) => t.id === "task-pick-1")?.status).toBe("COMPLETED");
+      expect(uow.state.orders[0]?.status).toBe("PACKED");
+      expect(uow.state.balances.find((b) => b.id === "bal-stor-a01")?.allocatedQty).toBe(0);
+      expect(uow.state.balances.find((b) => b.id === "bal-stor-a01")?.onHandQty).toBe(2);
     });
-  });
 
-  // ── Hito 6 (F6.1): Idempotencia Transaccional ──────────────────────────────
-  describe("Idempotencia con IdempotencyStore (F6.1)", () => {
-    it("devuelve ALREADY_APPLIED sin re-ejecutar moveStock en llamadas duplicadas", async () => {
-      const store = new InMemoryIdempotencyStore();
-
-      mockPrisma.warehouseTask.findFirst.mockResolvedValueOnce({
-        id: "task-put-idemp",
-        tenantId: "tenant-1",
-        type: "PUTAWAY",
-        status: "IN_PROGRESS",
-        steps: [
-          {
-            id: "step-put-1",
-            taskId: "task-put-idemp",
-            locationId: "loc-storage-1",
-            productId: "prod-1",
-            expectedQty: 5,
-            scannedQty: 0,
-            status: "PENDING",
-            location: { code: "STORAGE-A1", warehouseId: "wh-1" },
-            product: { sku: "SKU-PUT", barcode: "BAR-PUT" },
-          },
-        ],
+    it("paso resuelto = no PENDING: completa la tarea si el otro paso está en SKIPPED o EXCEPTION", async () => {
+      uow.state.tasks[0]!.steps.push({
+        id: "step-put-skipped",
+        taskId: "task-put-1",
+        sequence: 2,
+        locationId: "loc-storage-b02",
+        productId: "product-1",
+        expectedQty: 2,
+        scannedQty: 0,
+        status: "SKIPPED",
       });
 
-      mockPrisma.location.findFirst.mockResolvedValueOnce({
-        id: "loc-rec-1",
-        code: "REC-01",
-        type: "RECEIVING",
-      });
-
-      mockPrisma.taskStep.update.mockResolvedValueOnce({});
-      mockPrisma.taskStep.findMany.mockResolvedValueOnce([
-        { id: "step-put-1", status: "COMPLETED" },
-      ]);
-      mockPrisma.warehouseTask.update.mockResolvedValueOnce({});
-
-      // Primera llamada: debe aplicar y guardar
-      const firstResult = await confirmTaskStep({
-        taskId: "task-put-idemp",
+      const result = await confirmTaskStep({
+        taskId: "task-put-1",
         stepId: "step-put-1",
         tenantId: "tenant-1",
-        scannedCode: "BAR-PUT",
+        scannedCode: "SKU-001",
+        quantity: 5,
+        unitOfWork: uow,
+      });
+
+      expect(result.taskStatus).toBe("COMPLETED");
+      expect(result.taskComplete).toBe(true);
+    });
+
+    it("en tareas PICKING reportException delega en handlePickingException y re-aloca stock", async () => {
+      const result = await confirmTaskStep({
+        taskId: "task-pick-1",
+        stepId: "step-pick-1",
+        tenantId: "tenant-1",
+        scannedCode: "A-01-01",
+        reportException: true,
+        exceptionNote: "Producto dañado en estantería",
+        userId: "user-op-1",
+        unitOfWork: uow,
+      });
+
+      expect(result).toMatchObject({
+        stepId: "step-pick-1",
+        stepStatus: "EXCEPTION",
+        taskStatus: "IN_PROGRESS",
+        taskComplete: false,
+        note: "Producto dañado en estantería",
+        reallocated: true,
+      });
+      expect(result.replacementSteps).toHaveLength(1);
+      expect(result.replacementSteps?.[0]?.locationCode).toBe("B-02-01");
+      expect(uow.state.balances.find((b) => b.id === "bal-stor-b02")?.allocatedQty).toBe(3);
+    });
+
+    it("en tareas PUTAWAY reportException marca paso y tarea como EXCEPTION sin mover stock", async () => {
+      const result = await confirmTaskStep({
+        taskId: "task-put-1",
+        stepId: "step-put-1",
+        tenantId: "tenant-1",
+        scannedCode: "A-01-01",
+        reportException: true,
+        unitOfWork: uow,
+      });
+
+      expect(result.stepStatus).toBe("EXCEPTION");
+      expect(result.taskStatus).toBe("EXCEPTION");
+      expect(result.note).toBe("Operator reported exception");
+      expect(uow.state.transactions).toHaveLength(0);
+    });
+
+    it("idempotencia: devuelve ALREADY_APPLIED en reintentos sin duplicar movimientos ni Ledger", async () => {
+      const firstResult = await confirmTaskStep({
+        taskId: "task-put-1",
+        stepId: "step-put-1",
+        tenantId: "tenant-1",
+        scannedCode: "7509998887776",
         quantity: 5,
         idempotencyKey: "idemp-key-step-001",
-        idempotencyStore: store,
+        idempotencyStore,
+        unitOfWork: uow,
       });
 
       expect(firstResult.idempotencyStatus).toBe("APPLIED");
       expect(firstResult.stepStatus).toBe("COMPLETED");
-      expect(moveStock).toHaveBeenCalledTimes(1);
+      expect(uow.state.transactions).toHaveLength(1);
 
-      // Segunda llamada con la misma clave: debe devolver ALREADY_APPLIED inmediatamente
       const secondResult = await confirmTaskStep({
-        taskId: "task-put-idemp",
+        taskId: "task-put-1",
         stepId: "step-put-1",
         tenantId: "tenant-1",
-        scannedCode: "BAR-PUT",
+        scannedCode: "7509998887776",
         quantity: 5,
         idempotencyKey: "idemp-key-step-001",
-        idempotencyStore: store,
+        idempotencyStore,
+        unitOfWork: uow,
       });
 
       expect(secondResult.idempotencyStatus).toBe("ALREADY_APPLIED");
       expect(secondResult.stepStatus).toBe("COMPLETED");
       expect(secondResult.scannedQty).toBe(5);
+      expect(uow.state.transactions).toHaveLength(1);
+    });
+  });
 
-      // moveStock NO fue llamado una segunda vez
-      expect(moveStock).toHaveBeenCalledTimes(1);
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe("Romper a propósito — Validaciones, Invariantes, Rollback y Multi-Tenant", () => {
+    it("lanza TASK_NOT_FOUND (404) si la tarea no existe o pertenece a otro tenant", async () => {
+      await expect(
+        confirmTaskStep({
+          taskId: "task-inexistente",
+          stepId: "step-1",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          unitOfWork: uow,
+        }),
+      ).rejects.toThrow(WmsError);
+
+      await expect(
+        confirmTaskStep({
+          taskId: "task-t2",
+          stepId: "step-t2",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "TASK_NOT_FOUND", statusCode: 404 });
+    });
+
+    it("lanza TASK_NOT_FOUND (404) si el stepId no existe dentro de la tarea", async () => {
+      await expect(
+        confirmTaskStep({
+          taskId: "task-put-1",
+          stepId: "step-inexistente",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "TASK_NOT_FOUND", statusCode: 404 });
+    });
+
+    it.each(["COMPLETED", "CANCELLED"] as const)(
+      "lanza VALIDATION_ERROR (409) si la tarea ya está en estado terminal %s",
+      async (status) => {
+        uow.state.tasks[0]!.status = status;
+
+        await expect(
+          confirmTaskStep({
+            taskId: "task-put-1",
+            stepId: "step-put-1",
+            tenantId: "tenant-1",
+            scannedCode: "SKU-001",
+            unitOfWork: uow,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 409 });
+      },
+    );
+
+    it.each(["COMPLETED", "EXCEPTION", "SKIPPED"] as const)(
+      "rechaza re-escaneo sobre paso ya resuelto (%s) con VALIDATION_ERROR (409)",
+      async (stepStatus) => {
+        uow.state.tasks[0]!.steps[0]!.status = stepStatus;
+
+        await expect(
+          confirmTaskStep({
+            taskId: "task-put-1",
+            stepId: "step-put-1",
+            tenantId: "tenant-1",
+            scannedCode: "SKU-001",
+            unitOfWork: uow,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 409 });
+
+        expect(uow.state.transactions).toHaveLength(0);
+      },
+    );
+
+    it("rechaza sobre-escaneo (SCAN_EXCEEDS_EXPECTED → VALIDATION_ERROR 422) sin mutar stock ni tarea", async () => {
+      await expect(
+        confirmTaskStep({
+          taskId: "task-put-1",
+          stepId: "step-put-1",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          quantity: 6, // expected es 5
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 422 });
+
+      expect(uow.state.tasks[0]?.status).toBe("PENDING");
+      expect(uow.state.tasks[0]?.steps[0]?.scannedQty).toBe(0);
+      expect(uow.state.transactions).toHaveLength(0);
+    });
+
+    it("en PICKING rechaza si allocatedQty es menor al escaneo (EXCEEDS_ALLOCATED → VALIDATION_ERROR 409) y hace rollback", async () => {
+      uow.state.balances.find((b) => b.id === "bal-stor-a01")!.allocatedQty = 1; // step espera 3
+
+      await expect(
+        confirmTaskStep({
+          taskId: "task-pick-1",
+          stepId: "step-pick-1",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          quantity: 2,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 409 });
+
+      // Rollback completo: la tarea sigue PENDING y el saldo intacto
+      expect(uow.state.tasks[1]?.status).toBe("PENDING");
+      expect(uow.state.tasks[1]?.steps[0]?.scannedQty).toBe(0);
+      expect(uow.state.balances.find((b) => b.id === "bal-stor-a01")?.onHandQty).toBe(5);
+      expect(uow.state.transactions).toHaveLength(0);
+    });
+
+    it("lanza VALIDATION_ERROR (422) si quantity <= 0", async () => {
+      await expect(
+        confirmTaskStep({
+          taskId: "task-put-1",
+          stepId: "step-put-1",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          quantity: 0,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 422 });
+    });
+
+    it("lanza INVALID_SCAN (422) si scannedCode no coincide con barcode, SKU ni ubicación", async () => {
+      await expect(
+        confirmTaskStep({
+          taskId: "task-put-1",
+          stepId: "step-put-1",
+          tenantId: "tenant-1",
+          scannedCode: "CODIGO-ERRONEO-999",
+          quantity: 1,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({
+        code: "INVALID_SCAN",
+        statusCode: 422,
+        details: {
+          expected: "7509998887776",
+          expectedLocation: "A-01-01",
+          scanned: "CODIGO-ERRONEO-999",
+        },
+      });
+    });
+
+    it("lanza LOCATION_NOT_FOUND (409) si falta RECEIVING en PUTAWAY o PACKING en PICKING y revierte tarea", async () => {
+      uow.state.locations = uow.state.locations.filter(
+        (l) => l.type !== "RECEIVING" && l.type !== "PACKING",
+      );
+
+      await expect(
+        confirmTaskStep({
+          taskId: "task-put-1",
+          stepId: "step-put-1",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          quantity: 5,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "LOCATION_NOT_FOUND", statusCode: 409 });
+
+      expect(uow.state.tasks[0]?.status).toBe("PENDING");
+
+      await expect(
+        confirmTaskStep({
+          taskId: "task-pick-1",
+          stepId: "step-pick-1",
+          tenantId: "tenant-1",
+          scannedCode: "SKU-001",
+          quantity: 3,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "LOCATION_NOT_FOUND", statusCode: 409 });
+
+      expect(uow.state.tasks[1]?.status).toBe("PENDING");
     });
   });
 });

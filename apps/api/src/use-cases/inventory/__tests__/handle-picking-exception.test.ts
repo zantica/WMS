@@ -1,527 +1,183 @@
 // apps/api/src/use-cases/inventory/__tests__/handle-picking-exception.test.ts
-// Suite de tests unitarios para handlePickingException (F3.2):
-// Verifica liberación atómica de reserva en ubicación fallida (ALLOCATION_CANCEL),
-// re-asignación en ubicaciones STORAGE alternativas (ALLOCATION + nuevos TaskStep),
-// transición a ON_HOLD con liberación total de pasos pendientes cuando no hay ATP suficiente,
-// protección de no-negatividad en allocatedQty y aislamiento multi-tenant.
+// Suite de tests unitarios para handlePickingException usando InMemoryUnitOfWork + @wms/domain.
+// Suites: Happy Path (re-alocación exitosa en 1 o varias ubicaciones, ON_HOLD sin stock)
+// y "Romper a propósito" (clamping releaseUpTo, estados terminales, paso ya resuelto, multi-tenant).
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { InMemoryUnitOfWork } from "../../../adapters/in-memory-unit-of-work.js";
 import { handlePickingException } from "../handle-picking-exception.js";
 
-// ── Mock de Prisma ────────────────────────────────────────────────────────────
-const mockTx = {
-  warehouseTask: {
-    findFirst: vi.fn(),
-    update: vi.fn(),
-  },
-  taskStep: {
-    update: vi.fn(),
-    create: vi.fn(),
-  },
-  inventoryBalance: {
-    update: vi.fn(),
-  },
-  inventoryTransaction: {
-    create: vi.fn(),
-  },
-  salesOrder: {
-    update: vi.fn(),
-  },
-  $queryRaw: vi.fn(),
-};
+describe("handlePickingException — Excepciones de Picking (InMemoryUnitOfWork + @wms/domain)", () => {
+  let uow: InMemoryUnitOfWork;
 
-vi.mock("@wms/db", () => ({
-  prisma: {
-    $transaction: vi.fn((callback: (tx: typeof mockTx) => Promise<unknown>) =>
-      callback(mockTx),
-    ),
-  },
-  Prisma: {
-    TransactionIsolationLevel: { Serializable: "Serializable" },
-  },
-}));
-
-const BASE_PICKING_TASK = {
-  id: "task-pick-1",
-  tenantId: "tenant-1",
-  orderId: "order-1",
-  type: "PICKING" as const,
-  status: "IN_PROGRESS" as const,
-  order: {
-    id: "order-1",
-    tenantId: "tenant-1",
-    warehouseId: "warehouse-1",
-    externalRef: "#ORD-500",
-    status: "PICKING" as const,
-  },
-  steps: [
-    {
-      id: "step-1",
-      taskId: "task-pick-1",
-      sequence: 1,
-      locationId: "loc-A01",
-      productId: "prod-1",
-      expectedQty: 4,
-      scannedQty: 0,
-      status: "PENDING" as const,
-      location: {
-        id: "loc-A01",
-        tenantId: "tenant-1",
-        warehouseId: "warehouse-1",
-        code: "A-01-01",
-        type: "STORAGE" as const,
-        isActive: true,
-      },
-      product: {
-        id: "prod-1",
-        tenantId: "tenant-1",
-        sku: "SKU-001",
-        name: "Teclado Mecánico",
-      },
-    },
-  ],
-};
-
-describe("handlePickingException — Gestión de Excepciones de Picking y Re-asignación de Stock", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockTx.warehouseTask.update.mockResolvedValue({});
-    mockTx.taskStep.update.mockResolvedValue({});
-    mockTx.inventoryBalance.update.mockResolvedValue({});
-    mockTx.inventoryTransaction.create.mockResolvedValue({});
-    mockTx.salesOrder.update.mockResolvedValue({});
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  describe("Validaciones de existencia, multi-tenancy y estados previos", () => {
-    it("lanza TASK_NOT_FOUND (404) si la tarea no existe o pertenece a otro tenant", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue(null);
-
-      await expect(
-        handlePickingException({
-          taskId: "task-missing",
-          stepId: "step-1",
+    uow = new InMemoryUnitOfWork({
+      products: [
+        { id: "prod-1", tenantId: "tenant-1", sku: "SKU-001", name: "Teclado" },
+        { id: "prod-2", tenantId: "tenant-1", sku: "SKU-002", name: "Mouse" },
+      ],
+      locations: [
+        { id: "loc-A01", tenantId: "tenant-1", warehouseId: "wh-1", code: "A-01-01", type: "STORAGE", isActive: true },
+        { id: "loc-B01", tenantId: "tenant-1", warehouseId: "wh-1", code: "B-01-01", type: "STORAGE", isActive: true },
+        { id: "loc-C01", tenantId: "tenant-1", warehouseId: "wh-1", code: "C-01-01", type: "STORAGE", isActive: true },
+        { id: "loc-D01", tenantId: "tenant-1", warehouseId: "wh-1", code: "D-01-01", type: "STORAGE", isActive: true },
+        { id: "loc-other-wh", tenantId: "tenant-1", warehouseId: "wh-2", code: "Z-01-01", type: "STORAGE", isActive: true },
+        { id: "loc-t2", tenantId: "tenant-2", warehouseId: "wh-t2", code: "A-01-01", type: "STORAGE", isActive: true },
+      ],
+      balances: [
+        { id: "bal-A01", tenantId: "tenant-1", locationId: "loc-A01", productId: "prod-1", onHandQty: 4, allocatedQty: 4 },
+        { id: "bal-B01", tenantId: "tenant-1", locationId: "loc-B01", productId: "prod-1", onHandQty: 10, allocatedQty: 0 },
+        { id: "bal-D01", tenantId: "tenant-1", locationId: "loc-D01", productId: "prod-2", onHandQty: 5, allocatedQty: 2 },
+        { id: "bal-other-wh", tenantId: "tenant-1", locationId: "loc-other-wh", productId: "prod-1", onHandQty: 50, allocatedQty: 0 },
+        { id: "bal-t2", tenantId: "tenant-2", locationId: "loc-t2", productId: "prod-1", onHandQty: 50, allocatedQty: 4 },
+      ],
+      orders: [
+        {
+          id: "order-1",
           tenantId: "tenant-1",
-        }),
-      ).rejects.toMatchObject({
-        code: "TASK_NOT_FOUND",
-        statusCode: 404,
-      });
-
-      expect(mockTx.taskStep.update).not.toHaveBeenCalled();
-      expect(mockTx.inventoryTransaction.create).not.toHaveBeenCalled();
-    });
-
-    it("lanza TASK_NOT_FOUND (404) si la tarea devuelta tiene un tenantId distinto", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PICKING_TASK,
-        tenantId: "tenant-otro",
-      });
-
-      await expect(
-        handlePickingException({
-          taskId: "task-pick-1",
-          stepId: "step-1",
+          warehouseId: "wh-1",
+          status: "ALLOCATED",
+          externalRef: "#ORD-500",
+          lines: [{ id: "line-1", productId: "prod-1", requestedQty: 4, pickedQty: 0 }],
+        },
+        {
+          id: "order-t2",
+          tenantId: "tenant-2",
+          warehouseId: "wh-t2",
+          status: "ALLOCATED",
+          externalRef: "#ORD-T2",
+          lines: [{ id: "line-t2", productId: "prod-1", requestedQty: 4, pickedQty: 0 }],
+        },
+      ],
+      tasks: [
+        {
+          id: "task-pick-1",
           tenantId: "tenant-1",
-        }),
-      ).rejects.toMatchObject({
-        code: "TASK_NOT_FOUND",
-        statusCode: 404,
-      });
-
-      expect(mockTx.inventoryBalance.update).not.toHaveBeenCalled();
-    });
-
-    it("lanza VALIDATION_ERROR (422) si la tarea no es de tipo PICKING", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PICKING_TASK,
-        type: "PUTAWAY",
-      });
-
-      await expect(
-        handlePickingException({
-          taskId: "task-pick-1",
-          stepId: "step-1",
-          tenantId: "tenant-1",
-        }),
-      ).rejects.toMatchObject({
-        code: "VALIDATION_ERROR",
-        statusCode: 422,
-      });
-
-      expect(mockTx.inventoryTransaction.create).not.toHaveBeenCalled();
-    });
-
-    it.each(["COMPLETED", "CANCELLED"] as const)(
-      "lanza VALIDATION_ERROR (409) si la tarea ya está en estado terminal %s",
-      async (terminalStatus) => {
-        mockTx.warehouseTask.findFirst.mockResolvedValue({
-          ...BASE_PICKING_TASK,
-          status: terminalStatus,
-        });
-
-        await expect(
-          handlePickingException({
-            taskId: "task-pick-1",
-            stepId: "step-1",
-            tenantId: "tenant-1",
-          }),
-        ).rejects.toMatchObject({
-          code: "VALIDATION_ERROR",
-          statusCode: 409,
-        });
-
-        expect(mockTx.inventoryTransaction.create).not.toHaveBeenCalled();
-      },
-    );
-
-    it("lanza ORDER_NOT_FOUND (404) si la tarea PICKING no tiene pedido válido del mismo tenant", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PICKING_TASK,
-        orderId: null,
-        order: null,
-      });
-
-      await expect(
-        handlePickingException({
-          taskId: "task-pick-1",
-          stepId: "step-1",
-          tenantId: "tenant-1",
-        }),
-      ).rejects.toMatchObject({
-        code: "ORDER_NOT_FOUND",
-        statusCode: 404,
-      });
-    });
-
-    it("lanza TASK_NOT_FOUND (404) si el stepId no pertenece a la tarea", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
-
-      await expect(
-        handlePickingException({
-          taskId: "task-pick-1",
-          stepId: "step-inexistente",
-          tenantId: "tenant-1",
-        }),
-      ).rejects.toMatchObject({
-        code: "TASK_NOT_FOUND",
-        statusCode: 404,
-      });
-    });
-
-    it.each(["COMPLETED", "EXCEPTION", "SKIPPED"] as const)(
-      "lanza VALIDATION_ERROR (409) si el paso ya está en estado %s",
-      async (stepStatus) => {
-        mockTx.warehouseTask.findFirst.mockResolvedValue({
-          ...BASE_PICKING_TASK,
+          orderId: "order-1",
+          receiptRef: null,
+          type: "PICKING",
+          status: "IN_PROGRESS",
+          assignedTo: null,
           steps: [
             {
-              ...BASE_PICKING_TASK.steps[0]!,
-              status: stepStatus,
+              id: "step-1",
+              taskId: "task-pick-1",
+              sequence: 1,
+              locationId: "loc-A01",
+              productId: "prod-1",
+              expectedQty: 4,
+              scannedQty: 0,
+              status: "PENDING",
             },
           ],
-        });
-
-        await expect(
-          handlePickingException({
-            taskId: "task-pick-1",
-            stepId: "step-1",
-            tenantId: "tenant-1",
-          }),
-        ).rejects.toMatchObject({
-          code: "VALIDATION_ERROR",
-          statusCode: 409,
-        });
-      },
-    );
+        },
+        {
+          id: "task-t2",
+          tenantId: "tenant-2",
+          orderId: "order-t2",
+          receiptRef: null,
+          type: "PICKING",
+          status: "IN_PROGRESS",
+          assignedTo: null,
+          steps: [
+            {
+              id: "step-t2",
+              taskId: "task-t2",
+              sequence: 1,
+              locationId: "loc-t2",
+              productId: "prod-1",
+              expectedQty: 4,
+              scannedQty: 0,
+              status: "PENDING",
+            },
+          ],
+        },
+      ],
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  describe("Caso A: Stock alternativo suficiente en otras ubicaciones STORAGE (Re-alocación exitosa)", () => {
-    it("libera reserva original (ALLOCATION_CANCEL), reserva en 1 ubicación alternativa (ALLOCATION) y crea nuevo TaskStep", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
-
-      // 1ª consulta raw: bloqueo de balance en ubicación original loc-A01
-      // 2ª consulta raw: ubicaciones STORAGE alternativas con ATP > 0
-      mockTx.$queryRaw
-        .mockResolvedValueOnce([
-          { id: "bal-A01", on_hand_qty: 4, allocated_qty: 4 },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: "bal-B01",
-            location_id: "loc-B01",
-            location_code: "B-01-01",
-            on_hand_qty: 10,
-            allocated_qty: 2,
-          },
-        ]);
-
-      mockTx.taskStep.create.mockResolvedValue({
-        id: "step-replacement-1",
-        taskId: "task-pick-1",
-        sequence: 2,
-        locationId: "loc-B01",
-        productId: "prod-1",
-        expectedQty: 4,
-        scannedQty: 0,
-        status: "PENDING",
-      });
-
+  describe("Happy Path", () => {
+    it("libera reserva original (ALLOCATION_CANCEL), re-asigna en ubicación alternativa y crea nuevo TaskStep", async () => {
       const result = await handlePickingException({
         taskId: "task-pick-1",
         stepId: "step-1",
         tenantId: "tenant-1",
-        exceptionNote: "Estantería A-01-01 vacía",
+        exceptionNote: "Ubicación dañada",
         userId: "op-1",
+        unitOfWork: uow,
       });
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         stepId: "step-1",
         taskId: "task-pick-1",
         orderId: "order-1",
         stepStatus: "EXCEPTION",
         taskStatus: "IN_PROGRESS",
-        orderStatus: "PICKING",
+        orderStatus: "ALLOCATED",
         reallocated: true,
         releasedOriginalQty: 4,
-        replacementSteps: [
-          {
-            id: "step-replacement-1",
-            sequence: 2,
-            locationId: "loc-B01",
-            locationCode: "B-01-01",
-            expectedQty: 4,
-          },
-        ],
-        note: "Estantería A-01-01 vacía",
+        note: "Ubicación dañada",
+      });
+      expect(result.replacementSteps).toHaveLength(1);
+      expect(result.replacementSteps[0]).toMatchObject({
+        sequence: 2,
+        locationId: "loc-B01",
+        locationCode: "B-01-01",
+        expectedQty: 4,
       });
 
-      // Paso original marcado como EXCEPTION
-      expect(mockTx.taskStep.update).toHaveBeenCalledWith({
-        where: { id: "step-1" },
-        data: {
-          status: "EXCEPTION",
-          exceptionNote: "Estantería A-01-01 vacía",
-        },
-      });
+      // Balances actualizados
+      expect(uow.state.balances.find((b) => b.id === "bal-A01")?.allocatedQty).toBe(0);
+      expect(uow.state.balances.find((b) => b.id === "bal-B01")?.allocatedQty).toBe(4);
 
-      // Liberación en ubicación original + reserva en ubicación alternativa
-      expect(mockTx.inventoryBalance.update).toHaveBeenNthCalledWith(1, {
-        where: { id: "bal-A01" },
-        data: { allocatedQty: { decrement: 4 } },
-      });
-      expect(mockTx.inventoryBalance.update).toHaveBeenNthCalledWith(2, {
-        where: { id: "bal-B01" },
-        data: { allocatedQty: { increment: 4 } },
-      });
+      // Ledger: 1 ALLOCATION_CANCEL + 1 ALLOCATION
+      expect(uow.state.transactions).toHaveLength(2);
+      expect(uow.state.transactions[0]?.reason).toBe("ALLOCATION_CANCEL");
+      expect(uow.state.transactions[1]?.reason).toBe("ALLOCATION");
 
-      // Asientos contables inmutables: ALLOCATION_CANCEL y ALLOCATION
-      expect(mockTx.inventoryTransaction.create).toHaveBeenNthCalledWith(1, {
-        data: {
-          tenantId: "tenant-1",
-          productId: "prod-1",
-          fromLocationId: "loc-A01",
-          quantity: 4,
-          reason: "ALLOCATION_CANCEL",
-          referenceId: "order-1",
-          userId: "op-1",
-          notes: "Picking exception at A-01-01: Estantería A-01-01 vacía",
-        },
-      });
-      expect(mockTx.inventoryTransaction.create).toHaveBeenNthCalledWith(2, {
-        data: {
-          tenantId: "tenant-1",
-          productId: "prod-1",
-          fromLocationId: "loc-B01",
-          quantity: 4,
-          reason: "ALLOCATION",
-          referenceId: "order-1",
-          userId: "op-1",
-          notes:
-            "Re-allocated after picking exception at A-01-01 for order #ORD-500",
-        },
-      });
-
-      // Tarea permanece en IN_PROGRESS y pedido no pasa a ON_HOLD
-      expect(mockTx.warehouseTask.update).toHaveBeenCalledWith({
-        where: { id: "task-pick-1" },
-        data: { status: "IN_PROGRESS" },
-      });
-      expect(mockTx.salesOrder.update).not.toHaveBeenCalled();
+      // Paso original en EXCEPTION con nota y nuevo paso PENDING
+      const task = uow.state.tasks[0]!;
+      expect(task.steps).toHaveLength(2);
+      expect(task.steps[0]?.status).toBe("EXCEPTION");
+      expect(task.steps[0]?.exceptionNote).toBe("Ubicación dañada");
+      expect(task.steps[1]?.status).toBe("PENDING");
     });
 
-    it("tras escaneo parcial previo (expected=5, scanned=2), solo re-aloca missingQty=3 repartido entre 2 ubicaciones alternativas", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PICKING_TASK,
-        steps: [
-          {
-            ...BASE_PICKING_TASK.steps[0]!,
-            expectedQty: 5,
-            scannedQty: 2, // Ya se habían recogido 2 unidades antes de encontrar el resto dañado
-          },
-        ],
+    it("divide re-alocación entre múltiples ubicaciones STORAGE si una sola no cubre el faltante", async () => {
+      uow.state.balances.find((b) => b.id === "bal-B01")!.onHandQty = 2;
+      uow.state.balances.push({
+        id: "bal-C01",
+        tenantId: "tenant-1",
+        locationId: "loc-C01",
+        productId: "prod-1",
+        onHandQty: 5,
+        allocatedQty: 0,
       });
-
-      mockTx.$queryRaw
-        .mockResolvedValueOnce([
-          { id: "bal-A01", on_hand_qty: 3, allocated_qty: 3 },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: "bal-B01",
-            location_id: "loc-B01",
-            location_code: "B-01-01",
-            on_hand_qty: 2,
-            allocated_qty: 0, // ATP = 2
-          },
-          {
-            id: "bal-C01",
-            location_id: "loc-C01",
-            location_code: "C-01-01",
-            on_hand_qty: 5,
-            allocated_qty: 1, // ATP = 4
-          },
-        ]);
-
-      mockTx.taskStep.create
-        .mockResolvedValueOnce({
-          id: "step-rep-1",
-          taskId: "task-pick-1",
-          sequence: 2,
-          locationId: "loc-B01",
-          productId: "prod-1",
-          expectedQty: 2,
-          scannedQty: 0,
-          status: "PENDING",
-        })
-        .mockResolvedValueOnce({
-          id: "step-rep-2",
-          taskId: "task-pick-1",
-          sequence: 3,
-          locationId: "loc-C01",
-          productId: "prod-1",
-          expectedQty: 1,
-          scannedQty: 0,
-          status: "PENDING",
-        });
 
       const result = await handlePickingException({
         taskId: "task-pick-1",
         stepId: "step-1",
         tenantId: "tenant-1",
-        exceptionNote: "3 unidades restantes dañadas",
+        unitOfWork: uow,
       });
 
       expect(result.reallocated).toBe(true);
-      expect(result.releasedOriginalQty).toBe(3);
-      expect(result.replacementSteps).toEqual([
-        {
-          id: "step-rep-1",
-          sequence: 2,
-          locationId: "loc-B01",
-          locationCode: "B-01-01",
-          expectedQty: 2,
-        },
-        {
-          id: "step-rep-2",
-          sequence: 3,
-          locationId: "loc-C01",
-          locationCode: "C-01-01",
-          expectedQty: 1,
-        },
+      expect(result.replacementSteps.map((s) => ({ code: s.locationCode, qty: s.expectedQty, seq: s.sequence }))).toEqual([
+        { code: "B-01-01", qty: 2, seq: 2 },
+        { code: "C-01-01", qty: 2, seq: 3 },
       ]);
-
-      expect(mockTx.inventoryBalance.update).toHaveBeenCalledTimes(3);
-      expect(mockTx.inventoryTransaction.create).toHaveBeenCalledTimes(3);
-      expect(mockTx.taskStep.create).toHaveBeenCalledTimes(2);
+      expect(uow.state.balances.find((b) => b.id === "bal-B01")?.allocatedQty).toBe(2);
+      expect(uow.state.balances.find((b) => b.id === "bal-C01")?.allocatedQty).toBe(2);
     });
-  });
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  describe("Caso B: Stock alternativo insuficiente (Transición a ON_HOLD y limpieza de reservas)", () => {
-    it("cuando no hay stock alternativo suficiente, libera la ubicación original y otros pasos PENDING, marca tarea EXCEPTION y pedido ON_HOLD", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue({
-        ...BASE_PICKING_TASK,
-        steps: [
-          {
-            ...BASE_PICKING_TASK.steps[0]!,
-            id: "step-1",
-            sequence: 1,
-            expectedQty: 4,
-            scannedQty: 0,
-            status: "PENDING" as const,
-          },
-          {
-            id: "step-2-pending",
-            taskId: "task-pick-1",
-            sequence: 2,
-            locationId: "loc-D01",
-            productId: "prod-2",
-            expectedQty: 2,
-            scannedQty: 0,
-            status: "PENDING" as const,
-            location: {
-              id: "loc-D01",
-              tenantId: "tenant-1",
-              warehouseId: "warehouse-1",
-              code: "D-01-01",
-              type: "STORAGE" as const,
-              isActive: true,
-            },
-            product: {
-              id: "prod-2",
-              tenantId: "tenant-1",
-              sku: "SKU-002",
-              name: "Mouse Inalámbrico",
-            },
-          },
-          {
-            id: "step-3-completed",
-            taskId: "task-pick-1",
-            sequence: 3,
-            locationId: "loc-E01",
-            productId: "prod-3",
-            expectedQty: 1,
-            scannedQty: 1,
-            status: "COMPLETED" as const,
-            location: {
-              id: "loc-E01",
-              tenantId: "tenant-1",
-              warehouseId: "warehouse-1",
-              code: "E-01-01",
-              type: "STORAGE" as const,
-              isActive: true,
-            },
-            product: {
-              id: "prod-3",
-              tenantId: "tenant-1",
-              sku: "SKU-003",
-              name: "Alfombrilla",
-            },
-          },
-        ],
-      });
-
-      // 1ª consulta raw: balance original de step-1 (loc-A01)
-      // 2ª consulta raw: ubicaciones alternativas para prod-1 -> solo hay 1 unidad disponible (insuficiente para cubrir 4)
-      // 3ª consulta raw: balance de step-2-pending (loc-D01) para liberarlo al pasar el pedido a ON_HOLD
-      mockTx.$queryRaw
-        .mockResolvedValueOnce([
-          { id: "bal-A01", on_hand_qty: 4, allocated_qty: 4 },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: "bal-B01",
-            location_id: "loc-B01",
-            location_code: "B-01-01",
-            on_hand_qty: 1,
-            allocated_qty: 0, // ATP = 1 < 4
-          },
-        ])
-        .mockResolvedValueOnce([
-          { id: "bal-D01", on_hand_qty: 5, allocated_qty: 2 },
-        ]);
+    it("sin ATP alternativo suficiente en el mismo almacén: libera pasos PENDING, marca tarea EXCEPTION y pedido ON_HOLD", async () => {
+      // loc-B01 solo tiene 1 unidad (faltan 4); loc-other-wh está en otro almacén (wh-2)
+      uow.state.balances.find((b) => b.id === "bal-B01")!.onHandQty = 1;
+      uow.state.tasks[0]!.steps.push(
+        { id: "step-2-pending", taskId: "task-pick-1", sequence: 2, locationId: "loc-D01", productId: "prod-2", expectedQty: 2, scannedQty: 0, status: "PENDING" },
+        { id: "step-3-done", taskId: "task-pick-1", sequence: 3, locationId: "loc-C01", productId: "prod-1", expectedQty: 1, scannedQty: 1, status: "COMPLETED" },
+      );
 
       const result = await handlePickingException({
         taskId: "task-pick-1",
@@ -529,6 +185,7 @@ describe("handlePickingException — Gestión de Excepciones de Picking y Re-asi
         tenantId: "tenant-1",
         exceptionNote: "Sin stock físico en A-01-01",
         userId: "op-2",
+        unitOfWork: uow,
       });
 
       expect(result).toEqual({
@@ -544,77 +201,130 @@ describe("handlePickingException — Gestión de Excepciones de Picking y Re-asi
         note: "Sin stock físico en A-01-01",
       });
 
-      // No debe crear pasos de reemplazo ni reservar en bal-B01
-      expect(mockTx.taskStep.create).not.toHaveBeenCalled();
+      expect(uow.state.balances.find((b) => b.id === "bal-A01")?.allocatedQty).toBe(0);
+      expect(uow.state.balances.find((b) => b.id === "bal-D01")?.allocatedQty).toBe(0);
+      expect(uow.state.transactions).toHaveLength(2);
+      expect(uow.state.transactions.every((t) => t.reason === "ALLOCATION_CANCEL")).toBe(true);
 
-      // Debe haber liberado bal-A01 (4 uds) y bal-D01 (2 uds)
-      expect(mockTx.inventoryBalance.update).toHaveBeenCalledTimes(2);
-      expect(mockTx.inventoryBalance.update).toHaveBeenNthCalledWith(1, {
-        where: { id: "bal-A01" },
-        data: { allocatedQty: { decrement: 4 } },
-      });
-      expect(mockTx.inventoryBalance.update).toHaveBeenNthCalledWith(2, {
-        where: { id: "bal-D01" },
-        data: { allocatedQty: { decrement: 2 } },
-      });
+      expect(uow.state.tasks[0]?.status).toBe("EXCEPTION");
+      expect(uow.state.tasks[0]?.steps.map((s) => s.status)).toEqual([
+        "EXCEPTION",
+        "SKIPPED",
+        "COMPLETED",
+      ]);
+      expect(uow.state.orders[0]?.status).toBe("ON_HOLD");
+    });
+  });
 
-      // Dos asientos ALLOCATION_CANCEL en el Ledger
-      expect(mockTx.inventoryTransaction.create).toHaveBeenCalledTimes(2);
-      expect(mockTx.inventoryTransaction.create).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          data: expect.objectContaining({
-            tenantId: "tenant-1",
-            productId: "prod-2",
-            fromLocationId: "loc-D01",
-            quantity: 2,
-            reason: "ALLOCATION_CANCEL",
-            referenceId: "order-1",
-          }),
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe("Romper a propósito — Clamping, Estados Inválidos y Multi-Tenant", () => {
+    it("lanza TASK_NOT_FOUND (404) si la tarea no existe o pertenece a otro tenant", async () => {
+      await expect(
+        handlePickingException({
+          taskId: "task-missing",
+          stepId: "step-1",
+          tenantId: "tenant-1",
+          unitOfWork: uow,
         }),
-      );
+      ).rejects.toMatchObject({ code: "TASK_NOT_FOUND", statusCode: 404 });
 
-      // El otro paso PENDING se marca como SKIPPED, y el pedido pasa a ON_HOLD
-      expect(mockTx.taskStep.update).toHaveBeenCalledWith({
-        where: { id: "step-2-pending" },
-        data: { status: "SKIPPED" },
-      });
-      expect(mockTx.warehouseTask.update).toHaveBeenCalledWith({
-        where: { id: "task-pick-1" },
-        data: { status: "EXCEPTION" },
-      });
-      expect(mockTx.salesOrder.update).toHaveBeenCalledWith({
-        where: { id: "order-1" },
-        data: { status: "ON_HOLD" },
-      });
+      await expect(
+        handlePickingException({
+          taskId: "task-t2",
+          stepId: "step-t2",
+          tenantId: "tenant-1",
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "TASK_NOT_FOUND", statusCode: 404 });
+
+      expect(uow.state.balances.find((b) => b.id === "bal-t2")?.allocatedQty).toBe(4);
     });
 
-    it("🔒 Regla de No-Negatividad: nunca decrementa más que el allocated_qty actual en la ubicación con excepción", async () => {
-      mockTx.warehouseTask.findFirst.mockResolvedValue(BASE_PICKING_TASK);
+    it("lanza VALIDATION_ERROR (422) si la tarea no es de tipo PICKING", async () => {
+      uow.state.tasks[0]!.type = "PUTAWAY";
 
-      // Ubicación original tiene allocated_qty = 1 aunque expectedQty = 4; sin stock alternativo
-      mockTx.$queryRaw
-        .mockResolvedValueOnce([
-          { id: "bal-A01", on_hand_qty: 1, allocated_qty: 1 },
-        ])
-        .mockResolvedValueOnce([]);
+      await expect(
+        handlePickingException({
+          taskId: "task-pick-1",
+          stepId: "step-1",
+          tenantId: "tenant-1",
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 422 });
+    });
+
+    it.each(["COMPLETED", "CANCELLED"] as const)(
+      "lanza VALIDATION_ERROR (409) si la tarea ya está en estado terminal %s",
+      async (terminalStatus) => {
+        uow.state.tasks[0]!.status = terminalStatus;
+
+        await expect(
+          handlePickingException({
+            taskId: "task-pick-1",
+            stepId: "step-1",
+            tenantId: "tenant-1",
+            unitOfWork: uow,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 409 });
+      },
+    );
+
+    it("lanza ORDER_NOT_FOUND (404) si la tarea PICKING no tiene pedido asociado", async () => {
+      uow.state.tasks[0]!.orderId = null;
+
+      await expect(
+        handlePickingException({
+          taskId: "task-pick-1",
+          stepId: "step-1",
+          tenantId: "tenant-1",
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "ORDER_NOT_FOUND", statusCode: 404 });
+    });
+
+    it("lanza TASK_NOT_FOUND (404) si el stepId no pertenece a la tarea", async () => {
+      await expect(
+        handlePickingException({
+          taskId: "task-pick-1",
+          stepId: "step-inexistente",
+          tenantId: "tenant-1",
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "TASK_NOT_FOUND", statusCode: 404 });
+    });
+
+    it.each(["COMPLETED", "EXCEPTION", "SKIPPED"] as const)(
+      "lanza VALIDATION_ERROR (409) si el paso ya está resuelto (%s)",
+      async (stepStatus) => {
+        uow.state.tasks[0]!.steps[0]!.status = stepStatus;
+
+        await expect(
+          handlePickingException({
+            taskId: "task-pick-1",
+            stepId: "step-1",
+            tenantId: "tenant-1",
+            unitOfWork: uow,
+          }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 409 });
+      },
+    );
+
+    it("usa releaseUpTo (clamp a 0): nunca deja allocatedQty negativo si allocated < missingQty", async () => {
+      uow.state.balances.find((b) => b.id === "bal-A01")!.allocatedQty = 1;
+      uow.state.balances.find((b) => b.id === "bal-B01")!.onHandQty = 0;
 
       const result = await handlePickingException({
         taskId: "task-pick-1",
         stepId: "step-1",
         tenantId: "tenant-1",
+        unitOfWork: uow,
       });
 
       expect(result.releasedOriginalQty).toBe(1);
       expect(result.reallocated).toBe(false);
       expect(result.orderStatus).toBe("ON_HOLD");
       expect(result.note).toBe("Operator reported exception");
-
-      expect(mockTx.inventoryBalance.update).toHaveBeenCalledTimes(1);
-      expect(mockTx.inventoryBalance.update).toHaveBeenCalledWith({
-        where: { id: "bal-A01" },
-        data: { allocatedQty: { decrement: 1 } },
-      });
+      expect(uow.state.balances.find((b) => b.id === "bal-A01")?.allocatedQty).toBe(0);
     });
   });
 });
