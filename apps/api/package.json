@@ -19,6 +19,7 @@
     "@fastify/swagger": "^8.15.0",
     "@fastify/swagger-ui": "^4.0.1",
     "@wms/db": "workspace:*",
+    "@wms/domain": "workspace:*",
     "@wms/shared-types": "workspace:*",
     "fastify": "^4.28.0",
     "zod": "^3.23.8",

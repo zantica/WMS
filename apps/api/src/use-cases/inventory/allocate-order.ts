@@ -1,22 +1,20 @@
 // apps/api/src/use-cases/inventory/allocate-order.ts
 // Caso de uso: Reservar stock para un pedido.
-// Cuando un pedido entra, este use case busca stock disponible (ATP > 0),
-// reserva la cantidad necesaria y crea las tareas de picking.
-//
-// Garantías:
-// - SELECT FOR UPDATE por línea de balance (anti race condition)
-// - Si no hay stock suficiente para cualquier línea → rollback total
-// - Los TaskSteps se ordenan por location.code (recorrido eficiente del almacén)
+// Orquesta los agregados InventoryBalance y la máquina de estados SalesOrder
+// dentro de un UnitOfWork Serializable con SELECT ... FOR UPDATE.
 
-import { prisma, type Prisma } from "@wms/db";
+import { canTransitionOrder } from "@wms/domain";
 import { WmsError } from "../../plugins/error-handler.js";
-import { getAmbientTenantScope } from "../security/tenant-context.js";
+import type { UnitOfWork } from "../../ports/unit-of-work.js";
+import { PrismaUnitOfWork } from "../../adapters/prisma-unit-of-work.js";
+import { rethrowDomainErrorAsWmsError } from "../../shared/domain-error-mapper.js";
 
 export interface AllocateOrderParams {
   orderId: string;
   tenantId: string;
-  userId?: string;
-  tx?: Prisma.TransactionClient | undefined;
+  userId?: string | undefined;
+  unitOfWork?: UnitOfWork | undefined;
+  tx?: unknown;
 }
 
 interface AllocationPlan {
@@ -34,162 +32,116 @@ export async function allocateOrder(
   params: AllocateOrderParams,
 ): Promise<string> {
   const { orderId, tenantId, userId } = params;
+  const uow = params.unitOfWork ?? new PrismaUnitOfWork(undefined, params.tx);
 
-  const executeAllocate = async (tx: Prisma.TransactionClient) => {
-    // ── 1. Cargar el pedido y verificar que está en estado correcto ──────
-    const order = await tx.salesOrder.findUnique({
-      where: { id: orderId },
-      include: { lines: { include: { product: true } } },
-    });
+  try {
+    return await uow.execute(
+      tenantId,
+      async (repos) => {
+        // ── 1. Cargar el pedido y validar transición de estado ─────────────
+        const order = await repos.orders.findById(tenantId, orderId);
 
-    if (!order || order.tenantId !== tenantId) {
-      throw new WmsError("ORDER_NOT_FOUND", `Order ${orderId} not found`, 404);
-    }
+        if (!order || order.tenantId !== tenantId) {
+          throw new WmsError("ORDER_NOT_FOUND", `Order ${orderId} not found`, 404);
+        }
 
-    if (order.status !== "PENDING" && order.status !== "ON_HOLD") {
-      throw new WmsError(
-        "ORDER_ALREADY_ALLOCATED",
-        `Order ${orderId} is already in status ${order.status}`,
-        409,
-      );
-    }
+        if (!canTransitionOrder(order.status, "ALLOCATED")) {
+          throw new WmsError(
+            "ORDER_ALREADY_ALLOCATED",
+            `Order ${orderId} is already in status ${order.status}`,
+            409,
+          );
+        }
 
-    // ── 2. Por cada línea del pedido, buscar stock disponible (ATP) ──────
-    const allocationPlan: AllocationPlan[] = [];
+        // ── 2. Por cada línea del pedido, buscar stock disponible (ATP) ────
+        const allocationPlan: AllocationPlan[] = [];
 
-    for (const line of order.lines) {
-      let remaining = Number(line.requestedQty);
+        for (const line of order.lines) {
+          let remaining = Number(line.requestedQty);
 
-      // Buscar balances con ATP > 0, en ubicaciones STORAGE, ordenadas por código
-      // SELECT FOR UPDATE bloquea las filas para evitar doble reserva concurrente
-      const balances = await tx.$queryRaw<
-        Array<{
-          id: string;
-          location_id: string;
-          location_code: string;
-          on_hand_qty: number;
-          allocated_qty: number;
-        }>
-      >`
-        SELECT ib.id, ib."locationId" as location_id, l.code as location_code,
-               ib."onHandQty" as on_hand_qty, ib."allocatedQty" as allocated_qty
-        FROM inventory_balances ib
-        JOIN locations l ON l.id = ib."locationId"
-        WHERE ib."productId" = ${line.productId}
-          AND ib."tenantId" = ${tenantId}
-          AND l.type = 'STORAGE'
-          AND (ib."onHandQty" - ib."allocatedQty") > 0
-        ORDER BY l.code ASC
-        FOR UPDATE OF ib
-      `;
-
-      if (balances.length === 0) {
-        throw new WmsError(
-          "INSUFFICIENT_STOCK",
-          `No available stock for product ${line.product.sku} (${line.productId})`,
-          409,
-          { productId: line.productId, sku: line.product.sku },
-        );
-      }
-
-      for (const balance of balances) {
-        if (remaining <= 0) break;
-
-        const atp = Number(balance.on_hand_qty) - Number(balance.allocated_qty);
-        if (atp <= 0) continue;
-
-        const toAllocate = Math.min(atp, remaining);
-
-        // Actualizar allocatedQty en la proyección
-        await tx.inventoryBalance.update({
-          where: { id: balance.id },
-          data: { allocatedQty: { increment: toAllocate } },
-        });
-
-        // Registrar en el Ledger
-        await tx.inventoryTransaction.create({
-          data: {
+          const balances = await repos.inventory.findStorageBalancesForUpdate(
             tenantId,
-            productId: line.productId,
-            fromLocationId: balance.location_id,
-            quantity: toAllocate,
-            reason: "ALLOCATION",
-            referenceId: orderId,
-            userId,
-            notes: `Allocated for order ${order.externalRef ?? orderId}`,
-          },
-        });
+            line.productId,
+          );
 
-        allocationPlan.push({
-          productId: line.productId,
-          locationId: balance.location_id,
-          locationCode: balance.location_code,
-          quantity: toAllocate,
-        });
+          if (balances.length === 0) {
+            throw new WmsError(
+              "INSUFFICIENT_STOCK",
+              `No available stock for product ${line.product.sku} (${line.productId})`,
+              409,
+              { productId: line.productId, sku: line.product.sku },
+            );
+          }
 
-        remaining -= toAllocate;
-      }
+          for (const candidate of balances) {
+            if (remaining <= 0) break;
 
-      if (remaining > 0) {
-        throw new WmsError(
-          "INSUFFICIENT_STOCK",
-          `Insufficient stock for product ${line.product.sku}: missing ${remaining} units`,
-          409,
-          { productId: line.productId, missing: remaining },
+            const atp = candidate.balance.available;
+            if (atp <= 0) continue;
+
+            const toAllocate = Math.min(atp, remaining);
+
+            candidate.balance.allocate(toAllocate);
+            await repos.inventory.saveBalance(candidate.balance);
+
+            await repos.inventory.recordTransaction({
+              tenantId,
+              productId: line.productId,
+              fromLocationId: candidate.balance.locationId,
+              quantity: toAllocate,
+              reason: "ALLOCATION",
+              referenceId: orderId,
+              userId: userId ?? null,
+              notes: `Allocated for order ${order.externalRef ?? orderId}`,
+            });
+
+            allocationPlan.push({
+              productId: line.productId,
+              locationId: candidate.balance.locationId,
+              locationCode: candidate.locationCode,
+              quantity: toAllocate,
+            });
+
+            remaining -= toAllocate;
+          }
+
+          if (remaining > 0) {
+            throw new WmsError(
+              "INSUFFICIENT_STOCK",
+              `Insufficient stock for product ${line.product.sku}: missing ${remaining} units`,
+              409,
+              { productId: line.productId, missing: remaining },
+            );
+          }
+        }
+
+        // ── 3. Crear la WarehouseTask de picking con pasos ordenados ───────
+        const sortedPlan = allocationPlan.sort((a, b) =>
+          a.locationCode.localeCompare(b.locationCode),
         );
-      }
-    }
 
-    // ── 3. Crear la WarehouseTask de picking con pasos ordenados ─────────
-    const sortedPlan = allocationPlan.sort((a, b) =>
-      a.locationCode.localeCompare(b.locationCode),
-    );
-
-    const task = await tx.warehouseTask.create({
-      data: {
-        tenantId,
-        orderId,
-        type: "PICKING",
-        status: "PENDING",
-        assignedTo: null,
-        steps: {
-          create: sortedPlan.map((step, index) => ({
+        const task = await repos.tasks.create({
+          tenantId,
+          orderId,
+          type: "PICKING",
+          status: "PENDING",
+          assignedTo: null,
+          steps: sortedPlan.map((step, index) => ({
             sequence: index + 1,
             locationId: step.locationId,
             productId: step.productId,
             expectedQty: step.quantity,
-            scannedQty: 0,
-            status: "PENDING",
           })),
-        },
+        });
+
+        // ── 4. Actualizar estado del pedido ────────────────────────────────
+        await repos.orders.updateStatus(tenantId, orderId, "ALLOCATED");
+
+        return task.id;
       },
-    });
-
-    // ── 4. Actualizar estado del pedido ──────────────────────────────────
-    await tx.salesOrder.update({
-      where: { id: orderId },
-      data: { status: "ALLOCATED" },
-    });
-
-    return task.id;
-  };
-
-  const ambientStore = getAmbientTenantScope<Prisma.TransactionClient>();
-  if (ambientStore && ambientStore.tenantId !== tenantId) {
-    throw new WmsError(
-      "TENANT_MISMATCH",
-      `Active tenant context "${ambientStore.tenantId}" does not match allocateOrder tenantId "${tenantId}"`,
-      403,
+      { isolationLevel: "Serializable", timeoutMs: 15_000 },
     );
+  } catch (err) {
+    rethrowDomainErrorAsWmsError(err);
   }
-
-  const reusableTx = params.tx ?? ambientStore?.scope;
-  if (reusableTx) {
-    return await executeAllocate(reusableTx);
-  }
-
-  return await prisma.$transaction(executeAllocate, {
-    timeout: 15_000,
-    isolationLevel: "Serializable" as Prisma.TransactionIsolationLevel,
-  });
 }

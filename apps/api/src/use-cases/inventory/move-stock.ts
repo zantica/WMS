@@ -1,36 +1,39 @@
 // apps/api/src/use-cases/inventory/move-stock.ts
 // Caso de uso más importante del sistema.
 // Registra un movimiento de stock en el Ledger y actualiza el Snapshot (InventoryBalance)
-// en la MISMA transacción SQL — garantiza consistencia total.
+// en la MISMA transacción SQL — garantiza consistencia total mediante @wms/domain + UnitOfWork.
 //
 // Principios de seguridad:
-// 1. SELECT FOR UPDATE en filas de InventoryBalance para evitar race conditions
-// 2. Chequeo de saldo negativo ANTES de descontar
+// 1. SELECT FOR UPDATE en filas de InventoryBalance vía InventoryRepository
+// 2. Chequeo de stock disponible (onHand - allocated >= quantity) vía InventoryBalance.withdraw
 // 3. Ledger inmutable — nunca UPDATE/DELETE en inventory_transactions
 
-import { prisma, type Prisma, type TxReason } from "@wms/db";
+import { InventoryBalance, Quantity, type TxReason } from "@wms/domain";
 import { WmsError } from "../../plugins/error-handler.js";
-import { getAmbientTenantScope } from "../security/tenant-context.js";
+import type { UnitOfWork } from "../../ports/unit-of-work.js";
+import { PrismaUnitOfWork } from "../../adapters/prisma-unit-of-work.js";
+import { rethrowDomainErrorAsWmsError } from "../../shared/domain-error-mapper.js";
 
 export interface MoveStockParams {
   tenantId: string;
   productId: string;
-  fromLocationId?: string;
-  toLocationId?: string;
+  fromLocationId?: string | undefined;
+  toLocationId?: string | undefined;
   quantity: number;
   reason: TxReason;
-  referenceId?: string;
-  userId?: string;
-  notes?: string;
-  tx?: Prisma.TransactionClient | undefined;
+  referenceId?: string | undefined;
+  userId?: string | undefined;
+  notes?: string | undefined;
+  unitOfWork?: UnitOfWork | undefined;
+  tx?: unknown;
 }
 
 /**
  * Ejecuta un movimiento de stock atómico:
- * 1. Inserta InventoryTransaction (inmutable)
- * 2. Descuenta de fromLocation (si aplica)
- * 3. Añade a toLocation (si aplica)
- * Todo en un único BEGIN...COMMIT con bloqueos FOR UPDATE.
+ * 1. Descuenta de fromLocation (respetando available = onHand - allocated)
+ * 2. Añade a toLocation (si aplica)
+ * 3. Inserta InventoryTransaction (inmutable)
+ * Todo en un único UnitOfWork Serializable con bloqueos FOR UPDATE.
  */
 export async function moveStock(params: MoveStockParams): Promise<void> {
   const {
@@ -45,107 +48,77 @@ export async function moveStock(params: MoveStockParams): Promise<void> {
     notes,
   } = params;
 
-  if (quantity <= 0) {
-    throw new WmsError("VALIDATION_ERROR", "Quantity must be positive", 422);
+  try {
+    Quantity.positive(quantity);
+  } catch (err) {
+    rethrowDomainErrorAsWmsError(err);
   }
 
-  const executeMoveStock = async (tx: Prisma.TransactionClient) => {
-    // ── 1. Descontar de origen (si tiene ubicación de origen) ───────────
-    if (fromLocationId) {
-      // SELECT FOR UPDATE — bloquea la fila para evitar doble gasto concurrente
-      const fromBalance = await tx.$queryRaw<
-        Array<{ id: string; on_hand_qty: number; allocated_qty: number }>
-      >`
-        SELECT id, "onHandQty" as on_hand_qty, "allocatedQty" as allocated_qty
-        FROM inventory_balances
-        WHERE "locationId" = ${fromLocationId}
-          AND "productId" = ${productId}
-          AND "tenantId" = ${tenantId}
-        FOR UPDATE
-      `;
+  const uow = params.unitOfWork ?? new PrismaUnitOfWork(undefined, params.tx);
 
-      const balance = fromBalance[0];
-      if (!balance) {
-        throw new WmsError(
-          "INSUFFICIENT_STOCK",
-          `No stock found for product ${productId} in location ${fromLocationId}`,
-          409,
-        );
-      }
-
-      const currentQty = Number(balance.on_hand_qty);
-      if (currentQty < quantity) {
-        throw new WmsError(
-          "INSUFFICIENT_STOCK",
-          `Insufficient stock: available ${currentQty}, requested ${quantity}`,
-          409,
-        );
-      }
-
-      await tx.inventoryBalance.update({
-        where: { id: balance.id },
-        data: { onHandQty: { decrement: quantity } },
-      });
-    }
-
-    // ── 2. Añadir a destino (si tiene ubicación de destino) ─────────────
-    if (toLocationId) {
-      await tx.inventoryBalance.upsert({
-        where: {
-          locationId_productId: {
-            locationId: toLocationId,
+  try {
+    await uow.execute(
+      tenantId,
+      async (repos) => {
+        // ── 1. Descontar de origen (si tiene ubicación de origen) ─────────
+        if (fromLocationId) {
+          const fromBalance = await repos.inventory.findBalanceForUpdate(
+            tenantId,
+            fromLocationId,
             productId,
-          },
-        },
-        update: {
-          onHandQty: { increment: quantity },
-        },
-        create: {
+          );
+
+          if (!fromBalance) {
+            throw new WmsError(
+              "INSUFFICIENT_STOCK",
+              `No stock found for product ${productId} in location ${fromLocationId}`,
+              409,
+            );
+          }
+
+          fromBalance.withdraw(quantity);
+          await repos.inventory.saveBalance(fromBalance);
+        }
+
+        // ── 2. Añadir a destino (si tiene ubicación de destino) ───────────
+        if (toLocationId) {
+          let toBalance = await repos.inventory.findBalanceForUpdate(
+            tenantId,
+            toLocationId,
+            productId,
+          );
+
+          if (!toBalance) {
+            toBalance = new InventoryBalance({
+              id: crypto.randomUUID(),
+              tenantId,
+              locationId: toLocationId,
+              productId,
+              onHand: 0,
+              allocated: 0,
+            });
+          }
+
+          toBalance.receive(quantity);
+          await repos.inventory.saveBalance(toBalance);
+        }
+
+        // ── 3. Registrar en el Ledger (inmutable) ─────────────────────────
+        await repos.inventory.recordTransaction({
           tenantId,
-          locationId: toLocationId,
           productId,
-          onHandQty: quantity,
-          allocatedQty: 0,
-        },
-      });
-    }
-
-    // ── 3. Registrar en el Ledger (inmutable) ───────────────────────────
-    await tx.inventoryTransaction.create({
-      data: {
-        tenantId,
-        productId,
-        fromLocationId,
-        toLocationId,
-        quantity,
-        reason,
-        referenceId,
-        userId,
-        notes,
+          fromLocationId: fromLocationId ?? null,
+          toLocationId: toLocationId ?? null,
+          quantity,
+          reason,
+          referenceId: referenceId ?? null,
+          userId: userId ?? null,
+          notes: notes ?? null,
+        });
       },
-    });
-  };
-
-  const ambientStore = getAmbientTenantScope<Prisma.TransactionClient>();
-  if (ambientStore && ambientStore.tenantId !== tenantId) {
-    throw new WmsError(
-      "TENANT_MISMATCH",
-      `Active tenant context "${ambientStore.tenantId}" does not match moveStock tenantId "${tenantId}"`,
-      403,
+      { isolationLevel: "Serializable", timeoutMs: 10_000 },
     );
+  } catch (err) {
+    rethrowDomainErrorAsWmsError(err);
   }
-
-  const reusableTx = params.tx ?? ambientStore?.scope;
-  if (reusableTx) {
-    await executeMoveStock(reusableTx);
-    return;
-  }
-
-  await prisma.$transaction(executeMoveStock, {
-    // Timeout generoso para operaciones con múltiples pasos
-    timeout: 10_000,
-    // Isolation level por defecto en PostgreSQL es READ COMMITTED
-    // El FOR UPDATE eleva al nivel necesario por fila
-    isolationLevel: "Serializable" as Prisma.TransactionIsolationLevel,
-  });
 }
