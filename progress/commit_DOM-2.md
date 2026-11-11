@@ -68,5 +68,9 @@ Exit code: 0
 - `5cb222c` `feat(api): adopt @wms/domain via ports, adapters and Unit of Work (DOM-2)`
 - `715fba1` `test(api): adapt use-case tests to in-memory UoW, add parity and ledger locking tests (DOM-2)`
 - `b19756d` `docs(adr): record ADR 007 for API domain adoption and update KNOWLEDGE (DOM-2)`
-- `chore(harness): record DOM-2 reports and update progress to done`
-- **Resultado de `git push`**: `<pendiente de ejecucion>`
+- `c80f805` `chore(harness): record DOM-2 reports and update progress to done`
+- **Resultado de `git push`**:
+```text
+To https://github.com/zantica/WMS.git
+   5e2fa60..c80f805  main -> main
+```
