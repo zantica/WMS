@@ -3,6 +3,7 @@ import { ValueObject } from "../shared/value-object.js";
 
 const SCALE = 10_000; // Decimal(12, 4) del esquema Prisma
 const MAX_UNITS = 999_999_999_999; // 12 dígitos en total, 4 decimales
+const FLOAT_EPSILON = 1e-9; // Tolerancia para evitar falsos positivos de punto flotante IEEE-754
 
 /**
  * Cantidad de stock >= 0 con precisión fija de 4 decimales (Decimal(12,4)).
@@ -22,7 +23,7 @@ export class Quantity extends ValueObject<{ units: number }> {
       throw new InvalidQuantityError("Quantity cannot be negative", { value });
     }
     const units = Math.round(value * SCALE);
-    if (Math.abs(units / SCALE - value) > 1e-9) {
+    if (Math.abs(units / SCALE - value) > FLOAT_EPSILON) {
       throw new InvalidQuantityError("Quantity supports at most 4 decimals", { value });
     }
     if (units > MAX_UNITS) {
