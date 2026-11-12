@@ -14,6 +14,8 @@ export interface UnitOfWorkRepositories {
   txScope?: unknown;
 }
 
+export const DEFAULT_TX_TIMEOUT_MS = 15_000;
+
 export interface UnitOfWorkOptions {
   isolationLevel?: "ReadCommitted" | "Serializable" | undefined;
   timeoutMs?: number | undefined;

@@ -6,7 +6,10 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { prisma } from "@wms/db";
 import { confirmTaskStep } from "../use-cases/tasks/confirm-task-step.js";
-import { syncTaskBatch } from "../use-cases/tasks/sync-task-batch.js";
+import {
+  MAX_SYNC_BATCH_SIZE,
+  syncTaskBatch,
+} from "../use-cases/tasks/sync-task-batch.js";
 import { WmsError } from "../plugins/error-handler.js";
 import type { ApiResponse, WarehouseTaskDTO, SyncTaskBatchResult } from "@wms/shared-types";
 
@@ -26,7 +29,7 @@ const SyncBatchItemSchema = z.object({
 });
 
 const SyncBatchSchema = z.object({
-  items: z.array(SyncBatchItemSchema).min(1).max(100),
+  items: z.array(SyncBatchItemSchema).min(1).max(MAX_SYNC_BATCH_SIZE),
 });
 
 export const taskRoutes: FastifyPluginAsync = async (app) => {

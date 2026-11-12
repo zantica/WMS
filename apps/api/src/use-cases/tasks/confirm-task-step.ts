@@ -15,7 +15,7 @@ import {
 import { moveStock } from "../inventory/move-stock.js";
 import type { IdempotencyStore } from "../../ports/idempotency-store.js";
 import { PrismaIdempotencyStore } from "../../adapters/prisma-idempotency-store.js";
-import type { UnitOfWork } from "../../ports/unit-of-work.js";
+import { DEFAULT_TX_TIMEOUT_MS, type UnitOfWork } from "../../ports/unit-of-work.js";
 import { PrismaUnitOfWork } from "../../adapters/prisma-unit-of-work.js";
 import { rethrowDomainErrorAsWmsError } from "../../shared/domain-error-mapper.js";
 
@@ -414,7 +414,7 @@ export async function confirmTaskStep(
 
         return result;
       },
-      { isolationLevel: "Serializable", timeoutMs: 15_000 },
+      { isolationLevel: "Serializable", timeoutMs: DEFAULT_TX_TIMEOUT_MS },
     );
   } catch (err: unknown) {
     if (idempotencyKey && isUniqueConstraintError(err)) {

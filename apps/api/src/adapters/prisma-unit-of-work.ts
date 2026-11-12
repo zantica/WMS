@@ -12,7 +12,12 @@ import {
   type TenantTransactionClient,
 } from "@wms/db";
 import { WmsError } from "../plugins/error-handler.js";
-import type { UnitOfWork, UnitOfWorkOptions, UnitOfWorkRepositories } from "../ports/unit-of-work.js";
+import {
+  DEFAULT_TX_TIMEOUT_MS,
+  type UnitOfWork,
+  type UnitOfWorkOptions,
+  type UnitOfWorkRepositories,
+} from "../ports/unit-of-work.js";
 import {
   getAmbientTenantScope,
   runWithAmbientTenantScope,
@@ -86,7 +91,7 @@ export class PrismaUnitOfWork implements UnitOfWork {
           ),
         {
           isolationLevel: options?.isolationLevel ?? "Serializable",
-          timeout: options?.timeoutMs ?? 15_000,
+          timeout: options?.timeoutMs ?? DEFAULT_TX_TIMEOUT_MS,
         },
       );
     }
