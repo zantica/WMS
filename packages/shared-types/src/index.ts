@@ -42,13 +42,29 @@ export type StepStatus = "PENDING" | "COMPLETED" | "EXCEPTION" | "SKIPPED";
 // DTOs DE RESPUESTA (lo que devuelve la API)
 // ─────────────────────────────────────────────────────────────
 
+export interface CategoryDTO {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProductDTO {
   id: string;
   sku: string;
   name: string;
   barcode?: string | null;
   description?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  categoryCode?: string | null;
   weightGrams?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
+  depthCm?: number | null;
   imageUrl?: string | null;
   isActive: boolean;
 }
@@ -120,12 +136,90 @@ export interface TaskStepDTO {
 // DTOs DE SOLICITUD (lo que envía el cliente a la API)
 // ─────────────────────────────────────────────────────────────
 
+export interface CreateCategoryInput {
+  code: string;
+  name: string;
+  description?: string | undefined;
+}
+
+export interface UpdateCategoryInput {
+  code?: string | undefined;
+  name?: string | undefined;
+  description?: string | null | undefined;
+  isActive?: boolean | undefined;
+}
+
 export interface CreateProductInput {
   sku: string;
   name: string;
-  barcode?: string;
-  description?: string;
-  weightGrams?: number;
+  barcode?: string | undefined;
+  description?: string | undefined;
+  categoryId?: string | null | undefined;
+  weightGrams?: number | undefined;
+  widthCm?: number | undefined;
+  heightCm?: number | undefined;
+  depthCm?: number | undefined;
+  imageUrl?: string | undefined;
+}
+
+export interface UpdateProductInput {
+  sku?: string | undefined;
+  name?: string | undefined;
+  barcode?: string | null | undefined;
+  description?: string | null | undefined;
+  categoryId?: string | null | undefined;
+  weightGrams?: number | null | undefined;
+  widthCm?: number | null | undefined;
+  heightCm?: number | null | undefined;
+  depthCm?: number | null | undefined;
+  imageUrl?: string | null | undefined;
+  isActive?: boolean | undefined;
+}
+
+export interface ListProductsFilters {
+  sku?: string | undefined;
+  q?: string | undefined;
+  barcode?: string | undefined;
+  categoryId?: string | undefined;
+  includeInactive?: boolean | undefined;
+  page?: number | undefined;
+  limit?: number | undefined;
+}
+
+export interface PaginationMetaDTO {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}
+
+export interface TenantUserDTO {
+  id: string;
+  tenantId: string;
+  clerkId: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+}
+
+export interface CreateTenantUserInput {
+  name: string;
+  email: string;
+  role: UserRole;
+  clerkId?: string | undefined;
+}
+
+export interface UpdateTenantUserInput {
+  name?: string | undefined;
+  email?: string | undefined;
+  role?: UserRole | undefined;
+  isActive?: boolean | undefined;
+}
+
+export interface ListTenantUsersFilters {
+  role?: UserRole | undefined;
+  includeInactive?: boolean | undefined;
 }
 
 export interface CreateLocationInput {
@@ -367,6 +461,8 @@ export interface ApiError {
 export type WmsErrorCode =
   | "INSUFFICIENT_STOCK"
   | "PRODUCT_NOT_FOUND"
+  | "CATEGORY_NOT_FOUND"
+  | "USER_NOT_FOUND"
   | "LOCATION_NOT_FOUND"
   | "ORDER_NOT_FOUND"
   | "TASK_NOT_FOUND"
