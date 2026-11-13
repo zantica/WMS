@@ -224,3 +224,17 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Aplicadas las 8 decisiones aprobadas (`moveStock` respeta `available`, `consume` vs `releaseUpTo`, rechazo de re-escaneos y sobre-escaneo, `IN_PROGRESS` en primer escaneo, `ALLOCATED -> PACKED` directo, mapeo `domainErrorToWmsError` preservando códigos públicos/HTTP y test bidireccional de paridad de enums `domain-prisma-parity.test.ts`).
   - Nueva suite de integración PostgreSQL `ledger-locking.integration.test.ts`; `pnpm build --force` (6/6) y `pnpm --filter @wms/api test:coverage` (197 passed, 8 skipped PG, `92.36%` líneas global y `>= 82%` en cada use-case).
 - **Opcionales pendientes**: `create-putaway-task.ts`, `confirm-receipt-line.ts` y `sync-task-batch.ts` conservan su integración directa actual (`confirm-receipt-line` delega en `moveStock` vía compatibilidad `tx`).
+
+---
+
+## [2026-11-13] Feature `F9.1` — Maestro de Producto WMS, Categorías configurables, Búsqueda por SKU y Gestión de Usuarios/Roles
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F9.1.md`](./impl_F9.1.md)
+  - Revisión: [`progress/review_F9.1.md`](./review_F9.1.md)
+- **Cambios clave**:
+  - Contratos en `@wms/shared-types`: `CategoryDTO`, `CreateCategoryInput`, `UpdateCategoryInput`, `TenantUserDTO`, `CreateTenantUserInput`, `UpdateTenantUserInput`, `ListTenantUsersFilters`, `ListProductsFilters`, `PaginationMetaDTO`, ampliación de `ProductDTO`/`CreateProductInput`/`UpdateProductInput` y errores `CATEGORY_NOT_FOUND` y `USER_NOT_FOUND`.
+  - Esquema Prisma + migración `20261113010000_catalog_categories` en `@wms/db` añadiendo modelo `Category` (`@@unique([tenantId, code])`), relación opcional `Product.categoryId` (`ON DELETE SET NULL`), políticas PostgreSQL `ENABLE` + `FORCE ROW LEVEL SECURITY` (`categories_tenant_isolation_policy` en `rls.ts`) y seed idempotente.
+  - Arquitectura hexagonal en `@wms/api`: puertos `CatalogRepositoryPort` y `UserRepositoryPort`, adaptadores `Prisma*` e `InMemory*`, casos de uso `manage-categories`, `manage-products` y `manage-users` (con RBAC y protección anti-auto-desactivación/degradación de `ADMIN`), y rutas `/api/v1/categories`, `/api/v1/products` y `/api/v1/users`.
+  - UI unificada (`S5` / `P2` / `T3`, 0 hex crudos): búsqueda por SKU/texto/categoría/inactivos, edición y gobierno de usuarios/roles en `@wms/web` (`/catalog`) y `searchProducts` en el escáner rápido de `@wms/mobile`.
+  - Verificación independiente: `pnpm build` (6/6), `pnpm test` (7/7) y `pnpm --filter @wms/api test:coverage` (`268 passed | 8 skipped PG`, `93.59%` cobertura global en `use-cases`, `98.95%` en `catalog` y `100%` en `users`).

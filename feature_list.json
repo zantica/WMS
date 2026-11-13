@@ -183,13 +183,39 @@
       ]
     },
     {
+      "id": "F9.1",
+      "milestone": "Hito 9 — Maestro Operativo, Topología Física y Vista Gráfica",
+      "title": "Maestro de Producto WMS, Categorías configurables, Búsqueda por SKU y Gestión de Usuarios/Roles",
+      "boundedContext": "Core / Topology & Catalog + Multi-Tenancy",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Modelo Category por tenant (con aislamiento RLS y CRUD en /api/v1/categories) asociado opcionalmente a Product, manteniendo enfoque operativo WMS (sin motor EAV de ERP)",
+        "Endpoints de productos ampliados: búsqueda y filtrado en GET /api/v1/products (?sku=, ?q=, ?barcode=, ?categoryId=, paginación) y PATCH /api/v1/products/:id (edición y baja lógica isActive)",
+        "Gestión de usuarios del tenant en API y @wms/web (listar, asignar rol ADMIN | SUPERVISOR | OPERATOR, activar/desactivar) + vista completa de Maestro de Productos y buscador por SKU en @wms/web (/catalog) y @wms/mobile",
+        "Tests unitarios e integración (RLS/multi-tenant, búsqueda por SKU, permisos por rol) con cobertura >= 80%"
+      ]
+    },
+    {
+      "id": "F9.2",
+      "milestone": "Hito 9 — Maestro Operativo, Topología Física y Vista Gráfica",
+      "title": "Topología Física (RACK / SHELVING / FLOOR), Alta Estructurada de Ubicaciones y Vista Gráfica del Layout",
+      "boundedContext": "Core / Topology & Web Dashboard",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Extender Location en Prisma y @wms/shared-types separando rol operativo (LocationType: RECEIVING, STORAGE, PACKING, DISPATCH) del tipo físico (StorageType: RACK, SHELVING, FLOOR) y metadatos de layout (zone, aisle, rack, level)",
+        "Endpoints para alta individual/estructurada de ubicaciones físicas (generación por bloque Zona/Pasillo/Rack/Niveles) y consulta agregada de layout con ocupación/stock por ubicación",
+        "Vista gráfica interactiva del Layout de Almacén en @wms/web (Zona -> Pasillo -> Rack/Estantería/Piso -> Nivel) mostrando estado de ocupación, stock y acceso rápido a alta física de ubicaciones",
+        "Tests unitarios y de integración validando unicidad por (warehouseId, code), aislamiento tenantId/RLS y generación de ubicaciones"
+      ]
+    },
+    {
       "id": "F5.1",
       "milestone": "Hito 5 — Onboarding Flash: Bulk Import y Etiquetas QR",
       "title": "Carga masiva (Bulk Import) desacoplada con modo dryRun, normalización y estrategia ColumnMapper",
       "boundedContext": "Core / Topology & Catalog",
       "status": "pending",
       "acceptanceCriteria": [
-        "Casos de uso independientes del transporte con puertos para parser tabular y estrategia intercambiable ColumnMapper, expuestos en POST /api/v1/catalog/bulk-import y POST /api/v1/locations/bulk-import",
+        "Casos de uso independientes del transporte con puertos para parser tabular y estrategia intercambiable ColumnMapper, expuestos en POST /api/v1/catalog/bulk-import y POST /api/v1/locations/bulk-import (soportando categoría de producto y tipo físico RACK/SHELVING/FLOOR en ubicaciones)",
         "Soporte de modo dryRun, normalización previa (ceros a la izquierda, EAN en notación científica, trim/uppercase), rechazo de barcodes duplicados entre SKUs distintos y prohibición estricta de mutar InventoryBalance directamente",
         "Upsert idempotente por (tenantId, sku) y (tenantId, warehouseId, code) con reporte detallado fila por fila y tests unitarios + integración (>= 80% coverage)"
       ]
