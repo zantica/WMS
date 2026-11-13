@@ -13,7 +13,9 @@ import {
   type ApiResponse,
   type ConfirmScanInput,
   type InventoryBalanceDTO,
+  type ListProductsFilters,
   type OrderStatus,
+  type ProductDTO,
   type StepStatus,
   type TaskStatus,
   type TaskType,
@@ -489,6 +491,27 @@ export class WmsApiClient {
       "/api/v1/tasks/sync-batch",
       { body: request },
     );
+  }
+
+  /**
+   * GET /api/v1/products — Búsqueda de productos en el catálogo maestro (F9.1).
+   */
+  public async searchProducts(
+    filters?: ListProductsFilters,
+  ): Promise<ProductDTO[]> {
+    const query: Record<string, string | undefined> = {};
+    if (filters?.sku) query["sku"] = filters.sku;
+    if (filters?.q) query["q"] = filters.q;
+    if (filters?.barcode) query["barcode"] = filters.barcode;
+    if (filters?.categoryId) query["categoryId"] = filters.categoryId;
+    if (filters?.includeInactive !== undefined)
+      query["includeInactive"] = String(filters.includeInactive);
+    if (filters?.page !== undefined) query["page"] = String(filters.page);
+    if (filters?.limit !== undefined) query["limit"] = String(filters.limit);
+
+    return this.requestEnvelope<ProductDTO[]>("GET", "/api/v1/products", {
+      query,
+    });
   }
 }
 

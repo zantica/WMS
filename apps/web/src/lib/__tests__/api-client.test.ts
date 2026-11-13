@@ -474,4 +474,141 @@ describe("WmsWebApiClient (@wms/web)", () => {
       correlationId: "srv-body-corr-88",
     });
   });
+
+  it("handles categories and products with filters and user operations (F9.1)", async () => {
+    const mockCategory = {
+      id: "cat-1",
+      code: "ROPA",
+      name: "Ropa y Textiles",
+      isActive: true,
+    };
+    const mockProduct = {
+      id: "prod-1",
+      sku: "TSHIRT",
+      name: "Camiseta",
+      categoryId: "cat-1",
+      isActive: true,
+    };
+    const mockUser = {
+      id: "usr-1",
+      tenantId: "tenant-1",
+      clerkId: "clerk-1",
+      name: "Admin User",
+      email: "admin@test.com",
+      role: "ADMIN" as const,
+      isActive: true,
+    };
+
+    const mockFetch = vi
+      .fn<typeof fetch>()
+      // 1. listProducts with query
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ success: true, data: [mockProduct] }),
+      } as unknown as Response)
+      // 2. updateProduct
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { ...mockProduct, name: "Camiseta Actualizada" },
+        }),
+      } as unknown as Response)
+      // 3. listCategories
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ success: true, data: [mockCategory] }),
+      } as unknown as Response)
+      // 4. createCategory
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({ success: true, data: mockCategory }),
+      } as unknown as Response)
+      // 5. updateCategory
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { ...mockCategory, name: "Ropa Modificada" },
+        }),
+      } as unknown as Response)
+      // 6. listUsers
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ success: true, data: [mockUser] }),
+      } as unknown as Response)
+      // 7. createUser
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({ success: true, data: mockUser }),
+      } as unknown as Response)
+      // 8. updateUser
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { ...mockUser, role: "SUPERVISOR" },
+        }),
+      } as unknown as Response);
+
+    const client = createWmsWebClient({
+      baseUrl: "http://localhost:3001",
+      apiKey: "demo-key",
+      fetchImpl: mockFetch,
+    });
+
+    const prods = await client.listProducts({
+      q: "Camiseta",
+      categoryId: "cat-1",
+      includeInactive: true,
+    });
+    expect(prods).toEqual([mockProduct]);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:3001/api/v1/products?q=Camiseta&categoryId=cat-1&includeInactive=true",
+      expect.anything(),
+    );
+
+    const updatedProd = await client.updateProduct("prod-1", {
+      name: "Camiseta Actualizada",
+    });
+    expect(updatedProd.name).toBe("Camiseta Actualizada");
+
+    const cats = await client.listCategories({ includeInactive: true });
+    expect(cats).toEqual([mockCategory]);
+
+    const createdCat = await client.createCategory({
+      code: "ROPA",
+      name: "Ropa y Textiles",
+    });
+    expect(createdCat.code).toBe("ROPA");
+
+    const updatedCat = await client.updateCategory("cat-1", {
+      name: "Ropa Modificada",
+    });
+    expect(updatedCat.name).toBe("Ropa Modificada");
+
+    const users = await client.listUsers({ role: "ADMIN" });
+    expect(users).toEqual([mockUser]);
+
+    const createdUser = await client.createUser({
+      name: "Admin User",
+      email: "admin@test.com",
+      role: "ADMIN",
+    });
+    expect(createdUser.email).toBe("admin@test.com");
+
+    const updatedUser = await client.updateUser("usr-1", {
+      role: "SUPERVISOR",
+    });
+    expect(updatedUser.role).toBe("SUPERVISOR");
+  });
 });

@@ -12,12 +12,17 @@ import {
   type AdjustmentInput,
   type ApiError,
   type ApiResponse,
+  type CategoryDTO,
+  type CreateCategoryInput,
   type CreateLocationInput,
   type CreateOrderInput,
   type CreateProductInput,
+  type CreateTenantUserInput,
   type DiagnosticErrorRecord,
   type InventoryBalanceDTO,
   type ListDiagnosticErrorsFilters,
+  type ListProductsFilters,
+  type ListTenantUsersFilters,
   type LocationDTO,
   type LocationType,
   type OrderStatus,
@@ -25,7 +30,11 @@ import {
   type SalesOrderDTO,
   type TaskStatus,
   type TaskType,
+  type TenantUserDTO,
   type TxReason,
+  type UpdateCategoryInput,
+  type UpdateProductInput,
+  type UpdateTenantUserInput,
   type WarehouseTaskDTO,
   type WmsErrorCode,
 } from "@wms/shared-types";
@@ -370,10 +379,24 @@ export class WmsWebApiClient {
   }
 
   /**
-   * GET /api/v1/products — Lista productos activos del catálogo del tenant.
+   * GET /api/v1/products — Lista y busca productos del catálogo del tenant con filtros y paginación.
    */
-  public async listProducts(): Promise<ProductDTO[]> {
-    return this.requestEnvelope<ProductDTO[]>("GET", "/api/v1/products");
+  public async listProducts(
+    filters?: ListProductsFilters,
+  ): Promise<ProductDTO[]> {
+    const query: Record<string, string | undefined> = {};
+    if (filters?.sku) query["sku"] = filters.sku;
+    if (filters?.q) query["q"] = filters.q;
+    if (filters?.barcode) query["barcode"] = filters.barcode;
+    if (filters?.categoryId) query["categoryId"] = filters.categoryId;
+    if (filters?.includeInactive !== undefined)
+      query["includeInactive"] = String(filters.includeInactive);
+    if (filters?.page !== undefined) query["page"] = String(filters.page);
+    if (filters?.limit !== undefined) query["limit"] = String(filters.limit);
+
+    return this.requestEnvelope<ProductDTO[]>("GET", "/api/v1/products", {
+      query,
+    });
   }
 
   /**
@@ -383,6 +406,107 @@ export class WmsWebApiClient {
     return this.requestEnvelope<ProductDTO>("POST", "/api/v1/products", {
       body: input,
     });
+  }
+
+  /**
+   * PATCH /api/v1/products/:id — Actualiza parcialmente un producto existente.
+   */
+  public async updateProduct(
+    id: string,
+    input: UpdateProductInput,
+  ): Promise<ProductDTO> {
+    return this.requestEnvelope<ProductDTO>(
+      "PATCH",
+      `/api/v1/products/${encodeURIComponent(id)}`,
+      {
+        body: input,
+      },
+    );
+  }
+
+  /**
+   * GET /api/v1/categories — Lista categorías de producto del tenant.
+   */
+  public async listCategories(options?: {
+    includeInactive?: boolean;
+  }): Promise<CategoryDTO[]> {
+    const query: Record<string, string | undefined> = {};
+    if (options?.includeInactive !== undefined) {
+      query["includeInactive"] = String(options.includeInactive);
+    }
+    return this.requestEnvelope<CategoryDTO[]>("GET", "/api/v1/categories", {
+      query,
+    });
+  }
+
+  /**
+   * POST /api/v1/categories — Crea una nueva categoría en el catálogo.
+   */
+  public async createCategory(
+    input: CreateCategoryInput,
+  ): Promise<CategoryDTO> {
+    return this.requestEnvelope<CategoryDTO>("POST", "/api/v1/categories", {
+      body: input,
+    });
+  }
+
+  /**
+   * PATCH /api/v1/categories/:id — Actualiza una categoría existente.
+   */
+  public async updateCategory(
+    id: string,
+    input: UpdateCategoryInput,
+  ): Promise<CategoryDTO> {
+    return this.requestEnvelope<CategoryDTO>(
+      "PATCH",
+      `/api/v1/categories/${encodeURIComponent(id)}`,
+      {
+        body: input,
+      },
+    );
+  }
+
+  /**
+   * GET /api/v1/users — Lista usuarios y roles del inquilino (Tenant).
+   */
+  public async listUsers(
+    filters?: ListTenantUsersFilters,
+  ): Promise<TenantUserDTO[]> {
+    const query: Record<string, string | undefined> = {};
+    if (filters?.role) query["role"] = filters.role;
+    if (filters?.includeInactive !== undefined) {
+      query["includeInactive"] = String(filters.includeInactive);
+    }
+    return this.requestEnvelope<TenantUserDTO[]>("GET", "/api/v1/users", {
+      query,
+    });
+  }
+
+  /**
+   * POST /api/v1/users — Crea un nuevo usuario en el inquilino.
+   */
+  public async createUser(
+    input: CreateTenantUserInput,
+  ): Promise<TenantUserDTO> {
+    return this.requestEnvelope<TenantUserDTO>("POST", "/api/v1/users", {
+      body: input,
+    });
+  }
+
+  /**
+   * PATCH /api/v1/users/:id — Actualiza datos o rol de un usuario del inquilino.
+   */
+  public async updateUser(
+    id: string,
+    input: UpdateTenantUserInput,
+  ): Promise<TenantUserDTO> {
+    return this.requestEnvelope<TenantUserDTO>(
+      "PATCH",
+      `/api/v1/users/${encodeURIComponent(id)}`,
+      {
+        body: input,
+      },
+    );
   }
 
   /**

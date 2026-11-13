@@ -15,7 +15,11 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import type { InventoryBalanceDTO, WarehouseTaskDTO } from "@wms/shared-types";
+import type {
+  InventoryBalanceDTO,
+  ProductDTO,
+  WarehouseTaskDTO,
+} from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../src/components/BarcodeScannerBox";
 import {
   WmsBanner,
@@ -43,6 +47,7 @@ export default function ScannerScreen(): JSX.Element {
   const [matchingBalances, setMatchingBalances] = useState<
     InventoryBalanceDTO[]
   >([]);
+  const [matchingProducts, setMatchingProducts] = useState<ProductDTO[]>([]);
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
   const [feedbackBanner, setFeedbackBanner] = useState<{
@@ -118,21 +123,29 @@ export default function ScannerScreen(): JSX.Element {
           return;
         }
 
-        // Modo consulta rápida de stock por código de ubicación o SKU
-        const allBalances = await client.getInventoryBalances();
+        // Modo consulta rápida de stock por código de ubicación o SKU + Ficha de producto
+        const [allBalances, foundProducts] = await Promise.all([
+          client.getInventoryBalances(),
+          client.searchProducts({ q: scannedCode, includeInactive: true }),
+        ]);
+
         const normalized = scannedCode.toUpperCase();
-        const filtered = allBalances.filter(
+        const filteredBalances = allBalances.filter(
           (b) =>
             b.locationCode.toUpperCase() === normalized ||
             b.productSku.toUpperCase() === normalized,
         );
-        setMatchingBalances(filtered);
+
+        setMatchingBalances(filteredBalances);
+        setMatchingProducts(foundProducts);
+
+        const totalResults = foundProducts.length + filteredBalances.length;
         setFeedbackBanner({
           type: "success",
           text:
-            filtered.length > 0
-              ? `Se encontraron ${filtered.length} registros de saldo para "${scannedCode}".`
-              : `Sin stock activo para el código "${scannedCode}".`,
+            totalResults > 0
+              ? `Encontrado: ${foundProducts.length} producto(s) en catálogo y ${filteredBalances.length} saldo(s) en vivo.`
+              : `Sin resultados para el código "${scannedCode}".`,
         });
       } catch (err) {
         if (err instanceof WmsApiClientError) {
@@ -243,50 +256,93 @@ export default function ScannerScreen(): JSX.Element {
 
         {!activeTask && lastScannedCode ? (
           <View style={styles.resultsSection}>
-            <Text style={styles.sectionTitle}>
-              Saldos contables en vivo para &quot;{lastScannedCode}&quot;
-            </Text>
-            {matchingBalances.length === 0 ? (
-              <WmsEmptyState
-                title="Sin stock registrado para el código"
-                subtitle="Escanea otra ubicación (ej. A-01-01) o verifica el SKU en el catálogo."
-              />
-            ) : (
-              matchingBalances.map((b) => (
-                <View
-                  key={`${b.locationId}-${b.productId}`}
-                  style={styles.balanceCard}
-                >
-                  <View style={styles.balanceHeader}>
-                    <WmsTag label={b.locationCode} symbol="◆" tone="blue" />
-                    <Text style={[styles.skuText, monoText]}>
-                      {b.productSku}
-                    </Text>
-                  </View>
-                  <Text style={styles.productNameText}>{b.productName}</Text>
-                  <View style={styles.metricsRow}>
-                    <View style={styles.metricBlock}>
-                      <Text style={styles.metricLabel}>ON HAND</Text>
-                      <Text style={[styles.metricValue, monoText]}>
-                        {b.onHandQty} uds
+            {/* 1. Ficha del Maestro de Producto WMS (F9.1) */}
+            {matchingProducts.length > 0 ? (
+              <View style={styles.subResultsSection}>
+                <Text style={styles.sectionTitle}>
+                  Maestro de Producto ({matchingProducts.length})
+                </Text>
+                {matchingProducts.map((p) => (
+                  <View key={p.id} style={styles.productCard}>
+                    <View style={styles.balanceHeader}>
+                      <Text style={[styles.skuText, monoText]}>
+                        {p.sku}
                       </Text>
+                      <WmsTag
+                        label={p.isActive ? "ACTIVO" : "INACTIVO"}
+                        tone={p.isActive ? "emerald" : "slate"}
+                      />
                     </View>
-                    <View style={styles.metricBlock}>
-                      <Text style={styles.metricLabel}>ALLOCATED</Text>
-                      <Text style={[styles.metricWarning, monoText]}>
-                        {b.allocatedQty} uds
-                      </Text>
-                    </View>
-                    <View style={styles.metricBlock}>
-                      <Text style={styles.metricLabel}>ATP (PROMETIBLE)</Text>
-                      <Text style={[styles.metricAtp, monoText]}>
-                        {b.atpQty} uds
-                      </Text>
+                    <Text style={styles.productTitleText}>{p.name}</Text>
+                    <View style={styles.productMetaRow}>
+                      <WmsTag
+                        label={p.categoryCode ?? "SIN CATEGORÍA"}
+                        symbol="🏷"
+                        tone="blue"
+                      />
+                      {p.barcode ? (
+                        <Text style={[styles.metaMuted, monoText]}>
+                          EAN: {p.barcode}
+                        </Text>
+                      ) : null}
+                      {p.weightGrams ? (
+                        <Text style={[styles.metaMuted, monoText]}>
+                          {p.weightGrams} g
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
-                </View>
-              ))
-            )}
+                ))}
+              </View>
+            ) : null}
+
+            {/* 2. Saldos Contables en Vivo */}
+            <View style={styles.subResultsSection}>
+              <Text style={styles.sectionTitle}>
+                Saldos contables en vivo para &quot;{lastScannedCode}&quot;
+              </Text>
+              {matchingBalances.length === 0 ? (
+                <WmsEmptyState
+                  title="Sin stock registrado para el código"
+                  subtitle="Escanea otra ubicación (ej. A-01-01) o verifica el SKU en el catálogo."
+                />
+              ) : (
+                matchingBalances.map((b) => (
+                  <View
+                    key={`${b.locationId}-${b.productId}`}
+                    style={styles.balanceCard}
+                  >
+                    <View style={styles.balanceHeader}>
+                      <WmsTag label={b.locationCode} symbol="◆" tone="blue" />
+                      <Text style={[styles.skuText, monoText]}>
+                        {b.productSku}
+                      </Text>
+                    </View>
+                    <Text style={styles.productNameText}>{b.productName}</Text>
+                    <View style={styles.metricsRow}>
+                      <View style={styles.metricBlock}>
+                        <Text style={styles.metricLabel}>ON HAND</Text>
+                        <Text style={[styles.metricValue, monoText]}>
+                          {b.onHandQty} uds
+                        </Text>
+                      </View>
+                      <View style={styles.metricBlock}>
+                        <Text style={styles.metricLabel}>ALLOCATED</Text>
+                        <Text style={[styles.metricWarning, monoText]}>
+                          {b.allocatedQty} uds
+                        </Text>
+                      </View>
+                      <View style={styles.metricBlock}>
+                        <Text style={styles.metricLabel}>ATP (PROMETIBLE)</Text>
+                        <Text style={[styles.metricAtp, monoText]}>
+                          {b.atpQty} uds
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
           </View>
         ) : null}
       </ScrollView>
@@ -375,12 +431,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   resultsSection: {
+    gap: WMS_SPACING.md,
+  },
+  subResultsSection: {
     gap: WMS_SPACING.sm,
   },
   sectionTitle: {
     color: WMS_COLORS.text,
     fontSize: WMS_FONT_SIZES.base,
     fontWeight: "700",
+  },
+  productCard: {
+    backgroundColor: WMS_COLORS.surfaceCard,
+    borderRadius: WMS_RADII.lg,
+    padding: WMS_SPACING.md,
+    borderWidth: 1,
+    borderColor: WMS_COLORS.border,
+    gap: WMS_SPACING.xs,
+  },
+  productTitleText: {
+    color: WMS_COLORS.text,
+    fontSize: WMS_FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  productMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: WMS_SPACING.sm,
+    flexWrap: "wrap",
+    marginTop: 2,
+  },
+  metaMuted: {
+    color: WMS_COLORS.muted,
+    fontSize: WMS_FONT_SIZES.xs,
   },
   balanceCard: {
     backgroundColor: WMS_COLORS.surfaceCard,

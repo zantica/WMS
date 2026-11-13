@@ -491,4 +491,49 @@ describe("WmsApiClient (@wms/mobile)", () => {
       }),
     );
   });
+
+  it("searches products via searchProducts (/api/v1/products) with filters (F9.1)", async () => {
+    const mockProducts = [
+      {
+        id: "prod-1",
+        sku: "PROD-001",
+        name: "Camiseta Básica",
+        barcode: "8410000001",
+        categoryCode: "ROPA",
+        weightGrams: 200,
+        isActive: true,
+      },
+    ];
+
+    const mockFetch = createMockFetch(200, {
+      success: true,
+      data: mockProducts,
+      pagination: {
+        page: 1,
+        limit: 10,
+        total: 1,
+        pages: 1,
+      },
+    });
+
+    const client = createWmsClient({
+      baseUrl: "http://localhost:3001",
+      apiKey: "demo-api-key-12345",
+      fetchImpl: mockFetch,
+    });
+
+    const res = await client.searchProducts({
+      q: "PROD-001",
+      categoryId: "cat-ropa",
+      includeInactive: true,
+    });
+
+    expect(res).toEqual(mockProducts);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3001/api/v1/products?q=PROD-001&categoryId=cat-ropa&includeInactive=true",
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
+  });
 });
