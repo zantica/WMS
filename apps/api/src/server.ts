@@ -13,10 +13,16 @@ import { errorHandler } from "./plugins/error-handler.js";
 import { authPlugin } from "./plugins/auth.js";
 import { observabilityPlugin } from "./plugins/observability.js";
 import { PrismaTenantContextAdapter } from "./adapters/prisma-tenant-context.js";
+import { PrismaCatalogRepositoryAdapter } from "./adapters/prisma-catalog-repository.js";
+import { PrismaUserRepositoryAdapter } from "./adapters/prisma-user-repository.js";
 import type { DiagnosticsStore } from "./ports/diagnostics-store.js";
 import type { TenantContextPort } from "./ports/tenant-context.js";
+import type { CatalogRepositoryPort } from "./ports/catalog-repository.js";
+import type { UserRepositoryPort } from "./ports/user-repository.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { productRoutes } from "./routes/products.js";
+import { categoryRoutes } from "./routes/categories.js";
+import { userRoutes } from "./routes/users.js";
 import { locationRoutes } from "./routes/locations.js";
 import { orderRoutes } from "./routes/orders.js";
 import { taskRoutes } from "./routes/tasks.js";
@@ -31,12 +37,16 @@ const HOST = process.env["HOST"] ?? "0.0.0.0";
 declare module "fastify" {
   interface FastifyInstance {
     tenantContext: TenantContextPort;
+    catalogRepository: CatalogRepositoryPort;
+    userRepository: UserRepositoryPort;
   }
 }
 
 export interface BuildServerOptions {
   diagnosticsStore?: DiagnosticsStore | undefined;
   tenantContext?: TenantContextPort | undefined;
+  catalogRepository?: CatalogRepositoryPort | undefined;
+  userRepository?: UserRepositoryPort | undefined;
   enableLogger?: boolean | undefined;
 }
 
@@ -58,6 +68,14 @@ export async function buildServer(options: BuildServerOptions = {}) {
   app.decorate(
     "tenantContext",
     options.tenantContext ?? new PrismaTenantContextAdapter(),
+  );
+  app.decorate(
+    "catalogRepository",
+    options.catalogRepository ?? new PrismaCatalogRepositoryAdapter(),
+  );
+  app.decorate(
+    "userRepository",
+    options.userRepository ?? new PrismaUserRepositoryAdapter(),
   );
 
   // ── Seguridad ──────────────────────────────────────────────
@@ -84,6 +102,8 @@ export async function buildServer(options: BuildServerOptions = {}) {
       },
       tags: [
         { name: "Products", description: "Catálogo de productos, SKUs y dimensiones" },
+        { name: "Categories", description: "Categorías operativas configurables del catálogo" },
+        { name: "Users", description: "Gestión de usuarios y roles del inquilino (Tenant)" },
         { name: "Locations", description: "Zonas y ubicaciones físicas del almacén" },
         { name: "Inventory", description: "Saldos en vivo, ledger inmutable y ajustes de stock" },
         { name: "Orders", description: "Pedidos de venta, asignación y despacho" },
@@ -122,6 +142,8 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(healthRoute);
   await app.register(inventoryRoutes, { prefix: "/api/v1/inventory" });
   await app.register(productRoutes, { prefix: "/api/v1/products" });
+  await app.register(categoryRoutes, { prefix: "/api/v1/categories" });
+  await app.register(userRoutes, { prefix: "/api/v1/users" });
   await app.register(locationRoutes, { prefix: "/api/v1/locations" });
   await app.register(orderRoutes, { prefix: "/api/v1/orders" });
   await app.register(taskRoutes, { prefix: "/api/v1/tasks" });

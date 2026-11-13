@@ -52,6 +52,7 @@ describe.runIf(shouldRunPgIntegration)(
               await tx.location.deleteMany();
               await tx.warehouse.deleteMany();
               await tx.product.deleteMany();
+              await tx.category.deleteMany();
             });
           }
           await db.tenant.deleteMany({
@@ -116,12 +117,23 @@ describe.runIf(shouldRunPgIntegration)(
 
     it("aísla estrictamente Tenant A de Tenant B en lecturas, escrituras cruzadas y locks FOR UPDATE", async () => {
       // Sembrar datos en Tenant B
+      const categoryB = await withTenantContext(db, tenantBId, async (tx) => {
+        return await tx.category.create({
+          data: {
+            tenantId: tenantBId,
+            code: `CAT-B-${suffix}`,
+            name: "Categoría Secreta B",
+          },
+        });
+      });
+
       const productB = await withTenantContext(db, tenantBId, async (tx) => {
         return await tx.product.create({
           data: {
             tenantId: tenantBId,
             sku: `SKU-B-${suffix}`,
             name: "Producto B Secreto",
+            categoryId: categoryB.id,
           },
         });
       });
@@ -152,11 +164,16 @@ describe.runIf(shouldRunPgIntegration)(
             true,
           );
 
-          // 2. Tenant A no puede leer el producto de Tenant B por ID
+          // 2. Tenant A no puede leer el producto ni la categoría de Tenant B por ID
           const crossRead = await tx.product.findUnique({
             where: { id: productB.id },
           });
           expect(crossRead).toBeNull();
+
+          const crossCatRead = await tx.category.findUnique({
+            where: { id: categoryB.id },
+          });
+          expect(crossCatRead).toBeNull();
 
           // 4. Crear almacén, ubicación y balance en Tenant A y verificar SELECT ... FOR UPDATE
           const warehouseA = await tx.warehouse.create({

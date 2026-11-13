@@ -1,53 +1,86 @@
 // apps/api/src/routes/products.ts
+// Rutas de Fastify para el maestro de productos del catálogo WMS.
+
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { prisma } from "@wms/db";
-import { WmsError } from "../plugins/error-handler.js";
-import type { ApiResponse, ProductDTO } from "@wms/shared-types";
+import type { ApiResponse, PaginationMetaDTO, ProductDTO } from "@wms/shared-types";
+import {
+  createProduct,
+  getProductById,
+  searchProducts,
+  updateProduct,
+} from "../use-cases/catalog/manage-products.js";
+
+const ListProductsQuerySchema = z.object({
+  sku: z.string().optional(),
+  q: z.string().optional(),
+  barcode: z.string().optional(),
+  categoryId: z.string().optional(),
+  includeInactive: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .optional(),
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+});
 
 const CreateProductSchema = z.object({
   sku: z.string().min(1).max(100),
   name: z.string().min(1).max(255),
   barcode: z.string().max(50).optional(),
   description: z.string().max(1000).optional(),
+  categoryId: z.string().nullable().optional(),
   weightGrams: z.number().int().positive().optional(),
   widthCm: z.number().positive().optional(),
   heightCm: z.number().positive().optional(),
   depthCm: z.number().positive().optional(),
+  imageUrl: z.string().max(1000).optional(),
 });
 
+const UpdateProductSchema = z.object({
+  sku: z.string().min(1).max(100).optional(),
+  name: z.string().min(1).max(255).optional(),
+  barcode: z.string().max(50).nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
+  categoryId: z.string().nullable().optional(),
+  weightGrams: z.number().int().positive().nullable().optional(),
+  widthCm: z.number().positive().nullable().optional(),
+  heightCm: z.number().positive().nullable().optional(),
+  depthCm: z.number().positive().nullable().optional(),
+  imageUrl: z.string().max(1000).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+interface ProductsListResponse extends ApiResponse<ProductDTO[]> {
+  pagination?: PaginationMetaDTO;
+}
+
 export const productRoutes: FastifyPluginAsync = async (app) => {
-  // GET /api/v1/products — Listar todos los productos del tenant
+  // GET /api/v1/products — Buscar y listar productos del catálogo
   app.get(
     "/",
     {
       schema: {
         tags: ["Products"],
-        summary: "Listar todos los productos del catálogo",
+        summary: "Buscar y listar productos del catálogo con filtros y paginación",
       },
     },
-    async (request): Promise<ApiResponse<ProductDTO[]>> => {
-    const products = await prisma.product.findMany({
-      where: { tenantId: request.tenantId, isActive: true },
-      orderBy: { sku: "asc" },
-    });
+    async (request): Promise<ProductsListResponse> => {
+      const filters = ListProductsQuerySchema.parse(request.query);
+      const result = await searchProducts(
+        app.catalogRepository,
+        request.tenantId,
+        filters,
+      );
 
-    return {
-      success: true,
-      data: products.map((p) => ({
-        id: p.id,
-        sku: p.sku,
-        name: p.name,
-        barcode: p.barcode,
-        description: p.description,
-        weightGrams: p.weightGrams,
-        imageUrl: p.imageUrl,
-        isActive: p.isActive,
-      })),
-    };
-  });
+      return {
+        success: true,
+        data: result.items,
+        pagination: result.pagination,
+      };
+    },
+  );
 
-  // GET /api/v1/products/:id
+  // GET /api/v1/products/:id — Obtener detalle de un producto
   app.get<{ Params: { id: string } }>(
     "/:id",
     {
@@ -57,80 +90,44 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request): Promise<ApiResponse<ProductDTO>> => {
-      const product = await prisma.product.findFirst({
-        where: { id: request.params.id, tenantId: request.tenantId },
-      });
-
-      if (!product) {
-        throw new WmsError("PRODUCT_NOT_FOUND", `Product ${request.params.id} not found`, 404);
-      }
+      const product = await getProductById(
+        app.catalogRepository,
+        request.tenantId,
+        request.params.id,
+      );
 
       return {
         success: true,
-        data: {
-          id: product.id,
-          sku: product.sku,
-          name: product.name,
-          barcode: product.barcode,
-          description: product.description,
-          weightGrams: product.weightGrams,
-          imageUrl: product.imageUrl,
-          isActive: product.isActive,
-        },
+        data: product,
       };
     },
   );
 
-  // POST /api/v1/products — Crear producto
+  // POST /api/v1/products — Crear nuevo producto en el catálogo
   app.post(
     "/",
     {
       schema: {
         tags: ["Products"],
-        summary: "Crear un nuevo producto",
+        summary: "Crear un nuevo producto en el catálogo",
       },
     },
     async (request, reply): Promise<ApiResponse<ProductDTO>> => {
-    const body = CreateProductSchema.parse(request.body);
-
-    const existing = await prisma.product.findFirst({
-      where: {
-        tenantId: request.tenantId,
-        OR: [
-          { sku: body.sku },
-          ...(body.barcode ? [{ barcode: body.barcode }] : []),
-        ],
-      },
-    });
-
-    if (existing) {
-      throw new WmsError(
-        "VALIDATION_ERROR",
-        `A product with SKU "${body.sku}"${body.barcode ? ` or barcode "${body.barcode}"` : ""} already exists`,
-        409,
+      const body = CreateProductSchema.parse(request.body);
+      const created = await createProduct(
+        app.catalogRepository,
+        request.tenantId,
+        body,
       );
-    }
 
-    const product = await prisma.product.create({
-      data: { ...body, tenantId: request.tenantId },
-    });
+      return reply.status(201).send({
+        success: true,
+        data: created,
+      });
+    },
+  );
 
-    return reply.status(201).send({
-      success: true,
-      data: {
-        id: product.id,
-        sku: product.sku,
-        name: product.name,
-        barcode: product.barcode,
-        description: product.description,
-        weightGrams: product.weightGrams,
-        imageUrl: product.imageUrl,
-        isActive: product.isActive,
-      },
-    });
-  });
-
-  // PATCH /api/v1/products/:id — Actualización parcial
+  // PATCH /api/v1/products/:id — Actualización parcial de producto
   app.patch<{ Params: { id: string } }>(
     "/:id",
     {
@@ -140,33 +137,17 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request): Promise<ApiResponse<ProductDTO>> => {
-      const body = CreateProductSchema.partial().parse(request.body);
-
-      const product = await prisma.product.findFirst({
-        where: { id: request.params.id, tenantId: request.tenantId },
-      });
-
-      if (!product) {
-        throw new WmsError("PRODUCT_NOT_FOUND", `Product ${request.params.id} not found`, 404);
-      }
-
-      const updated = await prisma.product.update({
-        where: { id: product.id },
-        data: body,
-      });
+      const body = UpdateProductSchema.parse(request.body);
+      const updated = await updateProduct(
+        app.catalogRepository,
+        request.tenantId,
+        request.params.id,
+        body,
+      );
 
       return {
         success: true,
-        data: {
-          id: updated.id,
-          sku: updated.sku,
-          name: updated.name,
-          barcode: updated.barcode,
-          description: updated.description,
-          weightGrams: updated.weightGrams,
-          imageUrl: updated.imageUrl,
-          isActive: updated.isActive,
-        },
+        data: updated,
       };
     },
   );

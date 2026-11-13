@@ -548,15 +548,30 @@ describe("F7.2 — TenantContextPort, withTenantContext y PostgreSQL FORCE RLS",
     });
 
     it("verifica que las migraciones SQL y buildTenantRlsSqlStatements cubren todas las tablas con ENABLE + FORCE ROW LEVEL SECURITY", async () => {
+      const basePath = process.cwd().includes("apps")
+        ? "../../packages/db/prisma/migrations"
+        : "packages/db/prisma/migrations";
       const migrationPath1 = resolve(
         process.cwd(),
-        "../../packages/db/prisma/migrations/20261031010000_tenant_rls/migration.sql",
+        basePath,
+        "20261031010000_tenant_rls/migration.sql",
       );
       const migrationPath2 = resolve(
         process.cwd(),
-        "../../packages/db/prisma/migrations/20261110120000_idempotency_records/migration.sql",
+        basePath,
+        "20261110120000_idempotency_records/migration.sql",
       );
-      const migrationSql = readFileSync(migrationPath1, "utf8") + "\n" + readFileSync(migrationPath2, "utf8");
+      const migrationPath3 = resolve(
+        process.cwd(),
+        basePath,
+        "20261113010000_catalog_categories/migration.sql",
+      );
+      const migrationSql =
+        readFileSync(migrationPath1, "utf8") +
+        "\n" +
+        readFileSync(migrationPath2, "utf8") +
+        "\n" +
+        readFileSync(migrationPath3, "utf8");
       const generatedStatements = buildTenantRlsSqlStatements();
 
       const expectedTables = [
@@ -571,6 +586,7 @@ describe("F7.2 — TenantContextPort, withTenantContext y PostgreSQL FORCE RLS",
         "warehouse_tasks",
         "task_steps",
         "idempotency_records",
+        "categories",
       ];
 
       expect(RLS_PROTECTED_TABLES.map((t) => t.tableName)).toEqual(
