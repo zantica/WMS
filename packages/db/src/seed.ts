@@ -59,19 +59,98 @@ async function main() {
   }
   console.log(`✅ ${locationDefs.length} locations created`);
 
+  // ── Usuarios de demo ──────────────────────────────────────────────────────
+  const demoUsers = [
+    {
+      clerkId: "user_demo_admin_clerk",
+      name: "Admin Demo",
+      email: "admin@demo-wms.com",
+      role: "ADMIN" as const,
+    },
+    {
+      clerkId: "user_demo_supervisor_clerk",
+      name: "Supervisor Demo",
+      email: "supervisor@demo-wms.com",
+      role: "SUPERVISOR" as const,
+    },
+    {
+      clerkId: "user_demo_operator_clerk",
+      name: "Operador Demo",
+      email: "operator@demo-wms.com",
+      role: "OPERATOR" as const,
+    },
+  ];
+
+  for (const user of demoUsers) {
+    await prisma.user.upsert({
+      where: { clerkId: user.clerkId },
+      update: { name: user.name, email: user.email, role: user.role, isActive: true },
+      create: { ...user, tenantId: tenant.id },
+    });
+  }
+  console.log(`✅ ${demoUsers.length} demo users created (ADMIN, SUPERVISOR, OPERATOR)`);
+
+  // ── Categorías de demo ────────────────────────────────────────────────────
+  const categoryDefs = [
+    { code: "ROPA", name: "Ropa y Textiles", description: "Prendas de vestir y confección" },
+    { code: "CALZADO", name: "Calzado Deportivo y Formal", description: "Zapatos, zapatillas y botas" },
+    { code: "ACCESORIOS", name: "Accesorios y Equipamiento", description: "Bolsos, mochilas, botellas y complementos" },
+  ];
+
+  const categoryMap = new Map<string, string>();
+  for (const cat of categoryDefs) {
+    const saved = await prisma.category.upsert({
+      where: { tenantId_code: { tenantId: tenant.id, code: cat.code } },
+      update: { name: cat.name, description: cat.description, isActive: true },
+      create: { ...cat, tenantId: tenant.id },
+    });
+    categoryMap.set(saved.code, saved.id);
+  }
+  console.log(`✅ ${categoryDefs.length} categories created (ROPA, CALZADO, ACCESORIOS)`);
+
   // ── Productos de prueba ───────────────────────────────────────────────────
   const products = [
-    { sku: "PROD-001", name: "Camiseta Básica Blanca", barcode: "8410376000019", weightGrams: 200 },
-    { sku: "PROD-002", name: "Pantalón Vaquero Slim", barcode: "8410376000026", weightGrams: 600 },
-    { sku: "PROD-003", name: "Zapatillas Running X200", barcode: "8410376000033", weightGrams: 800 },
-    { sku: "PROD-004", name: "Mochila Urbana 20L", barcode: "8410376000040", weightGrams: 450 },
-    { sku: "PROD-005", name: "Botella Termo 500ml", barcode: "8410376000057", weightGrams: 350 },
+    {
+      sku: "PROD-001",
+      name: "Camiseta Básica Blanca",
+      barcode: "8410376000019",
+      weightGrams: 200,
+      categoryId: categoryMap.get("ROPA") ?? null,
+    },
+    {
+      sku: "PROD-002",
+      name: "Pantalón Vaquero Slim",
+      barcode: "8410376000026",
+      weightGrams: 600,
+      categoryId: categoryMap.get("ROPA") ?? null,
+    },
+    {
+      sku: "PROD-003",
+      name: "Zapatillas Running X200",
+      barcode: "8410376000033",
+      weightGrams: 800,
+      categoryId: categoryMap.get("CALZADO") ?? null,
+    },
+    {
+      sku: "PROD-004",
+      name: "Mochila Urbana 20L",
+      barcode: "8410376000040",
+      weightGrams: 450,
+      categoryId: categoryMap.get("ACCESORIOS") ?? null,
+    },
+    {
+      sku: "PROD-005",
+      name: "Botella Termo 500ml",
+      barcode: "8410376000057",
+      weightGrams: 350,
+      categoryId: categoryMap.get("ACCESORIOS") ?? null,
+    },
   ];
 
   for (const prod of products) {
     await prisma.product.upsert({
       where: { tenantId_sku: { tenantId: tenant.id, sku: prod.sku } },
-      update: {},
+      update: { categoryId: prod.categoryId },
       create: { ...prod, tenantId: tenant.id },
     });
   }

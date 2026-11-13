@@ -24,6 +24,7 @@ model Tenant {
 
   warehouses Warehouse[]
   users      User[]
+  categories Category[]
   idempotencyRecords IdempotencyRecord[]
 
   @@map("tenants")
@@ -101,9 +102,28 @@ enum LocationType {
   DISPATCH   // Zona de salida — stock listo para courier
 }
 
+model Category {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("categories")
+}
+
 model Product {
   id          String   @id @default(cuid())
   tenantId    String
+  categoryId  String?
   sku         String
   name        String
   /// EAN13 o Code128
@@ -118,6 +138,7 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  category     Category?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   balances     InventoryBalance[]
   transactions InventoryTransaction[]
   orderLines   OrderLine[]
@@ -126,6 +147,7 @@ model Product {
   @@unique([tenantId, sku])
   @@unique([tenantId, barcode])
   @@index([tenantId])
+  @@index([tenantId, categoryId])
   @@map("products")
 }
 
