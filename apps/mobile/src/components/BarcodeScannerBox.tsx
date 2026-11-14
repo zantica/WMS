@@ -3,7 +3,7 @@
 // Soporta cámara (expo-camera) y entrada rápida por teclado/lector láser HID (Zebra/Honeywell).
 // Alineado con el Design System S5 dark-data-dense (@wms/shared-types): cero hex crudos y targets >= 44px.
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -19,10 +19,13 @@ import {
 import {
   WMS_COLORS,
   WMS_FONT_SIZES,
+  WMS_HANDHELD_FONT_SIZES,
+  WMS_HANDHELD_TOUCH_TARGET,
   WMS_MIN_TOUCH_TARGET,
   WMS_RADII,
   WMS_SPACING,
   monoText,
+  type WmsHandedness,
 } from "../theme/tokens";
 import { WmsTag } from "./WmsUiPrimitives";
 
@@ -33,6 +36,10 @@ export interface BarcodeScannerBoxProps {
   expectedCodeHint?: string | null;
   disabled?: boolean;
   defaultMode?: "camera" | "manual";
+  autoFocus?: boolean;
+  continuousCamera?: boolean;
+  continuousCooldownMs?: number;
+  handedness?: WmsHandedness;
 }
 
 const SUPPORTED_BARCODE_TYPES = [
@@ -52,12 +59,36 @@ export function BarcodeScannerBox({
   expectedCodeHint,
   disabled = false,
   defaultMode = "manual",
+  autoFocus = true,
+  continuousCamera = true,
+  continuousCooldownMs = 1200,
+  handedness = "right",
 }: BarcodeScannerBoxProps): JSX.Element {
   const [mode, setMode] = useState<"camera" | "manual">(defaultMode);
   const [manualCode, setManualCode] = useState<string>("");
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [cameraLocked, setCameraLocked] = useState<boolean>(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const inputRef = useRef<{ focus?: () => void } | null>(null);
+
+  const refocusInput = useCallback(() => {
+    if (!autoFocus || disabled || mode !== "manual") return;
+    setTimeout(() => {
+      inputRef.current?.focus?.();
+    }, 50);
+  }, [autoFocus, disabled, mode]);
+
+  useEffect(() => {
+    refocusInput();
+  }, [refocusInput, expectedCodeHint]);
+
+  useEffect(() => {
+    if (!cameraLocked || !continuousCamera) return;
+    const timer = setTimeout(() => {
+      setCameraLocked(false);
+    }, continuousCooldownMs);
+    return () => clearTimeout(timer);
+  }, [cameraLocked, continuousCamera, continuousCooldownMs]);
 
   const triggerScan = useCallback(
     (rawCode: string) => {
@@ -66,8 +97,9 @@ export function BarcodeScannerBox({
       if (!normalized) return;
       setLastScanned(normalized);
       onScan(normalized);
+      refocusInput();
     },
-    [disabled, onScan],
+    [disabled, onScan, refocusInput],
   );
 
   const handleManualSubmit = useCallback(() => {
@@ -144,14 +176,24 @@ export function BarcodeScannerBox({
       ) : null}
 
       {mode === "manual" ? (
-        <View style={styles.manualContainer}>
+        <View
+          style={[
+            styles.manualContainer,
+            handedness === "left" ? styles.manualContainerLeft : null,
+          ]}
+        >
           <TextInput
+            {...({ ref: inputRef, blurOnSubmit: false } as Record<
+              string,
+              unknown
+            >)}
             style={[styles.input, monoText]}
             value={manualCode}
             onChangeText={setManualCode}
             onSubmitEditing={handleManualSubmit}
             placeholder={placeholder}
             placeholderTextColor={WMS_COLORS.muted}
+            autoFocus={autoFocus}
             autoCapitalize="characters"
             autoCorrect={false}
             returnKeyType="done"
@@ -267,7 +309,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
     fontWeight: "700",
     flexShrink: 1,
   },
@@ -280,7 +322,9 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   modeButton: {
-    paddingHorizontal: WMS_SPACING.sm,
+    minHeight: WMS_MIN_TOUCH_TARGET,
+    justifyContent: "center",
+    paddingHorizontal: WMS_SPACING.md,
     paddingVertical: 6,
     borderRadius: WMS_RADII.sm,
   },
@@ -291,7 +335,7 @@ const styles = StyleSheet.create({
   },
   modeButtonText: {
     color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
+    fontSize: WMS_HANDHELD_FONT_SIZES.caption,
     fontWeight: "600",
   },
   modeButtonTextActive: {
@@ -301,37 +345,42 @@ const styles = StyleSheet.create({
   hintBanner: {
     backgroundColor: WMS_COLORS.bg,
     borderRadius: WMS_RADII.md,
-    paddingHorizontal: WMS_SPACING.sm,
-    paddingVertical: 6,
-    borderLeftWidth: 3,
+    paddingHorizontal: WMS_SPACING.md,
+    paddingVertical: WMS_SPACING.sm,
+    borderLeftWidth: 4,
     borderLeftColor: WMS_COLORS.accent,
   },
   hintText: {
     color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
+    fontSize: WMS_HANDHELD_FONT_SIZES.caption,
   },
   hintCode: {
     color: WMS_COLORS.accent,
-    fontWeight: "700",
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
+    fontWeight: "800",
   },
   manualContainer: {
     flexDirection: "row",
     gap: WMS_SPACING.sm,
   },
+  manualContainerLeft: {
+    flexDirection: "row-reverse",
+  },
   input: {
     flex: 1,
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.surface,
     color: WMS_COLORS.text,
     borderRadius: WMS_RADII.md,
     paddingHorizontal: WMS_SPACING.md,
     paddingVertical: WMS_SPACING.sm,
-    fontSize: WMS_FONT_SIZES.sm,
-    borderWidth: 1,
-    borderColor: WMS_COLORS.borderStrong,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
+    borderWidth: 2,
+    borderColor: WMS_COLORS.accentBorder,
   },
   confirmButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
+    minWidth: 112,
     backgroundColor: WMS_COLORS.accent,
     borderRadius: WMS_RADII.md,
     paddingHorizontal: WMS_SPACING.lg,
@@ -346,7 +395,7 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     color: WMS_COLORS.accentContrast,
     fontWeight: "800",
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
   },
   confirmButtonTextDisabled: {
     color: WMS_COLORS.muted,

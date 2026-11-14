@@ -13,10 +13,13 @@ import {
 import {
   WMS_COLORS,
   WMS_FONT_SIZES,
+  WMS_HANDHELD_FONT_SIZES,
+  WMS_HANDHELD_TOUCH_TARGET,
   WMS_MIN_TOUCH_TARGET,
   WMS_RADII,
   WMS_SPACING,
   monoText,
+  type WmsHandedness,
 } from "../theme/tokens.js";
 
 export const commonTaskStyles = StyleSheet.create({
@@ -95,7 +98,7 @@ export const commonTaskStyles = StyleSheet.create({
   },
   qtyControlLabel: {
     color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
+    fontSize: WMS_HANDHELD_FONT_SIZES.caption,
     fontWeight: "600",
   },
   qtyButtonsGroup: {
@@ -104,8 +107,12 @@ export const commonTaskStyles = StyleSheet.create({
     flexWrap: "wrap",
     gap: WMS_SPACING.sm,
   },
+  qtyButtonsGroupLeft: {
+    flexDirection: "row-reverse",
+  },
   qtyStepBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
+    minWidth: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.surfaceHover,
     borderWidth: 1,
     borderColor: WMS_COLORS.borderStrong,
@@ -117,11 +124,11 @@ export const commonTaskStyles = StyleSheet.create({
   },
   qtyStepBtnText: {
     color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
     fontWeight: "800",
   },
   qtyInput: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.surface,
     color: WMS_COLORS.text,
     borderWidth: 1,
@@ -129,13 +136,13 @@ export const commonTaskStyles = StyleSheet.create({
     borderRadius: WMS_RADII.md,
     paddingHorizontal: WMS_SPACING.md,
     paddingVertical: 6,
-    minWidth: 68,
+    minWidth: 76,
     textAlign: "center",
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: WMS_HANDHELD_FONT_SIZES.heading,
+    fontWeight: "800",
   },
   qtyMaxBtn: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.accentTint,
     borderWidth: 1,
     borderColor: WMS_COLORS.accentBorder,
@@ -147,17 +154,18 @@ export const commonTaskStyles = StyleSheet.create({
   },
   qtyMaxBtnText: {
     color: WMS_COLORS.accent,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
+    fontWeight: "800",
   },
   exceptionContainer: {
     gap: WMS_SPACING.sm,
   },
   toggleExceptionButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.warningTint,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
+    paddingHorizontal: WMS_SPACING.md,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -165,8 +173,8 @@ export const commonTaskStyles = StyleSheet.create({
   },
   toggleExceptionText: {
     color: WMS_COLORS.warning,
-    fontSize: WMS_FONT_SIZES.xs,
-    fontWeight: "700",
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
+    fontWeight: "800",
   },
   exceptionForm: {
     backgroundColor: WMS_COLORS.surfaceCard,
@@ -188,7 +196,7 @@ export const commonTaskStyles = StyleSheet.create({
     fontSize: 13,
   },
   submitExceptionButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.warning,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
@@ -197,7 +205,7 @@ export const commonTaskStyles = StyleSheet.create({
   },
   submitExceptionButtonText: {
     color: WMS_COLORS.accentContrast,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
     fontWeight: "800",
   },
   stepsListSection: {
@@ -247,6 +255,7 @@ export interface TaskQuantityControlProps {
   readonly onSelectMax?: (() => void) | undefined;
   readonly disabled?: boolean | undefined;
   readonly inputTestID?: string | undefined;
+  readonly handedness?: WmsHandedness | undefined;
 }
 
 export function TaskQuantityControl({
@@ -258,11 +267,17 @@ export function TaskQuantityControl({
   onSelectMax,
   disabled = false,
   inputTestID,
+  handedness = "right",
 }: TaskQuantityControlProps): JSX.Element {
   return (
     <View style={commonTaskStyles.qtyControlRow}>
       <Text style={commonTaskStyles.qtyControlLabel}>{label}</Text>
-      <View style={commonTaskStyles.qtyButtonsGroup}>
+      <View
+        style={[
+          commonTaskStyles.qtyButtonsGroup,
+          handedness === "left" ? commonTaskStyles.qtyButtonsGroupLeft : null,
+        ]}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Restar 10 unidades"
