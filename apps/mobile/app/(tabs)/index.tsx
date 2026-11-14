@@ -3,7 +3,7 @@
 // Consume GET /api/v1/tasks y POST /api/v1/tasks/:id/start mediante el cliente HTTP tipado.
 // Rediseñada con el HUD de telemetría S5 dark-data-dense (@wms/shared-types): cero hex crudos.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -23,14 +23,14 @@ import { OfflineSyncStatusBar } from "../../src/components/OfflineSyncStatusBar"
 import {
   WmsBanner,
   WmsEmptyState,
-  WmsKpiCard,
   WmsProgressBar,
   WmsTag,
 } from "../../src/components/WmsUiPrimitives";
 import {
   WMS_COLORS,
   WMS_FONT_SIZES,
-  WMS_MIN_TOUCH_TARGET,
+  WMS_HANDHELD_FONT_SIZES,
+  WMS_HANDHELD_TOUCH_TARGET,
   WMS_RADII,
   WMS_SPACING,
   monoText,
@@ -123,18 +123,6 @@ export default function TasksListScreen(): JSX.Element {
     void loadTasks(false);
   }, [loadTasks]);
 
-  const queueMetrics = useMemo(() => {
-    let pendingCount = 0;
-    let inProgressCount = 0;
-    let exceptionCount = 0;
-    for (const task of tasks) {
-      if (task.status === "PENDING") pendingCount += 1;
-      else if (task.status === "IN_PROGRESS") inProgressCount += 1;
-      else if (task.status === "EXCEPTION") exceptionCount += 1;
-    }
-    return { pendingCount, inProgressCount, exceptionCount };
-  }, [tasks]);
-
   const handleStartOrOpenTask = useCallback(
     async (task: WarehouseTaskDTO) => {
       setErrorBanner(null);
@@ -170,33 +158,6 @@ export default function TasksListScreen(): JSX.Element {
           <Text style={styles.operatorHighlight}>{session.operatorName}</Text>
         </View>
         <WmsTag label={session.warehouseId} symbol="◆" tone="blue" mono />
-      </View>
-
-      {/* HUD compacto de cola operativa móvil */}
-      <View style={styles.kpiRow}>
-        <WmsKpiCard
-          label="En curso"
-          value={queueMetrics.inProgressCount}
-          unit="tareas"
-          tone="amber"
-          tagLabel="▲ PISO"
-        />
-        <WmsKpiCard
-          label="Pendientes"
-          value={queueMetrics.pendingCount}
-          unit="tareas"
-          tone="blue"
-          tagLabel="● COLA"
-        />
-        {queueMetrics.exceptionCount > 0 ? (
-          <WmsKpiCard
-            label="Excepciones"
-            value={queueMetrics.exceptionCount}
-            unit="alertas"
-            tone="rose"
-            tagLabel="⚠ REVISAR"
-          />
-        ) : null}
       </View>
 
       <View style={styles.filterRow}>
@@ -396,14 +357,8 @@ const styles = StyleSheet.create({
   },
   operatorHighlight: {
     color: WMS_COLORS.text,
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
     fontWeight: "700",
-  },
-  kpiRow: {
-    flexDirection: "row",
-    gap: WMS_SPACING.sm,
-    paddingHorizontal: WMS_SPACING.lg,
-    paddingTop: WMS_SPACING.md,
   },
   filterRow: {
     flexDirection: "row",
@@ -413,8 +368,10 @@ const styles = StyleSheet.create({
     paddingVertical: WMS_SPACING.md,
   },
   filterChip: {
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
+    justifyContent: "center",
     paddingHorizontal: WMS_SPACING.md,
-    paddingVertical: 6,
+    paddingVertical: WMS_SPACING.sm,
     borderRadius: WMS_RADII.sm,
     backgroundColor: WMS_COLORS.surfaceCard,
     borderWidth: 1,
@@ -426,7 +383,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     color: WMS_COLORS.muted,
-    fontSize: WMS_FONT_SIZES.xs,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
     fontWeight: "600",
   },
   filterChipTextActive: {
@@ -498,20 +455,20 @@ const styles = StyleSheet.create({
   },
   nextStepLocation: {
     color: WMS_COLORS.accent,
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
     fontWeight: "800",
   },
   nextStepProduct: {
     color: WMS_COLORS.text,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
   },
   allCompletedText: {
     color: WMS_COLORS.success,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
     fontWeight: "600",
   },
   actionButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
     alignItems: "center",
@@ -527,7 +484,7 @@ const styles = StyleSheet.create({
     borderColor: WMS_COLORS.borderStrong,
   },
   actionButtonText: {
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
     fontWeight: "800",
   },
   actionButtonTextPrimary: {
