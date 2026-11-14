@@ -7,6 +7,8 @@ import {
   WMS_COLORS,
   WMS_DESIGN_TOKENS,
   WMS_FONT_SIZES,
+  WMS_HANDHELD_FONT_SIZES,
+  WMS_HANDHELD_TOUCH_TARGET,
   WMS_MIN_TOUCH_TARGET,
   WMS_RADII,
   WMS_SPACING,
@@ -58,6 +60,14 @@ describe("mobile theme tokens & shared design system (@wms/mobile)", () => {
 
     expect(WMS_FONT_SIZES.display).toBe(30);
     expect(WMS_MIN_TOUCH_TARGET).toBe(44);
+    expect(WMS_HANDHELD_TOUCH_TARGET).toBe(64);
+    expect(WMS_HANDHELD_FONT_SIZES).toEqual({
+      caption: 14,
+      label: 16,
+      body: 18,
+      heading: 22,
+      scanTarget: 32,
+    });
     expect(tabularNums.fontVariant).toEqual(["tabular-nums"]);
     expect(monoText.fontFamily).toBe("monospace");
     expect(monoText.fontVariant).toEqual(["tabular-nums"]);

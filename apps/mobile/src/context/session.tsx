@@ -16,6 +16,7 @@ import {
   createWmsClient,
   type HealthCheckResponse,
 } from "../api/client";
+import type { WmsHandedness } from "../theme/tokens";
 
 /**
  * Detecta automáticamente la IP de la máquina host (donde corre Metro / Expo)
@@ -39,6 +40,9 @@ export interface OperatorSession {
   warehouseId: string;
   operatorName: string;
   isConnected: boolean;
+  handedness: WmsHandedness;
+  soundEnabled: boolean;
+  hapticEnabled: boolean;
 }
 
 export interface SessionContextValue {
@@ -59,6 +63,9 @@ export const DEFAULT_OPERATOR_SESSION: OperatorSession = {
   warehouseId: "warehouse-demo",
   operatorName: "Operario Turno A",
   isConnected: true,
+  handedness: "right",
+  soundEnabled: true,
+  hapticEnabled: true,
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
