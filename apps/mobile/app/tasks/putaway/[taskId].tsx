@@ -35,10 +35,12 @@ import {
 import { useSession } from "../../../src/context/session";
 import { useOfflineSync } from "../../../src/context/offline-sync";
 import { WmsApiClientError } from "../../../src/api/client";
+import { triggerOperatorFeedback } from "../../../src/feedback/operator-feedback";
 import {
   WMS_COLORS,
   WMS_FONT_SIZES,
-  WMS_MIN_TOUCH_TARGET,
+  WMS_HANDHELD_FONT_SIZES,
+  WMS_HANDHELD_TOUCH_TARGET,
   WMS_RADII,
   WMS_SPACING,
   monoText,
@@ -57,8 +59,16 @@ export default function PutawayTaskScreen(): JSX.Element {
   const router = useRouter();
   const params = useLocalSearchParams<{ taskId?: string }>();
   const taskId = typeof params.taskId === "string" ? params.taskId : "";
-  const { client } = useSession();
+  const { client, session } = useSession();
   const { cache, isOnline, enqueueStepConfirmation } = useOfflineSync();
+
+  const feedbackOptions = useMemo(
+    () => ({
+      soundEnabled: session.soundEnabled,
+      hapticEnabled: session.hapticEnabled,
+    }),
+    [session.soundEnabled, session.hapticEnabled],
+  );
 
   const [task, setTask] = useState<WarehouseTaskDTO | null>(null);
   const [qtyInput, setQtyInput] = useState<string>("1");
@@ -173,11 +183,13 @@ export default function PutawayTaskScreen(): JSX.Element {
         });
 
         if (!offRes.success) {
+          triggerOperatorFeedback("error", feedbackOptions);
           if (offRes.error) setDomainError(offRes.error);
           setIsSubmitting(false);
           return;
         }
 
+        triggerOperatorFeedback("success", feedbackOptions);
         if (offRes.updatedTask) {
           setTask(offRes.updatedTask);
           const next = getNextActiveStep(offRes.updatedTask.steps);
@@ -200,6 +212,7 @@ export default function PutawayTaskScreen(): JSX.Element {
           quantity: parsedQty,
         });
 
+        triggerOperatorFeedback("success", feedbackOptions);
         setSuccessNote(
           `Ubicado en ${nextStep.locationCode}: ${res.scannedQty}/${res.expectedQty} uds (${res.stepStatus}).`,
         );
@@ -207,6 +220,7 @@ export default function PutawayTaskScreen(): JSX.Element {
         setExceptionNote("");
         await loadTask();
       } catch (err) {
+        triggerOperatorFeedback("error", feedbackOptions);
         setDomainError(formatDomainErrorBanner(err));
       } finally {
         setIsSubmitting(false);
@@ -221,6 +235,7 @@ export default function PutawayTaskScreen(): JSX.Element {
       enqueueStepConfirmation,
       client,
       loadTask,
+      feedbackOptions,
     ],
   );
 
@@ -242,6 +257,7 @@ export default function PutawayTaskScreen(): JSX.Element {
         exceptionNote: note,
       });
 
+      triggerOperatorFeedback("warning", feedbackOptions);
       setSuccessNote(
         `Incidencia registrada en paso #${nextStep.sequence} (${res.stepStatus}).`,
       );
@@ -249,11 +265,12 @@ export default function PutawayTaskScreen(): JSX.Element {
       setExceptionNote("");
       await loadTask();
     } catch (err) {
+      triggerOperatorFeedback("error", feedbackOptions);
       setDomainError(formatDomainErrorBanner(err));
     } finally {
       setIsSubmitting(false);
     }
-  }, [task, nextStep, exceptionNote, client, loadTask]);
+  }, [task, nextStep, exceptionNote, client, loadTask, feedbackOptions]);
 
   if (isLoading) {
     return (
@@ -410,6 +427,7 @@ export default function PutawayTaskScreen(): JSX.Element {
                 setQtyInput(String(Math.max(1, getRemainingStepQty(nextStep))))
               }
               disabled={isSubmitting}
+              handedness={session.handedness}
               inputTestID="putaway-qty-input"
             />
 
@@ -421,6 +439,7 @@ export default function PutawayTaskScreen(): JSX.Element {
               placeholder="Escanea el QR de la estantería o código del producto..."
               expectedCodeHint={`${nextStep.locationCode} / ${nextStep.productBarcode ?? nextStep.productSku}`}
               disabled={isSubmitting}
+              handedness={session.handedness}
             />
 
             {/* Botón y formulario para reportar excepción en ubicación/stock */}
@@ -548,7 +567,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   backToQueueButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.accent,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
@@ -558,7 +577,7 @@ const styles = StyleSheet.create({
   },
   backToQueueButtonText: {
     color: WMS_COLORS.accentContrast,
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
     fontWeight: "800",
   },
   guidedPanel: {
@@ -580,11 +599,11 @@ const styles = StyleSheet.create({
   },
   destinationInstruction: {
     color: WMS_COLORS.muted,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
   },
   destinationCode: {
     color: WMS_COLORS.accent,
-    fontSize: WMS_FONT_SIZES.display,
+    fontSize: WMS_HANDHELD_FONT_SIZES.scanTarget,
     fontWeight: "900",
   },
   stepRowCurrent: {

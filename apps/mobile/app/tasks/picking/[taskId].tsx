@@ -37,10 +37,12 @@ import {
 import { useSession } from "../../../src/context/session";
 import { useOfflineSync } from "../../../src/context/offline-sync";
 import { WmsApiClientError } from "../../../src/api/client";
+import { triggerOperatorFeedback } from "../../../src/feedback/operator-feedback";
 import {
   WMS_COLORS,
   WMS_FONT_SIZES,
-  WMS_MIN_TOUCH_TARGET,
+  WMS_HANDHELD_FONT_SIZES,
+  WMS_HANDHELD_TOUCH_TARGET,
   WMS_RADII,
   WMS_SPACING,
   monoText,
@@ -67,8 +69,16 @@ export default function PickingTaskScreen(): JSX.Element {
   const router = useRouter();
   const params = useLocalSearchParams<{ taskId?: string }>();
   const taskId = typeof params.taskId === "string" ? params.taskId : "";
-  const { client } = useSession();
+  const { client, session } = useSession();
   const { cache, isOnline } = useOfflineSync();
+
+  const feedbackOptions = useMemo(
+    () => ({
+      soundEnabled: session.soundEnabled,
+      hapticEnabled: session.hapticEnabled,
+    }),
+    [session.soundEnabled, session.hapticEnabled],
+  );
 
   const [task, setTask] = useState<WarehouseTaskDTO | null>(null);
   const [dualScan, setDualScan] = useState<DualScanState>(
@@ -207,6 +217,7 @@ export default function PickingTaskScreen(): JSX.Element {
       const transition = advanceDualScanState(dualScan, nextStep, scannedCode);
 
       if (!transition.valid) {
+        triggerOperatorFeedback("error", feedbackOptions);
         setDualScan({
           stepId: nextStep.id,
           stage: transition.nextStage,
@@ -227,6 +238,7 @@ export default function PickingTaskScreen(): JSX.Element {
 
       // 1º Escaneo completado: Ubicación STORAGE verificada -> pasamos a pedir Producto
       if (transition.nextStage === "AWAITING_PRODUCT") {
+        triggerOperatorFeedback("success", feedbackOptions);
         setDualScan({
           stepId: nextStep.id,
           stage: "AWAITING_PRODUCT",
@@ -252,6 +264,7 @@ export default function PickingTaskScreen(): JSX.Element {
           quantity: parsedQty,
         });
 
+        triggerOperatorFeedback("success", feedbackOptions);
         setSuccessNote(
           `Extraído de ${nextStep.locationCode} hacia PACKING: ${res.scannedQty}/${res.expectedQty} uds (${res.stepStatus}).`,
         );
@@ -260,12 +273,13 @@ export default function PickingTaskScreen(): JSX.Element {
         setDualScan(createInitialDualScanState(""));
         await loadTask();
       } catch (err) {
+        triggerOperatorFeedback("error", feedbackOptions);
         setDomainError(formatDomainErrorBanner(err));
       } finally {
         setIsSubmitting(false);
       }
     },
-    [task, nextStep, dualScan, parsedQty, client, loadTask],
+    [task, nextStep, dualScan, parsedQty, client, loadTask, feedbackOptions],
   );
 
   const handleReportException = useCallback(async () => {
@@ -286,6 +300,7 @@ export default function PickingTaskScreen(): JSX.Element {
         exceptionNote: note,
       });
 
+      triggerOperatorFeedback("warning", feedbackOptions);
       const feedback = formatPickingExceptionFeedback(res, nextStep);
       setExceptionFeedback(feedback);
       setShowExceptionForm(false);
@@ -293,11 +308,12 @@ export default function PickingTaskScreen(): JSX.Element {
       setDualScan(createInitialDualScanState(""));
       await loadTask();
     } catch (err) {
+      triggerOperatorFeedback("error", feedbackOptions);
       setDomainError(formatDomainErrorBanner(err));
     } finally {
       setIsSubmitting(false);
     }
-  }, [task, nextStep, exceptionNote, client, loadTask]);
+  }, [task, nextStep, exceptionNote, client, loadTask, feedbackOptions]);
 
   const handleDispatchOrder = useCallback(async () => {
     if (!task?.orderId) return;
@@ -307,16 +323,18 @@ export default function PickingTaskScreen(): JSX.Element {
 
     try {
       const result = await client.dispatchOrder(task.orderId);
+      triggerOperatorFeedback("success", feedbackOptions);
       setDispatchedOrderStatus(result.status);
       setSuccessNote(
         `Pedido #${result.orderId} empaquetado y despachado (${result.status}).`,
       );
     } catch (err) {
+      triggerOperatorFeedback("error", feedbackOptions);
       setDomainError(formatDomainErrorBanner(err));
     } finally {
       setIsSubmitting(false);
     }
-  }, [task?.orderId, client]);
+  }, [task?.orderId, client, feedbackOptions]);
 
   if (isLoading) {
     return (
@@ -577,6 +595,7 @@ export default function PickingTaskScreen(): JSX.Element {
                 setQtyInput(String(Math.max(1, getRemainingStepQty(nextStep))))
               }
               disabled={isSubmitting}
+              handedness={session.handedness}
               inputTestID="picking-qty-input"
             />
 
@@ -600,6 +619,7 @@ export default function PickingTaskScreen(): JSX.Element {
                   : `${nextStep.locationCode}`
               }
               disabled={isSubmitting}
+              handedness={session.handedness}
             />
 
             {/* Reporte de excepción en tiempo real (F3.2: Ubicación vacía / Rotura de stock) */}
@@ -752,7 +772,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   dispatchButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.accent,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
@@ -762,12 +782,12 @@ const styles = StyleSheet.create({
   },
   dispatchButtonText: {
     color: WMS_COLORS.accentContrast,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
     fontWeight: "800",
     textAlign: "center",
   },
   backToQueueButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.surfaceCard,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
@@ -778,7 +798,7 @@ const styles = StyleSheet.create({
   },
   backToQueueButtonText: {
     color: WMS_COLORS.text,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
     fontWeight: "700",
   },
   guidedPanel: {
@@ -800,11 +820,11 @@ const styles = StyleSheet.create({
   },
   destinationInstruction: {
     color: WMS_COLORS.muted,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
   },
   destinationCode: {
     color: WMS_COLORS.accent,
-    fontSize: WMS_FONT_SIZES.display,
+    fontSize: WMS_HANDHELD_FONT_SIZES.scanTarget,
     fontWeight: "900",
   },
   dualScanChecklist: {

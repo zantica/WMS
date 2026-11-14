@@ -34,10 +34,12 @@ import {
 import { useSession } from "../../../src/context/session";
 import { useOfflineSync } from "../../../src/context/offline-sync";
 import { WmsApiClientError } from "../../../src/api/client";
+import { triggerOperatorFeedback } from "../../../src/feedback/operator-feedback";
 import {
   WMS_COLORS,
   WMS_FONT_SIZES,
-  WMS_MIN_TOUCH_TARGET,
+  WMS_HANDHELD_FONT_SIZES,
+  WMS_HANDHELD_TOUCH_TARGET,
   WMS_RADII,
   WMS_SPACING,
   monoText,
@@ -57,8 +59,16 @@ export default function ReceivingTaskScreen(): JSX.Element {
   const router = useRouter();
   const params = useLocalSearchParams<{ taskId?: string }>();
   const taskId = typeof params.taskId === "string" ? params.taskId : "";
-  const { client } = useSession();
+  const { client, session } = useSession();
   const { cache, isOnline, enqueueReceiptLineConfirmation } = useOfflineSync();
+
+  const feedbackOptions = useMemo(
+    () => ({
+      soundEnabled: session.soundEnabled,
+      hapticEnabled: session.hapticEnabled,
+    }),
+    [session.soundEnabled, session.hapticEnabled],
+  );
 
   const [task, setTask] = useState<WarehouseTaskDTO | null>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
@@ -221,11 +231,13 @@ export default function ReceivingTaskScreen(): JSX.Element {
           });
 
           if (!offRes.success) {
+            triggerOperatorFeedback("error", feedbackOptions);
             if (offRes.error) setDomainError(offRes.error);
             setIsSubmitting(false);
             return;
           }
 
+          triggerOperatorFeedback("success", feedbackOptions);
           if (offRes.updatedTask) {
             setTask(offRes.updatedTask);
           }
@@ -242,6 +254,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
           barcode: scannedCode,
         });
 
+        triggerOperatorFeedback("success", feedbackOptions);
         if (response.putawayTaskId) {
           setGeneratedPutawayTaskId(response.putawayTaskId);
         }
@@ -252,6 +265,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
 
         await loadTask();
       } catch (err) {
+        triggerOperatorFeedback("error", feedbackOptions);
         setDomainError(formatDomainErrorBanner(err));
       } finally {
         setIsSubmitting(false);
@@ -266,6 +280,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
       enqueueReceiptLineConfirmation,
       client,
       loadTask,
+      feedbackOptions,
     ],
   );
 
@@ -417,6 +432,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
                 )
               }
               disabled={isSubmitting}
+              handedness={session.handedness}
               inputTestID="receiving-qty-input"
             />
 
@@ -430,6 +446,7 @@ export default function ReceivingTaskScreen(): JSX.Element {
                 activeStep.productBarcode ?? activeStep.productSku
               }
               disabled={isSubmitting}
+              handedness={session.handedness}
             />
           </View>
         ) : null}
@@ -541,7 +558,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   putawayCtaButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.accent,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
@@ -551,11 +568,11 @@ const styles = StyleSheet.create({
   },
   putawayCtaButtonText: {
     color: WMS_COLORS.accentContrast,
-    fontSize: WMS_FONT_SIZES.sm,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
     fontWeight: "800",
   },
   secondaryBackButton: {
-    minHeight: WMS_MIN_TOUCH_TARGET,
+    minHeight: WMS_HANDHELD_TOUCH_TARGET,
     backgroundColor: WMS_COLORS.surfaceCard,
     borderRadius: WMS_RADII.md,
     paddingVertical: WMS_SPACING.sm,
@@ -566,7 +583,7 @@ const styles = StyleSheet.create({
   },
   secondaryBackButtonText: {
     color: WMS_COLORS.text,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.label,
     fontWeight: "700",
   },
   activeStepPanel: {
@@ -589,12 +606,12 @@ const styles = StyleSheet.create({
   },
   locationBadge: {
     color: WMS_COLORS.accent,
-    fontSize: 13,
+    fontSize: WMS_HANDHELD_FONT_SIZES.body,
     fontWeight: "800",
   },
   productTitle: {
     color: WMS_COLORS.text,
-    fontSize: 15,
+    fontSize: WMS_HANDHELD_FONT_SIZES.heading,
     fontWeight: "700",
   },
   barcodeMeta: {
