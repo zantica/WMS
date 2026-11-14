@@ -62,7 +62,31 @@ Este documento define el estilo activo, tokens consolidados y arquitectura compa
 2. **Cero hex crudos en `.tsx`**: Prohibido usar colores hexadecimales literales (`#...`) en archivos `.tsx` de `apps/web` y `apps/mobile`. Todo color se referencia mediante clases de `globals.css` (Web) o `WMS_COLORS` / `resolveToneColors` (Mobile).
 3. **Un único CTA primario por vista**: Solo la acción principal de sincronización o confirmación principal usa `.wms-btn-primary` / `WMS_COLORS.accent` (`#38BDF8` con texto `WMS_COLORS.accentContrast` `#08172A`).
 4. **Accesibilidad y estados**:
-   - `:focus-visible` con anillo cian de 2px en todo elemento interactivo web y targets táctiles `>= 44px` (`WMS_MIN_TOUCH_TARGET`) en móvil.
+   - `:focus-visible` con anillo cian de 2px en todo elemento interactivo web y targets táctiles `>= 44px` (`WMS_MIN_TOUCH_TARGET`) en web/auxiliares o `>= 64dp` (`WMS_HANDHELD_TOUCH_TARGET`) en controles operativos móviles.
    - Respeto estricto a `prefers-reduced-motion: reduce`.
    - Estados no codificados únicamente por color (siempre acompañados de etiqueta textual e indicador simbólico `●`, `▲`, `✓`, `⚠`, `◆`).
    - Tablas y paneles con estados `loading` y `empty` (`WmsEmptyState`) orientadores.
+
+---
+
+## Perfil Handheld Operator (`@wms/mobile` — Operario de Almacén)
+
+Extiende la paleta semántica `WMS_COLORS` con reglas ergonómicas para operación de pie, a una mano, con guantes, ruido ambiental y luz variable (Zebra, Honeywell, anillos escáner HID y smartphones):
+
+1. **Un pantallazo = una tarea**:
+   - Home = cola de tareas priorizada (sin dashboards de KPIs que empujen la lista ni menús de módulos).
+   - Flujo secuencial tipo wizard: `Ubicación → Producto/SKU → Cantidad → Confirmar → Siguiente`, con pasos secundarios colapsados.
+2. **Escáner protagonista y continuo**:
+   - En modo `Láser / Manual (HID)`, el campo de escaneo mantiene `autoFocus` activo y **re-enfoca automáticamente** tras cada lectura o error.
+   - En modo `Cámara`, soporta **escaneo continuo** con cooldown breve (sin bloqueo manual entre lecturas consecutivas).
+3. **Ergonomía y zona del pulgar**:
+   - `WMS_HANDHELD_TOUCH_TARGET = 64` (mínimo `60dp` en botones de acción, steppers `+/-` y chips; `>= 64dp` en CTA primario).
+   - `WMS_HANDHELD_FONT_SIZES`: `caption: 14`, `label: 16`, `body: 18`, `heading: 22`, `scanTarget: 32` (código objetivo a escanear).
+   - Layout de 3 zonas: **Top** (cabecera contextual + estado sync), **Centro** (objetivo único a escanear en tamaño protagonista), **Bottom Dock** (controles en la zona del pulgar con soporte configurable **zurdo / diestro**).
+   - Sin gestos ocultos (todo botón visible) y teclado numérico (`number-pad`) exclusivo para cantidades junto a steppers `+/-`.
+4. **Feedback multisensorial (<300ms)**:
+   - Toda validación (`success`, `error`, `warning`) dispara en simultáneo: **vibración háptica diferenciada** + **señal sonora (beep)** + **color + icono/símbolo**.
+5. **Condiciones reales de almacén**:
+   - Separación entre **Configuración de Terminal** (URL/API Key una sola vez) y **Login Rápido de Operario** (PIN numérico de 4 dígitos o escaneo de credencial).
+   - Modo **High-Contrast Daylight** opcional para exteriores/muelles y bloqueo de apagado de pantalla durante tareas activas.
+   - Botón **Reportar problema** siempre visible en el flujo operativo.
