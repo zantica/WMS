@@ -9,7 +9,7 @@ services:
       POSTGRES_DB: wms_dev
     ports:
       # Puerto poco común en el host para no chocar con Postgres locales (5432/5433)
-      - "127.0.0.1:55432:5432"
+      - "127.0.0.1:15432:5432"
     volumes:
       - wms_pgdata:/var/lib/postgresql/data
     healthcheck:
