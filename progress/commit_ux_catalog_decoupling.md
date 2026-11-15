@@ -104,8 +104,12 @@ Exit code: 0
 ## 3. Commits Atómicos Creados y Push (ESTADO = PUBLISHED)
 - `399f53f` `chore(infra): update dev postgres port to 15432 in docker-compose and env examples`
 - `544ff88` `refactor(web): decouple catalog master into locations and users views`
-- `[hash_docs]` `docs(progress): record ux_catalog_decoupling reports and current state`
-- **Resultado de `git push`**: PENDIENTE_DE_REGISTRO
+- `c53e36e` `docs(progress): record ux_catalog_decoupling reports and current state`
+- **Resultado de `git push`**:
+  ```text
+  To https://github.com/zantica/WMS.git
+     c911271..c53e36e  main -> main
+  ```
 
 ## 4. Motivo de Rechazo o Bloqueo
 N/A — Auditoría aprobada al 100% de cumplimiento.
