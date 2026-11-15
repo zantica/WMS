@@ -241,6 +241,36 @@ export class PrismaCatalogRepositoryAdapter implements CatalogRepositoryPort {
     };
   }
 
+  public async findProductsByIdsOrSkus(
+    tenantId: string,
+    criteria: { ids?: string[]; skus?: string[] },
+  ): Promise<ProductDTO[]> {
+    const orConditions: Prisma.ProductWhereInput[] = [];
+
+    if (criteria.ids && criteria.ids.length > 0) {
+      orConditions.push({ id: { in: criteria.ids } });
+    }
+
+    if (criteria.skus && criteria.skus.length > 0) {
+      orConditions.push({ sku: { in: criteria.skus } });
+    }
+
+    if (orConditions.length === 0) {
+      return [];
+    }
+
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId,
+        OR: orConditions,
+      },
+      include: { category: true },
+      orderBy: { sku: "asc" },
+    });
+
+    return products.map(mapProductToDTO);
+  }
+
   public async createProduct(
     tenantId: string,
     input: CreateProductInput,

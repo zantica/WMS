@@ -250,6 +250,23 @@ export class InMemoryCatalogRepository implements CatalogRepositoryPort {
     return null;
   }
 
+  public async findProductsByIdsOrSkus(
+    tenantId: string,
+    criteria: { ids?: string[]; skus?: string[] },
+  ): Promise<ProductDTO[]> {
+    const idSet = new Set(criteria.ids ?? []);
+    const skuSet = new Set((criteria.skus ?? []).map((s) => s.trim().toUpperCase()));
+
+    const matches = this.products.filter((p) => {
+      if (p.tenantId !== tenantId) return false;
+      const matchesId = idSet.size > 0 && idSet.has(p.id);
+      const matchesSku = skuSet.size > 0 && skuSet.has(p.sku.toUpperCase());
+      return matchesId || matchesSku;
+    });
+
+    return matches.map((p) => this.resolveProductDTO(p));
+  }
+
   public async createProduct(
     tenantId: string,
     input: CreateProductInput,

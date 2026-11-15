@@ -15,10 +15,14 @@ import { observabilityPlugin } from "./plugins/observability.js";
 import { PrismaTenantContextAdapter } from "./adapters/prisma-tenant-context.js";
 import { PrismaCatalogRepositoryAdapter } from "./adapters/prisma-catalog-repository.js";
 import { PrismaUserRepositoryAdapter } from "./adapters/prisma-user-repository.js";
+import { PrismaLocationRepository } from "./adapters/prisma-location-repository.js";
+import { SvgLabelRendererAdapter } from "./adapters/svg-label-renderer.js";
 import type { DiagnosticsStore } from "./ports/diagnostics-store.js";
 import type { TenantContextPort } from "./ports/tenant-context.js";
 import type { CatalogRepositoryPort } from "./ports/catalog-repository.js";
 import type { UserRepositoryPort } from "./ports/user-repository.js";
+import type { LocationRepositoryPort } from "./ports/location-repository.js";
+import type { LabelRendererPort } from "./ports/label-renderer.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { productRoutes } from "./routes/products.js";
 import { categoryRoutes } from "./routes/categories.js";
@@ -29,6 +33,7 @@ import { taskRoutes } from "./routes/tasks.js";
 import { receiptRoutes } from "./routes/receipts.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { diagnosticsRoutes } from "./routes/v1/diagnostics.js";
+import { labelRoutes } from "./routes/v1/labels.js";
 import { healthRoute } from "./routes/health.js";
 
 const PORT = Number(process.env["PORT"] ?? 3001);
@@ -39,6 +44,8 @@ declare module "fastify" {
     tenantContext: TenantContextPort;
     catalogRepository: CatalogRepositoryPort;
     userRepository: UserRepositoryPort;
+    locationRepository: LocationRepositoryPort;
+    labelRenderer: LabelRendererPort;
   }
 }
 
@@ -47,6 +54,8 @@ export interface BuildServerOptions {
   tenantContext?: TenantContextPort | undefined;
   catalogRepository?: CatalogRepositoryPort | undefined;
   userRepository?: UserRepositoryPort | undefined;
+  locationRepository?: LocationRepositoryPort | undefined;
+  labelRenderer?: LabelRendererPort | undefined;
   enableLogger?: boolean | undefined;
 }
 
@@ -76,6 +85,14 @@ export async function buildServer(options: BuildServerOptions = {}) {
   app.decorate(
     "userRepository",
     options.userRepository ?? new PrismaUserRepositoryAdapter(),
+  );
+  app.decorate(
+    "locationRepository",
+    options.locationRepository ?? new PrismaLocationRepository(),
+  );
+  app.decorate(
+    "labelRenderer",
+    options.labelRenderer ?? new SvgLabelRendererAdapter(),
   );
 
   // ── Seguridad ──────────────────────────────────────────────
@@ -110,6 +127,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
         { name: "Receipts", description: "Recepción de mercancía de proveedores (Inbound)" },
         { name: "Tasks", description: "Tareas guiadas de almacén (Picking, Putaway)" },
         { name: "Diagnostics", description: "Observabilidad, trazabilidad y diagnóstico de errores por tenant" },
+        { name: "Labels", description: "Generación de etiquetas logísticas con prefijos tipados (QR y Code128)" },
         { name: "Health", description: "Estado y monitorización del servicio" },
       ],
       components: {
@@ -150,6 +168,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(receiptRoutes, { prefix: "/api/v1/receipts" });
   await app.register(webhookRoutes, { prefix: "/api/v1/webhooks" });
   await app.register(diagnosticsRoutes, { prefix: "/api/v1/diagnostics" });
+  await app.register(labelRoutes, { prefix: "/api/v1/labels" });
 
   return app;
 }

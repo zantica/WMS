@@ -57,6 +57,11 @@ export interface CatalogRepositoryPort {
     excludeId?: string,
   ): Promise<ProductConflictResult | null>;
 
+  findProductsByIdsOrSkus(
+    tenantId: string,
+    criteria: { ids?: string[]; skus?: string[] },
+  ): Promise<ProductDTO[]>;
+
   createProduct(
     tenantId: string,
     input: CreateProductInput,
