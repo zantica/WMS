@@ -17,9 +17,21 @@ const NAV_ITEMS = [
   },
   {
     href: "/catalog",
-    label: "Catálogo y ubicaciones",
-    subtitle: "Productos y mapa de zonas",
-    badge: "A-Z",
+    label: "Catálogo maestro",
+    subtitle: "Productos y categorías",
+    badge: "SKU",
+  },
+  {
+    href: "/locations",
+    label: "Topología y zonas",
+    subtitle: "Mapa físico y ubicaciones",
+    badge: "ZONES",
+  },
+  {
+    href: "/users",
+    label: "Usuarios y roles",
+    subtitle: "Accesos del tenant",
+    badge: "RBAC",
   },
   {
     href: "/inventory",

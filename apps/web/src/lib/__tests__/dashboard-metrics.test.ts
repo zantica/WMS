@@ -6,6 +6,7 @@ import type {
   InventoryBalanceDTO,
   LocationDTO,
   SalesOrderDTO,
+  TenantUserDTO,
   WarehouseTaskDTO,
 } from "@wms/shared-types";
 import type { KardexTransactionItem } from "../api-client.js";
@@ -15,6 +16,8 @@ import {
   WMS_RADII,
   buildWmsCssVariables,
   computeInventoryKpis,
+  computeTopologySummary,
+  computeUsersSummary,
   filterKardexTransactions,
   groupLocationsByZone,
   resolveOrderStatusVisual,
@@ -352,5 +355,107 @@ describe("dashboard-metrics (@wms/web)", () => {
     expect(resolveOrderStatusVisual("ON_HOLD").recommendedAction).toContain(
       "reabastecimiento",
     );
+  });
+
+  it("computes physical topology summary and occupancy rates", () => {
+    const locations: LocationDTO[] = [
+      { id: "loc-1", warehouseId: "wh-1", code: "A-01", type: "STORAGE" },
+      { id: "loc-2", warehouseId: "wh-1", code: "A-02", type: "STORAGE" },
+      { id: "loc-3", warehouseId: "wh-1", code: "REC-1", type: "RECEIVING" },
+      { id: "loc-4", warehouseId: "wh-1", code: "DIS-1", type: "DISPATCH" },
+    ];
+
+    const balances: InventoryBalanceDTO[] = [
+      {
+        locationId: "loc-1",
+        locationCode: "A-01",
+        productId: "p1",
+        productSku: "SKU-1",
+        productName: "Item 1",
+        onHandQty: 100,
+        allocatedQty: 20,
+        atpQty: 80,
+      },
+      {
+        locationId: "loc-2",
+        locationCode: "A-02",
+        productId: "p2",
+        productSku: "SKU-2",
+        productName: "Item 2",
+        onHandQty: 0,
+        allocatedQty: 0,
+        atpQty: 0,
+      },
+    ];
+
+    const summary = computeTopologySummary(locations, balances);
+    expect(summary).toEqual({
+      totalLocations: 4,
+      occupiedLocations: 1,
+      emptyLocations: 3,
+      occupancyRate: 25,
+      totalOnHand: 100,
+      totalAllocated: 20,
+      totalAtp: 80,
+    });
+
+    const emptySummary = computeTopologySummary([], []);
+    expect(emptySummary.occupancyRate).toBe(0);
+    expect(emptySummary.totalLocations).toBe(0);
+  });
+
+  it("computes tenant users summary with role distribution and active status", () => {
+    const users: TenantUserDTO[] = [
+      {
+        id: "u-1",
+        tenantId: "t-1",
+        clerkId: "clerk-1",
+        email: "admin@corp.com",
+        name: "Admin User",
+        role: "ADMIN",
+        isActive: true,
+      },
+      {
+        id: "u-2",
+        tenantId: "t-1",
+        clerkId: "clerk-2",
+        email: "supervisor@corp.com",
+        name: "Supervisor User",
+        role: "SUPERVISOR",
+        isActive: true,
+      },
+      {
+        id: "u-3",
+        tenantId: "t-1",
+        clerkId: "clerk-3",
+        email: "op1@corp.com",
+        name: "Operator 1",
+        role: "OPERATOR",
+        isActive: true,
+      },
+      {
+        id: "u-4",
+        tenantId: "t-1",
+        clerkId: "clerk-4",
+        email: "op2@corp.com",
+        name: "Operator 2",
+        role: "OPERATOR",
+        isActive: false,
+      },
+    ];
+
+    const summary = computeUsersSummary(users);
+    expect(summary).toEqual({
+      totalUsers: 4,
+      adminCount: 1,
+      supervisorCount: 1,
+      operatorCount: 2,
+      activeCount: 3,
+      inactiveCount: 1,
+    });
+
+    const emptySummary = computeUsersSummary([]);
+    expect(emptySummary.totalUsers).toBe(0);
+    expect(emptySummary.adminCount).toBe(0);
   });
 });

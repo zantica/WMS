@@ -19,6 +19,7 @@ import {
   type LocationType,
   type OrderStatus,
   type SalesOrderDTO,
+  type TenantUserDTO,
   type TxReason,
   type WarehouseTaskDTO,
   type WmsOrderStatusVisual,
@@ -96,6 +97,25 @@ export interface ZoneMapGroup {
   totalAllocated: number;
   totalAtp: number;
   locations: LocationOccupancyNode[];
+}
+
+export interface TopologySummary {
+  totalLocations: number;
+  occupiedLocations: number;
+  emptyLocations: number;
+  occupancyRate: number;
+  totalOnHand: number;
+  totalAllocated: number;
+  totalAtp: number;
+}
+
+export interface UsersSummary {
+  totalUsers: number;
+  adminCount: number;
+  supervisorCount: number;
+  operatorCount: number;
+  activeCount: number;
+  inactiveCount: number;
 }
 
 export interface OrdersStatusSummary {
@@ -416,3 +436,88 @@ export function filterKardexTransactions(
     return haystack.includes(searchNormalized);
   });
 }
+
+/**
+ * Calcula el resumen compacto de topología física (ubicaciones totales, ocupadas, vacías, tasa de ocupación y saldos agregados).
+ */
+export function computeTopologySummary(
+  locations: readonly LocationDTO[],
+  balances: readonly InventoryBalanceDTO[],
+): TopologySummary {
+  const occupiedLocationIds = new Set<string>();
+  let totalOnHand = 0;
+  let totalAllocated = 0;
+  let totalAtp = 0;
+
+  for (const b of balances) {
+    totalOnHand += b.onHandQty;
+    totalAllocated += b.allocatedQty;
+    totalAtp += b.atpQty;
+    if (b.onHandQty > 0) {
+      occupiedLocationIds.add(b.locationId);
+    }
+  }
+
+  let occupiedCount = 0;
+  for (const loc of locations) {
+    if (occupiedLocationIds.has(loc.id)) {
+      occupiedCount += 1;
+    }
+  }
+
+  const totalLocations = locations.length;
+  const emptyLocations = Math.max(0, totalLocations - occupiedCount);
+  const occupancyRate =
+    totalLocations > 0
+      ? Math.round((occupiedCount / totalLocations) * 10000) / 100
+      : 0;
+
+  return {
+    totalLocations,
+    occupiedLocations: occupiedCount,
+    emptyLocations,
+    occupancyRate,
+    totalOnHand,
+    totalAllocated,
+    totalAtp,
+  };
+}
+
+/**
+ * Calcula el resumen de gobierno de usuarios y roles del tenant (distribución por rol y estado activo/inactivo).
+ */
+export function computeUsersSummary(
+  users: readonly TenantUserDTO[],
+): UsersSummary {
+  let adminCount = 0;
+  let supervisorCount = 0;
+  let operatorCount = 0;
+  let activeCount = 0;
+  let inactiveCount = 0;
+
+  for (const u of users) {
+    if (u.role === "ADMIN") {
+      adminCount += 1;
+    } else if (u.role === "SUPERVISOR") {
+      supervisorCount += 1;
+    } else if (u.role === "OPERATOR") {
+      operatorCount += 1;
+    }
+
+    if (u.isActive) {
+      activeCount += 1;
+    } else {
+      inactiveCount += 1;
+    }
+  }
+
+  return {
+    totalUsers: users.length,
+    adminCount,
+    supervisorCount,
+    operatorCount,
+    activeCount,
+    inactiveCount,
+  };
+}
+

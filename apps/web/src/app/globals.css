@@ -1067,6 +1067,119 @@ textarea:focus-visible {
   background-color: var(--danger);
 }
 
+/* Sistema de Pestañas (Tabs) y Divulgación Progresiva */
+.wms-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.25rem;
+}
+
+.wms-tabs-full {
+  display: flex;
+  width: 100%;
+}
+
+.wms-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.wms-tab:hover:not(:disabled) {
+  color: var(--text);
+  background-color: var(--surface-hover);
+}
+
+.wms-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.wms-tab-active {
+  background-color: var(--surface-card);
+  color: var(--accent);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.wms-tab-badge {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--neutral-tint);
+  color: var(--muted);
+}
+
+.wms-tab-active .wms-tab-badge {
+  background-color: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* Paneles de Divulgación Progresiva (Progressive Disclosure) */
+.wms-disclosure-box {
+  background-color: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-md);
+  animation: wms-disclosure-in 180ms ease-out;
+}
+
+.wms-disclosure-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.wms-disclosure-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@keyframes wms-disclosure-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Diseño Responsivo (1024px / 768px / 375px) */
 @media (max-width: 1024px) {
   .wms-shell {
