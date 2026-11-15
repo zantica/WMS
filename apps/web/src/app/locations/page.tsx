@@ -26,6 +26,7 @@ import {
   computeTopologySummary,
   groupLocationsByZone,
 } from "../../lib/dashboard-metrics";
+import { LabelPrintModal } from "../../components/labels/label-print-modal";
 
 type ZoneFilter = "ALL" | LocationType;
 
@@ -52,6 +53,12 @@ export default function WarehouseLocationsPage(): JSX.Element {
   // Filtro por zona y divulgación progresiva de alta
   const [zoneFilter, setZoneFilter] = useState<ZoneFilter>("ALL");
   const [showCreateLocation, setShowCreateLocation] = useState<boolean>(false);
+
+  // Selección para impresión de etiquetas (F5.2)
+  const [selectedLocationCodes, setSelectedLocationCodes] = useState<Set<string>>(
+    new Set(),
+  );
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
 
   // Formulario nueva ubicación
   const [locCode, setLocCode] = useState("");
@@ -261,7 +268,19 @@ export default function WarehouseLocationsPage(): JSX.Element {
           })}
         </nav>
 
-        <div>
+        <div className="wms-actions-row">
+          <button
+            type="button"
+            className="wms-btn wms-btn-outline"
+            disabled={locations.length === 0}
+            onClick={() => setIsPrintModalOpen(true)}
+            title="Imprimir etiquetas de ubicaciones"
+          >
+            🏷️ Imprimir Etiquetas{" "}
+            {selectedLocationCodes.size > 0
+              ? `(${selectedLocationCodes.size})`
+              : `(${locations.length})`}
+          </button>
           <button
             type="button"
             className={`wms-btn ${
@@ -443,6 +462,22 @@ export default function WarehouseLocationsPage(): JSX.Element {
           ))}
         </div>
       </section>
+
+      {/* Modal de Impresión de Etiquetas Logísticas (F5.2) */}
+      <LabelPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        entityType="LOCATION"
+        items={(selectedLocationCodes.size > 0
+          ? locations.filter((l) => selectedLocationCodes.has(l.code))
+          : locations
+        ).map((l) => ({
+          id: l.id,
+          code: l.code,
+          title: `Ubicación ${l.code}`,
+          subtitle: `Zona: ${l.type}`,
+        }))}
+      />
     </>
   );
 }

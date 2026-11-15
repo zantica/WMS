@@ -611,4 +611,95 @@ describe("WmsWebApiClient (@wms/web)", () => {
     });
     expect(updatedUser.role).toBe("SUPERVISOR");
   });
+
+  it("calls generateLocationLabels and generateProductLabels with proper endpoints and payloads", async () => {
+    const mockBatchResponse = {
+      symbology: "QR",
+      dimensions: { widthMm: 70, heightMm: 35 },
+      count: 1,
+      labels: [
+        {
+          id: "lbl-1",
+          entityType: "LOCATION",
+          entityId: "loc-1",
+          code: "A-01-01",
+          barcodePayload: "LOC:A-01-01",
+          humanReadableText: "LOC:A-01-01",
+          title: "Ubicación A-01-01",
+          symbology: "QR",
+          widthMm: 70,
+          heightMm: 35,
+          svg: "<svg>test</svg>",
+          dataUri: "data:image/svg+xml;utf8,<svg>test</svg>",
+        },
+      ],
+    };
+
+    const mockFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: mockBatchResponse,
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { ...mockBatchResponse, symbology: "CODE128" },
+        }),
+      } as unknown as Response);
+
+    const client = createWmsWebClient({
+      baseUrl: "http://localhost:3001",
+      apiKey: "test-api-key",
+      fetchImpl: mockFetch,
+    });
+
+    const locLabels = await client.generateLocationLabels({
+      locationCodes: ["A-01-01"],
+      symbology: "QR",
+      widthMm: 70,
+      heightMm: 35,
+    });
+
+    expect(locLabels.count).toBe(1);
+    expect(locLabels.symbology).toBe("QR");
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:3001/api/v1/labels/locations",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          locationCodes: ["A-01-01"],
+          symbology: "QR",
+          widthMm: 70,
+          heightMm: 35,
+        }),
+      }),
+    );
+
+    const prodLabels = await client.generateProductLabels({
+      skus: ["SKU-100"],
+      symbology: "CODE128",
+    });
+
+    expect(prodLabels.count).toBe(1);
+    expect(prodLabels.symbology).toBe("CODE128");
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:3001/api/v1/labels/products",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          skus: ["SKU-100"],
+          symbology: "CODE128",
+        }),
+      }),
+    );
+  });
 });

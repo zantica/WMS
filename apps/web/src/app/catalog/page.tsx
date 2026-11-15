@@ -18,6 +18,7 @@ import {
 } from "react";
 import type { CategoryDTO, ProductDTO } from "@wms/shared-types";
 import { useSupervisorSession } from "../../context/supervisor-session";
+import { LabelPrintModal } from "../../components/labels/label-print-modal";
 
 type CatalogTab = "products" | "categories";
 
@@ -40,6 +41,12 @@ export default function CatalogMasterPage(): JSX.Element {
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Selección de productos para impresión de etiquetas (F5.2)
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
 
   // Filtros de búsqueda del catálogo
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -361,17 +368,32 @@ export default function CatalogMasterPage(): JSX.Element {
           </button>
         </nav>
 
-        <div>
+        <div className="wms-actions-row">
           {activeTab === "products" ? (
-            <button
-              type="button"
-              className={`wms-btn ${
-                showCreateProduct ? "wms-btn-secondary" : "wms-btn-emerald"
-              }`}
-              onClick={() => setShowCreateProduct((prev) => !prev)}
-            >
-              {showCreateProduct ? "✕ Ocultar formulario" : "+ Nuevo producto"}
-            </button>
+            <>
+              <button
+                type="button"
+                className="wms-btn wms-btn-outline"
+                disabled={selectedProductIds.size === 0}
+                onClick={() => setIsPrintModalOpen(true)}
+                title={
+                  selectedProductIds.size === 0
+                    ? "Selecciona productos en la tabla para imprimir etiquetas"
+                    : "Imprimir etiquetas de los productos seleccionados"
+                }
+              >
+                🏷️ Imprimir Etiquetas {selectedProductIds.size > 0 ? `(${selectedProductIds.size})` : ""}
+              </button>
+              <button
+                type="button"
+                className={`wms-btn ${
+                  showCreateProduct ? "wms-btn-secondary" : "wms-btn-emerald"
+                }`}
+                onClick={() => setShowCreateProduct((prev) => !prev)}
+              >
+                {showCreateProduct ? "✕ Ocultar formulario" : "+ Nuevo producto"}
+              </button>
+            </>
           ) : (
             <button
               type="button"
@@ -634,6 +656,25 @@ export default function CatalogMasterPage(): JSX.Element {
             <table className="wms-table">
               <thead>
                 <tr>
+                  <th style={{ width: "36px", textAlign: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={
+                        products.length > 0 &&
+                        selectedProductIds.size === products.length
+                      }
+                      onChange={() => {
+                        if (selectedProductIds.size === products.length) {
+                          setSelectedProductIds(new Set());
+                        } else {
+                          setSelectedProductIds(
+                            new Set(products.map((p) => p.id)),
+                          );
+                        }
+                      }}
+                      aria-label="Seleccionar todos los productos"
+                    />
+                  </th>
                   <th>SKU</th>
                   <th>Nombre del producto</th>
                   <th>Categoría</th>
@@ -646,7 +687,7 @@ export default function CatalogMasterPage(): JSX.Element {
               <tbody>
                 {loading && products.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <span
                         className="wms-skeleton"
                         aria-label="Cargando catálogo de productos"
@@ -655,7 +696,7 @@ export default function CatalogMasterPage(): JSX.Element {
                   </tr>
                 ) : products.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <div className="wms-empty-state">
                         <div className="wms-empty-title">
                           No se encontraron productos coincidentes
@@ -670,6 +711,21 @@ export default function CatalogMasterPage(): JSX.Element {
                 ) : (
                   products.map((prod) => (
                     <tr key={prod.id}>
+                      <td style={{ textAlign: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.has(prod.id)}
+                          onChange={() => {
+                            setSelectedProductIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(prod.id)) next.delete(prod.id);
+                              else next.add(prod.id);
+                              return next;
+                            });
+                          }}
+                          aria-label={`Seleccionar ${prod.sku}`}
+                        />
+                      </td>
                       <td className="wms-mono">
                         <strong>{prod.sku}</strong>
                       </td>
@@ -857,6 +913,21 @@ export default function CatalogMasterPage(): JSX.Element {
           </div>
         </section>
       ) : null}
+
+      {/* Modal de Impresión de Etiquetas Logísticas (F5.2) */}
+      <LabelPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        entityType="PRODUCT"
+        items={products
+          .filter((p) => selectedProductIds.has(p.id))
+          .map((p) => ({
+            id: p.id,
+            code: p.sku,
+            title: p.name,
+            subtitle: p.categoryName,
+          }))}
+      />
     </>
   );
 }

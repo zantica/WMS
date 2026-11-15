@@ -1262,3 +1262,25 @@ textarea:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* Impresión Logística de Etiquetas */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .wms-topbar,
+  .wms-nav,
+  header,
+  nav {
+    display: none !important;
+  }
+
+  [role="dialog"] {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+}
+

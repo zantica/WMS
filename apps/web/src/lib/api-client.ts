@@ -19,7 +19,10 @@ import {
   type CreateProductInput,
   type CreateTenantUserInput,
   type DiagnosticErrorRecord,
+  type GenerateLocationLabelsRequest,
+  type GenerateProductLabelsRequest,
   type InventoryBalanceDTO,
+  type LabelBatchResponseDTO,
   type ListDiagnosticErrorsFilters,
   type ListProductsFilters,
   type ListTenantUsersFilters,
@@ -716,6 +719,32 @@ export class WmsWebApiClient {
           correlationId: filters?.correlationId,
         },
       },
+    );
+  }
+
+  /**
+   * POST /api/v1/labels/locations — Genera lote de etiquetas para ubicaciones físicas en SVG (QR / Code128).
+   */
+  public async generateLocationLabels(
+    request: GenerateLocationLabelsRequest,
+  ): Promise<LabelBatchResponseDTO> {
+    return this.requestEnvelope<LabelBatchResponseDTO>(
+      "POST",
+      "/api/v1/labels/locations",
+      { body: request },
+    );
+  }
+
+  /**
+   * POST /api/v1/labels/products — Genera lote de etiquetas para productos/SKUs en SVG (Code128 / QR).
+   */
+  public async generateProductLabels(
+    request: GenerateProductLabelsRequest,
+  ): Promise<LabelBatchResponseDTO> {
+    return this.requestEnvelope<LabelBatchResponseDTO>(
+      "POST",
+      "/api/v1/labels/products",
+      { body: request },
     );
   }
 }
