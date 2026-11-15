@@ -238,3 +238,16 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Arquitectura hexagonal en `@wms/api`: puertos `CatalogRepositoryPort` y `UserRepositoryPort`, adaptadores `Prisma*` e `InMemory*`, casos de uso `manage-categories`, `manage-products` y `manage-users` (con RBAC y protección anti-auto-desactivación/degradación de `ADMIN`), y rutas `/api/v1/categories`, `/api/v1/products` y `/api/v1/users`.
   - UI unificada (`S5` / `P2` / `T3`, 0 hex crudos): búsqueda por SKU/texto/categoría/inactivos, edición y gobierno de usuarios/roles en `@wms/web` (`/catalog`) y `searchProducts` en el escáner rápido de `@wms/mobile`.
   - Verificación independiente: `pnpm build` (6/6), `pnpm test` (7/7) y `pnpm --filter @wms/api test:coverage` (`268 passed | 8 skipped PG`, `93.59%` cobertura global en `use-cases`, `98.95%` en `catalog` y `100%` en `users`).
+
+
+---
+
+## [2026-11-15] Feature `F5.2` — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F5.2.md`](./impl_F5.2.md)
+  - Revisión: [`progress/review_F5.2.md`](./review_F5.2.md)
+- **Cambios clave**:
+  - Esquema de prefijos tipados (`LOC:`, `SKU:`, `EAN:`, `LPN:`, `ORDER:`, `TASK:`, `USER:`) y DTOs de etiquetas en `@wms/shared-types` (`barcode-payload.ts`).
+  - Puerto `LabelRendererPort` y `LocationRepositoryPort` en `@wms/api` con generadores en TypeScript puro para QR (ISO/IEC 18004) y Code128 (ISO/IEC 15417), `SvgLabelRendererAdapter` con dimensiones en mm, casos de uso `generateLocationLabels` / `generateProductLabels` (92.63% cobertura) y rutas `POST /api/v1/labels/locations` y `POST /api/v1/labels/products`.
+  - Integración en `@wms/web` (`/catalog`, `/locations`) con `LabelPrintModal` y reglas `@media print`, más habilitación de `*.test.tsx` en `apps/web/vitest.config.ts` (19/19 tests en verde).

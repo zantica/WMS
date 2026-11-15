@@ -225,7 +225,7 @@
       "milestone": "Hito 5 — Onboarding Flash: Bulk Import y Etiquetas QR",
       "title": "Puerto LabelRenderer (QR + Code128) con Prefijos Tipados y Vista Web de Impresión",
       "boundedContext": "Core / Topology & Web Dashboard",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Esquema de payload de etiquetas con prefijo de entidad en @wms/shared-types (ej. LOC:A-01-01, SKU:...) para validación de tipo de lectura en móvil",
         "Puerto LabelRenderer con adaptadores para QR y Code128 (lectores láser 1D) y dimensiones en milímetros, expuesto en POST /api/v1/labels/locations y POST /api/v1/labels/products",

@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
 - **Última actualización**: 2026-11-15
-- **Estado General**: 🔄 **En progreso `F5.2` — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión**
+- **Estado General**: ✅ **`F5.2` completada y aprobada (`APPROVED` en `progress/review_F5.2.md`) — Siguiente: `F9.2` (Topología Física y Vista Gráfica del Layout) o `F5.1` (Bulk Import)**
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
@@ -18,7 +18,7 @@
   6. ✅ **`F9.1`** — Maestro de Producto WMS, Categorías configurables, Búsqueda por SKU y Gestión de Usuarios/Roles (`done`, `APPROVED` en [`progress/review_F9.1.md`](./review_F9.1.md))
   7. ⏳ **`F9.2`** — Topología Física (`RACK` / `SHELVING` / `FLOOR`), Alta Estructurada y Vista Gráfica del Layout (`pending`, **Prioridad 1**)
   8. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`, **Prioridad 2**)
-  9. 🔄 **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`in_progress`, **Activa ahora**)
+  9. ✅ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`done`, `APPROVED` en [`progress/review_F5.2.md`](./review_F5.2.md))
 - **Sesión (2026-11-13 — Hito 9 `F9.1`)**:
   - ✅ **`F9.1`** (`done`, review `APPROVED` en [`progress/review_F9.1.md`](./review_F9.1.md)) — Contratos `CategoryDTO` / `TenantUserDTO` / `ListProductsFilters` en `@wms/shared-types`, modelo `Category` con migración SQL y `FORCE RLS` en `@wms/db`, puertos `CatalogRepositoryPort` / `UserRepositoryPort` con adaptadores Prisma/InMemory y casos de uso `manage-categories`, `manage-products`, `manage-users` (cobertura 93.59% en `use-cases`), vistas `/catalog` en `@wms/web` y búsqueda rápida por SKU en `@wms/mobile`.
 - **Sesión (2026-11-10 / 2026-11-11 — Hito 8 `@wms/domain`)**:
