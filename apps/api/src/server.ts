@@ -16,12 +16,14 @@ import { PrismaTenantContextAdapter } from "./adapters/prisma-tenant-context.js"
 import { PrismaCatalogRepositoryAdapter } from "./adapters/prisma-catalog-repository.js";
 import { PrismaUserRepositoryAdapter } from "./adapters/prisma-user-repository.js";
 import { PrismaLocationRepository } from "./adapters/prisma-location-repository.js";
+import { PrismaTopologyRepository } from "./adapters/prisma-topology-repository.js";
 import { SvgLabelRendererAdapter } from "./adapters/svg-label-renderer.js";
 import type { DiagnosticsStore } from "./ports/diagnostics-store.js";
 import type { TenantContextPort } from "./ports/tenant-context.js";
 import type { CatalogRepositoryPort } from "./ports/catalog-repository.js";
 import type { UserRepositoryPort } from "./ports/user-repository.js";
 import type { LocationRepositoryPort } from "./ports/location-repository.js";
+import type { TopologyRepositoryPort } from "./ports/topology-repository.js";
 import type { LabelRendererPort } from "./ports/label-renderer.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { productRoutes } from "./routes/products.js";
@@ -45,6 +47,7 @@ declare module "fastify" {
     catalogRepository: CatalogRepositoryPort;
     userRepository: UserRepositoryPort;
     locationRepository: LocationRepositoryPort;
+    topologyRepository: TopologyRepositoryPort;
     labelRenderer: LabelRendererPort;
   }
 }
@@ -55,6 +58,7 @@ export interface BuildServerOptions {
   catalogRepository?: CatalogRepositoryPort | undefined;
   userRepository?: UserRepositoryPort | undefined;
   locationRepository?: LocationRepositoryPort | undefined;
+  topologyRepository?: TopologyRepositoryPort | undefined;
   labelRenderer?: LabelRendererPort | undefined;
   enableLogger?: boolean | undefined;
 }
@@ -89,6 +93,10 @@ export async function buildServer(options: BuildServerOptions = {}) {
   app.decorate(
     "locationRepository",
     options.locationRepository ?? new PrismaLocationRepository(),
+  );
+  app.decorate(
+    "topologyRepository",
+    options.topologyRepository ?? new PrismaTopologyRepository(),
   );
   app.decorate(
     "labelRenderer",
