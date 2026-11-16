@@ -9,6 +9,8 @@
 export type UserRole = "ADMIN" | "SUPERVISOR" | "OPERATOR";
 
 export type LocationType = "RECEIVING" | "STORAGE" | "PACKING" | "DISPATCH";
+export type StorageType = "RACK" | "SHELVING" | "FLOOR";
+export type LocationStatus = "ACTIVE" | "BLOCKED";
 
 export type TxReason =
   | "INBOUND_RECEIPT"
@@ -74,7 +76,161 @@ export interface LocationDTO {
   warehouseId: string;
   code: string;
   type: LocationType;
-  description?: string | null;
+  storageType?: StorageType | undefined;
+  status?: LocationStatus | undefined;
+  zone?: string | undefined;
+  aisle?: string | null | undefined;
+  rack?: string | undefined;
+  level?: string | undefined;
+  position?: string | undefined;
+  generationBatchId?: string | null | undefined;
+  description?: string | null | undefined;
+  isActive?: boolean | undefined;
+  createdAt?: string | undefined;
+}
+
+export interface LocationCellDTO {
+  id: string;
+  code: string;
+  zone: string;
+  aisle: string | null;
+  rack: string;
+  level: string;
+  position: string;
+  storageType: StorageType;
+  type: LocationType;
+  status: LocationStatus;
+  onHandQty: number;
+  allocatedQty: number;
+  atpQty: number;
+  skuCount: number;
+}
+
+export interface RackLayoutGroupDTO {
+  rack: string;
+  storageType: StorageType;
+  totalLocations: number;
+  occupiedLocations: number;
+  blockedLocations: number;
+  occupancyRate: number;
+  totalOnHand: number;
+  totalAllocated: number;
+  totalAtp: number;
+  levels: Array<{
+    level: string;
+    positions: LocationCellDTO[];
+  }>;
+}
+
+export interface AisleLayoutSummaryDTO {
+  zone: string;
+  aisle: string;
+  storageType: StorageType;
+  totalLocations: number;
+  activeLocations: number;
+  occupiedLocations: number;
+  blockedLocations: number;
+  /** Porcentaje de ocupación: activeLocations === 0 ? 0 : Math.round((occupiedLocations / activeLocations) * 100) */
+  occupancyRate: number;
+  totalOnHand: number;
+  totalAllocated: number;
+  totalAtp: number;
+}
+
+export interface AisleLayoutDetailDTO {
+  warehouseId: string;
+  zone: string;
+  aisle: string;
+  totalLocations: number;
+  activeLocations: number;
+  occupiedLocations: number;
+  blockedLocations: number;
+  occupancyRate: number;
+  totalOnHand: number;
+  totalAllocated: number;
+  totalAtp: number;
+  racks: RackLayoutGroupDTO[];
+}
+
+export interface ZoneLayoutNodeDTO {
+  zone: string;
+  totalLocations: number;
+  activeLocations: number;
+  occupiedLocations: number;
+  blockedLocations: number;
+  occupancyRate: number;
+  totalOnHand: number;
+  totalAllocated: number;
+  totalAtp: number;
+  aisles: AisleLayoutSummaryDTO[];
+}
+
+export interface WarehouseLayoutSummaryDTO {
+  warehouseId: string;
+  totalLocations: number;
+  activeLocations: number;
+  occupiedLocations: number;
+  blockedLocations: number;
+  occupancyRate: number;
+  totalOnHand: number;
+  totalAllocated: number;
+  totalAtp: number;
+  zones: ZoneLayoutNodeDTO[];
+}
+
+export interface CreateLocationInput {
+  warehouseId: string;
+  code?: string | undefined;
+  type: LocationType;
+  storageType?: StorageType | undefined;
+  status?: LocationStatus | undefined;
+  zone?: string | undefined;
+  aisle?: string | null | undefined;
+  rack?: string | undefined;
+  level?: string | undefined;
+  position?: string | undefined;
+  description?: string | null | undefined;
+}
+
+export interface UpdateLocationInput {
+  status?: LocationStatus | undefined;
+  storageType?: StorageType | undefined;
+  description?: string | null | undefined;
+  zone?: string | undefined;
+  aisle?: string | null | undefined;
+  rack?: string | undefined;
+  level?: string | undefined;
+  position?: string | undefined;
+}
+
+export interface GenerateLocationBlockInput {
+  warehouseId: string;
+  type: LocationType;
+  storageType: StorageType;
+  zone: string;
+  aisle?: string | null;
+  rackStart: number;
+  rackEnd: number;
+  levelStart: number;
+  levelEnd: number;
+  positionsPerLevel: number;
+  dryRun?: boolean;
+}
+
+export interface GenerateLocationBlockResultDTO {
+  dryRun: boolean;
+  batchId?: string | null;
+  totalGenerated: number;
+  createdCount: number;
+  skippedCollisionsCount: number;
+  collisions: string[];
+  creatableCount: number;
+  locations: LocationDTO[];
+}
+
+export interface DeleteLocationBatchResultDTO {
+  batchId: string;
+  deletedCount: number;
 }
 
 export interface InventoryBalanceDTO {
@@ -220,13 +376,6 @@ export interface UpdateTenantUserInput {
 export interface ListTenantUsersFilters {
   role?: UserRole | undefined;
   includeInactive?: boolean | undefined;
-}
-
-export interface CreateLocationInput {
-  warehouseId: string;
-  code: string;
-  type: LocationType;
-  description?: string;
 }
 
 export interface CreateOrderInput {
@@ -474,7 +623,10 @@ export type WmsErrorCode =
   | "FORBIDDEN"
   | "VALIDATION_ERROR"
   | "CONFIGURATION_ERROR"
-  | "CONFLICT";
+  | "CONFLICT"
+  | "INVALID_LOCATION_CODE"
+  | "INVALID_STORAGE_TOPOLOGY"
+  | "LOCATION_BATCH_IN_USE";
 
 // ─────────────────────────────────────────────────────────────
 // DESIGN SYSTEM COMPARTIDO (S5 dark-data-dense / P2 / T3)
@@ -483,4 +635,5 @@ export type WmsErrorCode =
 export * from "./design-tokens.js";
 export * from "./api-helpers.js";
 export * from "./barcode-payload.js";
+export * from "./topology.js";
 

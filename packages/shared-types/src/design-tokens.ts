@@ -4,43 +4,46 @@
 // Agnóstico al framework: consumido tanto por @wms/web (Next.js / CSS Variables) como por @wms/mobile (Expo / React Native StyleSheet).
 
 import type {
+  LocationStatus,
   OrderStatus,
   StepStatus,
+  StorageType,
   TaskStatus,
   TaskType,
 } from "./index.js";
 
 export const WMS_COLORS = {
-  bg: "#0B1120",
-  surface: "#111A2E",
-  surfaceCard: "#162238",
-  surfaceHover: "#1E2D4A",
-  border: "#23334D",
-  borderStrong: "#334A6E",
-  text: "#E8EEF6",
-  muted: "#8CA0BA",
-  accent: "#38BDF8",
-  accentHover: "#7DD3FC",
-  accentContrast: "#08172A",
-  support: "#34D399",
-  success: "#34D399",
-  warning: "#FBBF24",
-  danger: "#F43F5E",
+  bg: "#061815",
+  surface: "#0A221D",
+  surfaceCard: "#0F2D26",
+  surfaceHover: "#163A32",
+  border: "#1F4A40",
+  borderStrong: "#2E6356",
+  text: "#E6F4F0",
+  muted: "#8FB3A9",
+  brand: "#0F6E56", // nuevo: rellenos de marca, texto blanco encima
+  accent: "#2DD4BF",
+  accentHover: "#5EEAD4",
+  accentContrast: "#04342C",
+  support: "#4ADE80",
+  success: "#4ADE80",
+  warning: "#FBBF24", // sin cambios
+  danger: "#F43F5E", // sin cambios
 
   // Tintes y bordes semánticos traslúcidos (HUD y tags de estado)
-  accentTint: "rgba(56, 189, 248, 0.12)",
-  accentBorder: "rgba(56, 189, 248, 0.42)",
-  successTint: "rgba(52, 211, 153, 0.12)",
-  successBorder: "rgba(52, 211, 153, 0.42)",
+  accentTint: "rgba(45, 212, 191, 0.12)",
+  accentBorder: "rgba(45, 212, 191, 0.42)",
+  successTint: "rgba(74, 222, 128, 0.12)",
+  successBorder: "rgba(74, 222, 128, 0.42)",
   warningTint: "rgba(251, 191, 36, 0.13)",
   warningBorder: "rgba(251, 191, 36, 0.42)",
   dangerTint: "rgba(244, 63, 94, 0.13)",
   dangerBorder: "rgba(244, 63, 94, 0.45)",
-  neutralTint: "rgba(140, 160, 186, 0.12)",
+  neutralTint: "rgba(143, 179, 169, 0.12)",
 
   // Overlays de cámara y backdrops
-  scannerFrameBg: "rgba(11, 17, 32, 0.88)",
-  overlayBackdrop: "rgba(2, 6, 23, 0.72)",
+  scannerFrameBg: "rgba(6, 24, 21, 0.88)",
+  overlayBackdrop: "rgba(2, 12, 10, 0.72)",
 } as const;
 
 export const WMS_RADII = {
@@ -138,6 +141,7 @@ export function buildWmsCssVariables(): Record<string, string> {
     "--border-strong": WMS_COLORS.borderStrong,
     "--text": WMS_COLORS.text,
     "--muted": WMS_COLORS.muted,
+    "--brand": WMS_COLORS.brand,
     "--accent": WMS_COLORS.accent,
     "--accent-hover": WMS_COLORS.accentHover,
     "--accent-contrast": WMS_COLORS.accentContrast,
@@ -396,4 +400,137 @@ export function resolveOrderStatusVisual(
         colors: resolveToneColors("rose"),
       };
   }
+}
+
+export interface WmsStorageTypeVisual {
+  label: string;
+  code: string;
+  symbol: string;
+  tone: WmsTone;
+  colors: WmsToneColors;
+}
+
+/**
+ * Resuelve la semántica visual para el tipo físico de almacenamiento (`StorageType`).
+ */
+export function resolveStorageTypeVisual(type: StorageType): WmsStorageTypeVisual {
+  switch (type) {
+    case "RACK":
+      return {
+        label: "Rack de Palets",
+        code: "RACK",
+        symbol: "▤",
+        tone: "blue",
+        colors: resolveToneColors("blue"),
+      };
+    case "SHELVING":
+      return {
+        label: "Estantería Picking",
+        code: "SHELVING",
+        symbol: "⊞",
+        tone: "emerald",
+        colors: resolveToneColors("emerald"),
+      };
+    case "FLOOR":
+      return {
+        label: "Planta / Suelo",
+        code: "FLOOR",
+        symbol: "⬚",
+        tone: "amber",
+        colors: resolveToneColors("amber"),
+      };
+  }
+}
+
+export interface WmsLocationStatusVisual {
+  label: string;
+  code: string;
+  symbol: string;
+  tone: WmsTone;
+  colors: WmsToneColors;
+}
+
+/**
+ * Resuelve la semántica visual para el estado operativo de la ubicación (`LocationStatus`).
+ */
+export function resolveLocationStatusVisual(
+  status: LocationStatus,
+): WmsLocationStatusVisual {
+  switch (status) {
+    case "ACTIVE":
+      return {
+        label: "Activa",
+        code: "ACTIVE",
+        symbol: "●",
+        tone: "emerald",
+        colors: resolveToneColors("emerald"),
+      };
+    case "BLOCKED":
+      return {
+        label: "Bloqueada",
+        code: "BLOCKED",
+        symbol: "⊘",
+        tone: "rose",
+        colors: resolveToneColors("rose"),
+      };
+  }
+}
+
+export interface WmsLocationCellVisual {
+  state: "EMPTY" | "OCCUPIED" | "RESERVED" | "BLOCKED";
+  label: string;
+  symbol: string;
+  tone: WmsTone;
+  colors: WmsToneColors;
+}
+
+/**
+ * Resuelve la representación visual y térmica de una celda del layout según sus saldos y estado:
+ * 1. BLOCKED -> Bloqueada (rose)
+ * 2. VACÍA (onHand === 0) -> Disponible (slate)
+ * 3. RESERVADA 100% (atp === 0 y onHand > 0) -> Totalmente asignada (amber)
+ * 4. OCUPADA (atp > 0) -> Con stock disponible (emerald)
+ */
+export function resolveLocationCellVisual(params: {
+  status: LocationStatus;
+  onHandQty: number;
+  atpQty: number;
+}): WmsLocationCellVisual {
+  if (params.status === "BLOCKED") {
+    return {
+      state: "BLOCKED",
+      label: "Bloqueada",
+      symbol: "⊘",
+      tone: "rose",
+      colors: resolveToneColors("rose"),
+    };
+  }
+
+  if (params.onHandQty <= 0) {
+    return {
+      state: "EMPTY",
+      label: "Vacía",
+      symbol: "○",
+      tone: "slate",
+      colors: resolveToneColors("slate"),
+    };
+  }
+
+  if (params.atpQty <= 0) {
+    return {
+      state: "RESERVED",
+      label: "Reservada 100%",
+      symbol: "■",
+      tone: "amber",
+      colors: resolveToneColors("amber"),
+    };
+  }
+
+  return {
+    state: "OCCUPIED",
+    label: "Ocupada (ATP > 0)",
+    symbol: "●",
+    tone: "emerald",
+    colors: resolveToneColors("emerald"),
+  };
 }
