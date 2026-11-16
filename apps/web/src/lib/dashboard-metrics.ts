@@ -3,27 +3,37 @@
 // Respeta las fronteras del monorepo: depende únicamente de @wms/shared-types y tipos locales.
 
 import {
+  AISLE_CELL_COLLAPSE_THRESHOLD,
+  SPECIAL_FLOOR_AISLE,
   WMS_COLORS,
   WMS_DESIGN_TOKENS,
   WMS_FONT_SIZES,
   WMS_RADII,
   WMS_SPACING,
   buildWmsCssVariables,
+  resolveLocationCellVisual,
+  resolveLocationStatusVisual,
   resolveOrderStatusVisual,
   resolveStepStatusVisual,
+  resolveStorageTypeVisual,
   resolveTaskStatusVisual,
   resolveTaskTypeVisual,
   resolveToneColors,
   type InventoryBalanceDTO,
   type LocationDTO,
+  type LocationStatus,
   type LocationType,
   type OrderStatus,
   type SalesOrderDTO,
+  type StorageType,
   type TenantUserDTO,
   type TxReason,
   type WarehouseTaskDTO,
+  type WmsLocationCellVisual,
+  type WmsLocationStatusVisual,
   type WmsOrderStatusVisual,
   type WmsStepStatusVisual,
+  type WmsStorageTypeVisual,
   type WmsTaskStatusVisual,
   type WmsTaskTypeVisual,
   type WmsTone,
@@ -32,19 +42,27 @@ import {
 import type { KardexTransactionItem } from "./api-client.js";
 
 export {
+  AISLE_CELL_COLLAPSE_THRESHOLD,
+  SPECIAL_FLOOR_AISLE,
   WMS_COLORS,
   WMS_DESIGN_TOKENS,
   WMS_FONT_SIZES,
   WMS_RADII,
   WMS_SPACING,
   buildWmsCssVariables,
+  resolveLocationCellVisual,
+  resolveLocationStatusVisual,
   resolveOrderStatusVisual,
   resolveStepStatusVisual,
+  resolveStorageTypeVisual,
   resolveTaskStatusVisual,
   resolveTaskTypeVisual,
   resolveToneColors,
+  type WmsLocationCellVisual,
+  type WmsLocationStatusVisual,
   type WmsOrderStatusVisual,
   type WmsStepStatusVisual,
+  type WmsStorageTypeVisual,
   type WmsTaskStatusVisual,
   type WmsTaskTypeVisual,
   type WmsTone,
@@ -101,8 +119,11 @@ export interface ZoneMapGroup {
 
 export interface TopologySummary {
   totalLocations: number;
+  activeLocations: number;
+  blockedLocations: number;
   occupiedLocations: number;
   emptyLocations: number;
+  /** Invariante 3: Porcentaje de ocupación sobre ubicaciones activas */
   occupancyRate: number;
   totalOnHand: number;
   totalAllocated: number;
@@ -459,21 +480,33 @@ export function computeTopologySummary(
   }
 
   let occupiedCount = 0;
+  let activeLocations = 0;
+  let blockedLocations = 0;
+
   for (const loc of locations) {
+    const isAct = loc.status !== "BLOCKED" && loc.isActive !== false;
+    if (isAct) {
+      activeLocations += 1;
+    } else {
+      blockedLocations += 1;
+    }
+
     if (occupiedLocationIds.has(loc.id)) {
       occupiedCount += 1;
     }
   }
 
   const totalLocations = locations.length;
-  const emptyLocations = Math.max(0, totalLocations - occupiedCount);
+  const emptyLocations = Math.max(0, activeLocations - occupiedCount);
   const occupancyRate =
-    totalLocations > 0
-      ? Math.round((occupiedCount / totalLocations) * 10000) / 100
+    activeLocations > 0
+      ? Math.round((occupiedCount / activeLocations) * 100)
       : 0;
 
   return {
     totalLocations,
+    activeLocations,
+    blockedLocations,
     occupiedLocations: occupiedCount,
     emptyLocations,
     occupancyRate,

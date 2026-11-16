@@ -702,4 +702,158 @@ describe("WmsWebApiClient (@wms/web)", () => {
       }),
     );
   });
+
+  it("calls physical topology and layout endpoints (macro, aisle detail, generate-block, rollback, update)", async () => {
+    const mockFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            warehouseId: "wh-1",
+            totalLocations: 10,
+            activeLocations: 8,
+            occupiedLocations: 4,
+            blockedLocations: 2,
+            occupancyRate: 50,
+            totalOnHand: 200,
+            totalAllocated: 50,
+            totalAtp: 150,
+            zones: [],
+          },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            warehouseId: "wh-1",
+            zone: "MAIN",
+            aisle: "01",
+            totalLocations: 6,
+            activeLocations: 6,
+            occupiedLocations: 2,
+            blockedLocations: 0,
+            occupancyRate: 33,
+            totalOnHand: 100,
+            totalAllocated: 20,
+            totalAtp: 80,
+            racks: [],
+          },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            dryRun: false,
+            batchId: "batch-123",
+            totalGenerated: 4,
+            createdCount: 4,
+            skippedCollisionsCount: 0,
+            collisions: [],
+            creatableCount: 4,
+            locations: [],
+          },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            batchId: "batch-123",
+            deletedCount: 4,
+          },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            id: "loc-1",
+            warehouseId: "wh-1",
+            code: "A-01-01",
+            type: "STORAGE",
+            storageType: "RACK",
+            status: "BLOCKED",
+            zone: "MAIN",
+            rack: "01",
+            level: "01",
+            position: "01",
+            isActive: false,
+          },
+        }),
+      } as unknown as Response);
+
+    const client = createWmsWebClient({
+      baseUrl: "http://localhost:3001",
+      apiKey: "test-api-key",
+      fetchImpl: mockFetch,
+    });
+
+    const macro = await client.getWarehouseLayoutSummary("wh-1");
+    expect(macro.totalLocations).toBe(10);
+    expect(macro.occupancyRate).toBe(50);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:3001/api/v1/locations/layout/wh-1",
+      expect.objectContaining({ method: "GET" }),
+    );
+
+    const aisle = await client.getAisleLayoutDetail("wh-1", "01", "MAIN");
+    expect(aisle.aisle).toBe("01");
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:3001/api/v1/locations/layout/wh-1/aisles/01?zone=MAIN",
+      expect.objectContaining({ method: "GET" }),
+    );
+
+    const gen = await client.generateLocationBlock({
+      warehouseId: "wh-1",
+      type: "STORAGE",
+      storageType: "RACK",
+      zone: "MAIN",
+      aisle: "01",
+      rackStart: 1,
+      rackEnd: 1,
+      levelStart: 1,
+      levelEnd: 2,
+      positionsPerLevel: 2,
+    });
+    expect(gen.batchId).toBe("batch-123");
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:3001/api/v1/locations/generate-block",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    const rollback = await client.deleteLocationBatch("batch-123");
+    expect(rollback.deletedCount).toBe(4);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:3001/api/v1/locations/batches/batch-123",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+
+    const updated = await client.updateLocation("loc-1", { status: "BLOCKED" });
+    expect(updated.status).toBe("BLOCKED");
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      5,
+      "http://localhost:3001/api/v1/locations/loc-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "BLOCKED" }),
+      }),
+    );
+  });
 });

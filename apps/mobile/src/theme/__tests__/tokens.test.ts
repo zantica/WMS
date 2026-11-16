@@ -28,17 +28,19 @@ describe("mobile theme tokens & shared design system (@wms/mobile)", () => {
     expect(WMS_DESIGN_TOKENS.palette).toBe("P2 Refinada");
     expect(WMS_DESIGN_TOKENS.typography).toBe("T3 DM Sans + JetBrains Mono");
 
-    expect(WMS_COLORS.bg).toBe("#0B1120");
-    expect(WMS_COLORS.surface).toBe("#111A2E");
-    expect(WMS_COLORS.surfaceCard).toBe("#162238");
-    expect(WMS_COLORS.surfaceHover).toBe("#1E2D4A");
-    expect(WMS_COLORS.border).toBe("#23334D");
-    expect(WMS_COLORS.borderStrong).toBe("#334A6E");
-    expect(WMS_COLORS.text).toBe("#E8EEF6");
-    expect(WMS_COLORS.muted).toBe("#8CA0BA");
-    expect(WMS_COLORS.accent).toBe("#38BDF8");
-    expect(WMS_COLORS.accentContrast).toBe("#08172A");
-    expect(WMS_COLORS.support).toBe("#34D399");
+    expect(WMS_COLORS.bg).toBe("#061815");
+    expect(WMS_COLORS.surface).toBe("#0A221D");
+    expect(WMS_COLORS.surfaceCard).toBe("#0F2D26");
+    expect(WMS_COLORS.surfaceHover).toBe("#163A32");
+    expect(WMS_COLORS.border).toBe("#1F4A40");
+    expect(WMS_COLORS.borderStrong).toBe("#2E6356");
+    expect(WMS_COLORS.text).toBe("#E6F4F0");
+    expect(WMS_COLORS.muted).toBe("#8FB3A9");
+    expect(WMS_COLORS.brand).toBe("#0F6E56");
+    expect(WMS_COLORS.accent).toBe("#2DD4BF");
+    expect(WMS_COLORS.accentHover).toBe("#5EEAD4");
+    expect(WMS_COLORS.accentContrast).toBe("#04342C");
+    expect(WMS_COLORS.support).toBe("#4ADE80");
     expect(WMS_COLORS.warning).toBe("#FBBF24");
     expect(WMS_COLORS.danger).toBe("#F43F5E");
 
@@ -143,7 +145,8 @@ describe("mobile theme tokens & shared design system (@wms/mobile)", () => {
     expect(resolveOrderStatusVisual("CANCELLED").tone).toBe("rose");
 
     const cssVars = buildWmsCssVariables();
-    expect(cssVars["--bg"]).toBe("#0B1120");
-    expect(cssVars["--accent"]).toBe("#38BDF8");
+    expect(cssVars["--bg"]).toBe("#061815");
+    expect(cssVars["--brand"]).toBe("#0F6E56");
+    expect(cssVars["--accent"]).toBe("#2DD4BF");
   });
 });

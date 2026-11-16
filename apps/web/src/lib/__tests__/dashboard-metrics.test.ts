@@ -325,18 +325,20 @@ describe("dashboard-metrics (@wms/web)", () => {
     expect(WMS_DESIGN_TOKENS.style).toBe("S5 dark-data-dense");
     expect(WMS_DESIGN_TOKENS.palette).toBe("P2 Refinada");
     expect(WMS_DESIGN_TOKENS.typography).toBe("T3 DM Sans + JetBrains Mono");
-    expect(WMS_COLORS.bg).toBe("#0B1120");
-    expect(WMS_COLORS.surface).toBe("#111A2E");
-    expect(WMS_COLORS.surfaceCard).toBe("#162238");
-    expect(WMS_COLORS.accent).toBe("#38BDF8");
-    expect(WMS_COLORS.accentContrast).toBe("#08172A");
-    expect(WMS_COLORS.support).toBe("#34D399");
+    expect(WMS_COLORS.bg).toBe("#061815");
+    expect(WMS_COLORS.surface).toBe("#0A221D");
+    expect(WMS_COLORS.surfaceCard).toBe("#0F2D26");
+    expect(WMS_COLORS.brand).toBe("#0F6E56");
+    expect(WMS_COLORS.accent).toBe("#2DD4BF");
+    expect(WMS_COLORS.accentContrast).toBe("#04342C");
+    expect(WMS_COLORS.support).toBe("#4ADE80");
     expect(WMS_COLORS.warning).toBe("#FBBF24");
     expect(WMS_COLORS.danger).toBe("#F43F5E");
 
     const cssVars = buildWmsCssVariables();
     expect(cssVars["--bg"]).toBe(WMS_COLORS.bg);
     expect(cssVars["--surface-card"]).toBe(WMS_COLORS.surfaceCard);
+    expect(cssVars["--brand"]).toBe(WMS_COLORS.brand);
     expect(cssVars["--accent"]).toBe(WMS_COLORS.accent);
     expect(cssVars["--radius-sm"]).toBe(`${WMS_RADII.sm}px`);
     expect(cssVars["--radius-md"]).toBe(`${WMS_RADII.md}px`);
@@ -391,6 +393,8 @@ describe("dashboard-metrics (@wms/web)", () => {
     const summary = computeTopologySummary(locations, balances);
     expect(summary).toEqual({
       totalLocations: 4,
+      activeLocations: 4,
+      blockedLocations: 0,
       occupiedLocations: 1,
       emptyLocations: 3,
       occupancyRate: 25,

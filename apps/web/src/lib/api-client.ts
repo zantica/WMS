@@ -10,6 +10,7 @@ import {
   isApiSuccessPayload,
   normalizeBaseUrl,
   type AdjustmentInput,
+  type AisleLayoutDetailDTO,
   type ApiError,
   type ApiResponse,
   type CategoryDTO,
@@ -18,7 +19,10 @@ import {
   type CreateOrderInput,
   type CreateProductInput,
   type CreateTenantUserInput,
+  type DeleteLocationBatchResultDTO,
   type DiagnosticErrorRecord,
+  type GenerateLocationBlockInput,
+  type GenerateLocationBlockResultDTO,
   type GenerateLocationLabelsRequest,
   type GenerateProductLabelsRequest,
   type InventoryBalanceDTO,
@@ -36,8 +40,10 @@ import {
   type TenantUserDTO,
   type TxReason,
   type UpdateCategoryInput,
+  type UpdateLocationInput,
   type UpdateProductInput,
   type UpdateTenantUserInput,
+  type WarehouseLayoutSummaryDTO,
   type WarehouseTaskDTO,
   type WmsErrorCode,
 } from "@wms/shared-types";
@@ -535,6 +541,79 @@ export class WmsWebApiClient {
     return this.requestEnvelope<LocationDTO>("POST", "/api/v1/locations", {
       body: input,
     });
+  }
+
+  /**
+   * PATCH /api/v1/locations/:id — Actualiza parcialmente una ubicación (estado, tipo, etc.).
+   */
+  public async updateLocation(
+    id: string,
+    input: UpdateLocationInput,
+  ): Promise<LocationDTO> {
+    return this.requestEnvelope<LocationDTO>(
+      "PATCH",
+      `/api/v1/locations/${encodeURIComponent(id)}`,
+      {
+        body: input,
+      },
+    );
+  }
+
+  /**
+   * GET /api/v1/locations/layout/:warehouseId — Obtiene el árbol agregado macro del almacén.
+   */
+  public async getWarehouseLayoutSummary(
+    warehouseId: string,
+  ): Promise<WarehouseLayoutSummaryDTO> {
+    return this.requestEnvelope<WarehouseLayoutSummaryDTO>(
+      "GET",
+      `/api/v1/locations/layout/${encodeURIComponent(warehouseId)}`,
+    );
+  }
+
+  /**
+   * GET /api/v1/locations/layout/:warehouseId/aisles/:aisle — Matriz detallada de celdas del pasillo.
+   */
+  public async getAisleLayoutDetail(
+    warehouseId: string,
+    aisle: string,
+    zone?: string,
+  ): Promise<AisleLayoutDetailDTO> {
+    const query: Record<string, string | undefined> = {};
+    if (zone) query["zone"] = zone;
+
+    return this.requestEnvelope<AisleLayoutDetailDTO>(
+      "GET",
+      `/api/v1/locations/layout/${encodeURIComponent(warehouseId)}/aisles/${encodeURIComponent(aisle)}`,
+      { query },
+    );
+  }
+
+  /**
+   * POST /api/v1/locations/generate-block — Genera un bloque estructurado de ubicaciones.
+   */
+  public async generateLocationBlock(
+    input: GenerateLocationBlockInput,
+  ): Promise<GenerateLocationBlockResultDTO> {
+    return this.requestEnvelope<GenerateLocationBlockResultDTO>(
+      "POST",
+      "/api/v1/locations/generate-block",
+      {
+        body: input,
+      },
+    );
+  }
+
+  /**
+   * DELETE /api/v1/locations/batches/:batchId — Deshace/elimina un lote de ubicaciones sin uso.
+   */
+  public async deleteLocationBatch(
+    batchId: string,
+  ): Promise<DeleteLocationBatchResultDTO> {
+    return this.requestEnvelope<DeleteLocationBatchResultDTO>(
+      "DELETE",
+      `/api/v1/locations/batches/${encodeURIComponent(batchId)}`,
+    );
   }
 
   /**
