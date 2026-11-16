@@ -1263,13 +1263,471 @@ textarea:focus-visible {
   }
 }
 
-/* Impresión Logística de Etiquetas */
+/* ==========================================================================
+   Modal de Impresión y Previsualización de Etiquetas Logísticas (F5.2)
+   ========================================================================== */
+
+.wms-label-modal-root {
+  position: relative;
+  z-index: 9999;
+}
+
+.wms-label-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(3, 7, 18, 0.78);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 9999;
+  overflow-y: auto;
+}
+
+.wms-label-modal-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1040px;
+  max-height: 90vh;
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(56, 189, 248, 0.15);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.wms-label-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background-color: var(--surface-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.wms-label-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.wms-label-modal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  background-color: var(--accent-tint);
+  color: var(--accent);
+  font-size: 1.125rem;
+}
+
+.wms-label-modal-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wms-label-modal-subtitle {
+  margin: 0.125rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.wms-label-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.wms-label-modal-close:hover {
+  background-color: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.wms-label-modal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem 1.25rem;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+
+.wms-label-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wms-label-toolbar-label {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wms-label-segmented-control {
+  display: inline-flex;
+  background-color: var(--surface-card);
+  padding: 2px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.wms-label-segment-btn {
+  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wms-label-segment-btn.active {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.wms-label-select {
+  background-color: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 0.75rem;
+  padding: 0.35rem 0.625rem;
+  cursor: pointer;
+}
+
+.wms-label-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wms-label-number-input {
+  width: 3.5rem;
+  background-color: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.35rem;
+  text-align: center;
+}
+
+.wms-label-number-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wms-label-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.wms-label-checkbox-label:hover {
+  color: var(--text);
+}
+
+.wms-label-modal-error {
+  margin: 0.75rem 1.25rem 0;
+  padding: 0.625rem 0.875rem;
+  background-color: var(--danger-tint);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+}
+
+.wms-label-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background-color: var(--bg);
+  min-height: 240px;
+}
+
+.wms-label-modal-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  gap: 0.75rem;
+}
+
+.wms-label-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--accent-tint);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: wms-spin 0.8s linear infinite;
+}
+
+@keyframes wms-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wms-label-modal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  gap: 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.wms-label-modal-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.wms-label-preview-card {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.875rem;
+  gap: 0.75rem;
+  transition: border-color 0.15s ease;
+}
+
+.wms-label-preview-card:hover {
+  border-color: var(--border-strong);
+}
+
+.wms-label-card-svg-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  padding: 0.625rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  min-height: 120px;
+  overflow: hidden;
+}
+
+.wms-label-card-svg-container svg {
+  max-width: 100%;
+  max-height: 140px;
+  height: auto;
+}
+
+.wms-label-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.wms-label-preview-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.wms-label-preview-title {
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wms-label-preview-payload {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  color: var(--accent);
+  background-color: var(--accent-tint);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-border);
+  white-space: nowrap;
+}
+
+.wms-label-preview-dims {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.wms-label-preview-badge-copies {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--accent-contrast);
+  background-color: var(--accent);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+}
+
+.wms-label-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 0.625rem;
+}
+
+.wms-label-copies-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.wms-label-qty-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wms-label-qty-btn:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wms-label-qty-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wms-label-qty-input {
+  width: 2.25rem;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  text-align: center;
+  padding: 0.125rem 0;
+}
+
+.wms-label-qty-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wms-label-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.25rem 0.375rem;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease;
+}
+
+.wms-label-remove-btn:hover {
+  background-color: var(--danger-tint);
+}
+
+.wms-label-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.25rem;
+  background-color: var(--surface-card);
+  border-top: 1px solid var(--border);
+}
+
+.wms-label-footer-summary {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.wms-label-footer-summary strong {
+  color: var(--text);
+}
+
+.wms-label-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Hoja de impresión: en pantalla está oculta, activa solo en @media print */
+.wms-label-print-sheet {
+  display: none;
+}
+
+/* ==========================================================================
+   Impresión Logística de Etiquetas (F5.2) — Térmica / A4
+   ========================================================================== */
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  @page {
+    margin: 8mm;
+    size: auto;
   }
 
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Oculta toda la aplicación fuera del portal de etiquetas */
+  body > *:not(.wms-label-modal-root) {
+    display: none !important;
+  }
+
+  /* Oculta controles de UI no imprimibles */
+  .wms-no-print,
   .wms-topbar,
   .wms-nav,
   header,
@@ -1277,10 +1735,78 @@ textarea:focus-visible {
     display: none !important;
   }
 
-  [role="dialog"] {
+  /* El modal en impresión es un contenedor transparente sin overlay ni scrolls */
+  .wms-label-modal-root {
     position: static !important;
     background: transparent !important;
     padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .wms-label-modal-backdrop {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .wms-label-modal-dialog {
+    position: static !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .wms-label-modal-body {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Hoja de impresión activa con fondo blanco puro y cuadrícula de etiquetas */
+  .wms-label-print-sheet {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4mm !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    width: 100% !important;
+  }
+
+  .wms-label-print-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px dashed #94a3b8 !important;
+    box-sizing: border-box !important;
+    padding: 2mm !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  .wms-label-print-card svg {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
   }
 }
 

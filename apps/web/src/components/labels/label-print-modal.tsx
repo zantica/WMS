@@ -1,10 +1,18 @@
 "use client";
 
 // apps/web/src/components/labels/label-print-modal.tsx
-// Modal de generación y vista previa de cuadrícula de etiquetas logísticas para impresión térmica o A4.
-// Soporta selección de simbología (QR / Code128), dimensiones físicas en mm y estilos CSS @media print.
+// Modal de generación y vista previa interactiva de etiquetas logísticas con aislamiento de impresión.
+// Soporta portal DOM en document.body, presets en mm, auto-regeneración viva, ajuste de copias por item
+// y hoja de impresión dedicada (.wms-label-print-sheet) para @media print sin Tailwind.
 
-import React, { useEffect, useState, useTransition, type JSX } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type JSX,
+} from "react";
+import { createPortal } from "react-dom";
 import type {
   BarcodeSymbology,
   LabelBatchResponseDTO,
@@ -24,30 +32,112 @@ export interface LabelPrintModalProps {
   onClose: () => void;
   entityType: "LOCATION" | "PRODUCT";
   items: LabelItemTarget[];
+  initialBatchData?: LabelBatchResponseDTO | undefined;
 }
 
-interface DimensionPreset {
+export interface DimensionPreset {
   id: string;
   label: string;
   widthMm: number;
   heightMm: number;
 }
 
-const DIMENSION_PRESETS: readonly DimensionPreset[] = [
-  { id: "70x35", label: "70 × 35 mm (Estantería Estándar)", widthMm: 70, heightMm: 35 },
+export interface ModalItemState extends LabelItemTarget {
+  copies: number;
+}
+
+export const DIMENSION_PRESETS: readonly DimensionPreset[] = [
+  { id: "70x35", label: "70 × 35 mm (Estantería / Estándar)", widthMm: 70, heightMm: 35 },
   { id: "50x25", label: "50 × 25 mm (Artículo / Bin Pequeño)", widthMm: 50, heightMm: 25 },
   { id: "100x50", label: "100 × 50 mm (Caja / Pallet)", widthMm: 100, heightMm: 50 },
   { id: "custom", label: "Personalizado (mm)", widthMm: 70, heightMm: 35 },
 ] as const;
+
+/**
+ * Modifica la cantidad de copias para un item específico asegurando límites 1..50.
+ */
+export function updateItemCopies(
+  items: readonly ModalItemState[],
+  id: string,
+  deltaOrExact: number | { exact: number },
+): ModalItemState[] {
+  return items.map((item) => {
+    if (item.id === id) {
+      const next =
+        typeof deltaOrExact === "number"
+          ? item.copies + deltaOrExact
+          : deltaOrExact.exact;
+      const valid = Math.max(1, Math.min(50, Number.isFinite(next) ? next : 1));
+      return { ...item, copies: valid };
+    }
+    return item;
+  });
+}
+
+/**
+ * Elimina un item de la cola de impresión.
+ */
+export function removeItemFromQueue(
+  items: readonly ModalItemState[],
+  id: string,
+): ModalItemState[] {
+  return items.filter((item) => item.id !== id);
+}
+
+/**
+ * Resuelve las dimensiones en mm de un preset predeterminado.
+ */
+export function resolvePresetDimensions(
+  presetId: string,
+): { widthMm: number; heightMm: number } | null {
+  const found = DIMENSION_PRESETS.find((p) => p.id === presetId);
+  if (!found || presetId === "custom") return null;
+  return { widthMm: found.widthMm, heightMm: found.heightMm };
+}
+
+/**
+ * Expande las etiquetas renderizadas para la hoja de impresión física según el número de copias.
+ */
+export function expandPrintLabels(
+  items: readonly ModalItemState[],
+  renderedLabels: readonly RenderedLabelDTO[],
+): { key: string; label: RenderedLabelDTO }[] {
+  const labelsMap = new Map<string, RenderedLabelDTO>(
+    renderedLabels.map((l) => [l.code, l]),
+  );
+  const result: { key: string; label: RenderedLabelDTO }[] = [];
+  for (const item of items) {
+    const label = labelsMap.get(item.code);
+    if (label) {
+      for (let copy = 0; copy < item.copies; copy++) {
+        result.push({
+          key: `${item.id}-copy-${copy}`,
+          label,
+        });
+      }
+    }
+  }
+  return result;
+}
 
 export function LabelPrintModal({
   isOpen,
   onClose,
   entityType,
   items,
+  initialBatchData,
 }: LabelPrintModalProps): JSX.Element | null {
   const { client } = useSupervisorSession();
-  const [isPending, startTransition] = useTransition();
+
+  // Estado local de ítems con copias modificables y capacidad de eliminación
+  const [itemsState, setItemsState] = useState<ModalItemState[]>(() =>
+    items.map((i) => ({ ...i, copies: 1 })),
+  );
+
+  // Sincronizar items al abrir o recibir nuevos items
+  useEffect(() => {
+    setItemsState(items.map((i) => ({ ...i, copies: 1 })));
+  }, [items, isOpen]);
 
   // Configuración de renderizado
   const [symbology, setSymbology] = useState<BarcodeSymbology>(
@@ -59,30 +149,34 @@ export function LabelPrintModal({
   const [includeHumanReadable, setIncludeHumanReadable] = useState<boolean>(true);
   const [useBarcodeAsPayload, setUseBarcodeAsPayload] = useState<boolean>(false);
 
-  // Datos generados
-  const [batchData, setBatchData] = useState<LabelBatchResponseDTO | null>(null);
+  // Datos generados desde la API
+  const [batchData, setBatchData] = useState<LabelBatchResponseDTO | null>(
+    initialBatchData ?? null,
+  );
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Auto-generar al abrir o al cambiar items
-  useEffect(() => {
-    if (isOpen && items.length > 0) {
-      void fetchLabels();
+  // Clave serializada de códigos activos para disparar auto-regeneración si cambian
+  const activeCodesKey = useMemo(
+    () => itemsState.map((i) => i.code).join(","),
+    [itemsState],
+  );
+
+  // Carga / generación de etiquetas en la API
+  const fetchLabels = useCallback(async (): Promise<void> => {
+    if (itemsState.length === 0) {
+      setBatchData(null);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, items]);
 
-  if (!isOpen) return null;
-
-  async function fetchLabels(): Promise<void> {
-    if (items.length === 0) return;
     setLoading(true);
     setErrorMsg(null);
 
     try {
+      const activeCodes = itemsState.map((i) => i.code);
       if (entityType === "LOCATION") {
         const res = await client.generateLocationLabels({
-          locationCodes: items.map((i) => i.code),
+          locationCodes: activeCodes,
           symbology,
           widthMm,
           heightMm,
@@ -91,7 +185,7 @@ export function LabelPrintModal({
         setBatchData(res);
       } else {
         const res = await client.generateProductLabels({
-          skus: items.map((i) => i.code),
+          skus: activeCodes,
           symbology,
           widthMm,
           heightMm,
@@ -109,235 +203,390 @@ export function LabelPrintModal({
     } finally {
       setLoading(false);
     }
-  }
+  }, [
+    itemsState,
+    entityType,
+    client,
+    symbology,
+    widthMm,
+    heightMm,
+    includeHumanReadable,
+    useBarcodeAsPayload,
+  ]);
 
+  // Auto-regeneración viva al modificar configuración o lista de códigos
+  useEffect(() => {
+    if (isOpen && itemsState.length > 0) {
+      void fetchLabels();
+    }
+  }, [
+    isOpen,
+    activeCodesKey,
+    symbology,
+    widthMm,
+    heightMm,
+    includeHumanReadable,
+    useBarcodeAsPayload,
+    fetchLabels,
+  ]);
+
+  if (!isOpen) return null;
+
+  // Manejo de cambio de presets de tamaño
   function handlePresetChange(presetId: string): void {
     setSelectedPreset(presetId);
-    const found = DIMENSION_PRESETS.find((p) => p.id === presetId);
-    if (found && presetId !== "custom") {
-      setWidthMm(found.widthMm);
-      setHeightMm(found.heightMm);
+    const dims = resolvePresetDimensions(presetId);
+    if (dims) {
+      setWidthMm(dims.widthMm);
+      setHeightMm(dims.heightMm);
     }
   }
 
-  function handlePrint(): void {
-    window.print();
+  // Modificación de copias por item
+  function handleCopiesDelta(id: string, delta: number): void {
+    setItemsState((prev) => updateItemCopies(prev, id, delta));
   }
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="label-modal-title"
-    >
-      <div className="relative flex flex-col w-full max-w-5xl max-h-[92vh] bg-[#111A2E] border border-[#23334D] rounded-xl shadow-2xl text-[#E8EEF6] overflow-hidden print:w-full print:max-w-none print:max-h-none print:border-none print:bg-white print:text-black print:p-0">
-        {/* Cabecera del Modal */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#23334D] bg-[#162238] print:hidden">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#38BDF8]/10 text-[#38BDF8] font-bold text-sm">
-              🏷️
-            </span>
-            <div>
-              <h2 id="label-modal-title" className="text-base font-bold text-[#E8EEF6]">
-                Impresión de Etiquetas {entityType === "LOCATION" ? "de Ubicación" : "de Producto"}
-              </h2>
-              <p className="text-xs text-[#8CA0BA]">
-                {items.length} {items.length === 1 ? "elemento seleccionado" : "elementos seleccionados"} para generación en cuadrícula
-              </p>
+  function handleSetCopies(id: string, val: number): void {
+    setItemsState((prev) => updateItemCopies(prev, id, { exact: val }));
+  }
+
+  // Quitar un item de la cola
+  function handleRemoveItem(id: string): void {
+    setItemsState((prev) => removeItemFromQueue(prev, id));
+  }
+
+  // Disparar diálogo de impresión nativo del navegador
+  function handlePrint(): void {
+    if (typeof window !== "undefined") {
+      window.print();
+    }
+  }
+
+  // Mapeo rápido de etiquetas por código para asociarlas con cada item
+  const labelsMap = new Map<string, RenderedLabelDTO>(
+    batchData ? batchData.labels.map((l) => [l.code, l]) : [],
+  );
+
+  // Cálculo de copias totales
+  const totalCopies = itemsState.reduce((acc, curr) => acc + curr.copies, 0);
+
+  // Hoja expandida de impresión: repite cada etiqueta según el número de copias
+  const expandedPrintLabels = expandPrintLabels(
+    itemsState,
+    batchData?.labels ?? [],
+  );
+
+  const modalContent = (
+    <div className="wms-label-modal-root">
+      <div
+        className="wms-label-modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="label-modal-title"
+      >
+        <div className="wms-label-modal-dialog">
+          {/* Cabecera del Modal (no imprimible) */}
+          <div className="wms-label-modal-header wms-no-print">
+            <div className="wms-label-modal-title-group">
+              <span className="wms-label-modal-icon">🏷️</span>
+              <div>
+                <h2 id="label-modal-title" className="wms-label-modal-title">
+                  Impresión de Etiquetas {entityType === "LOCATION" ? "de Ubicación" : "de Producto"}
+                </h2>
+                <p className="wms-label-modal-subtitle">
+                  {itemsState.length} {itemsState.length === 1 ? "elemento en cola" : "elementos en cola"} ({totalCopies} copias a imprimir)
+                </p>
+              </div>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-[#8CA0BA] hover:text-[#E8EEF6] hover:bg-[#23334D] rounded-lg transition-colors"
-            aria-label="Cerrar modal"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Barra de Configuración de Etiquetas */}
-        <div className="px-6 py-3 bg-[#0B1120] border-b border-[#23334D] flex flex-wrap items-center gap-4 text-xs print:hidden">
-          {/* Selector de Simbología */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-[#8CA0BA]">Simbología:</span>
-            <div className="inline-flex rounded-lg bg-[#162238] p-0.5 border border-[#23334D]">
-              <button
-                type="button"
-                onClick={() => setSymbology("QR")}
-                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                  symbology === "QR"
-                    ? "bg-[#38BDF8] text-[#0B1120] font-semibold"
-                    : "text-[#8CA0BA] hover:text-[#E8EEF6]"
-                }`}
-              >
-                QR Code
-              </button>
-              <button
-                type="button"
-                onClick={() => setSymbology("CODE128")}
-                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                  symbology === "CODE128"
-                    ? "bg-[#38BDF8] text-[#0B1120] font-semibold"
-                    : "text-[#8CA0BA] hover:text-[#E8EEF6]"
-                }`}
-              >
-                Code 128 (1D)
-              </button>
-            </div>
-          </div>
-
-          {/* Selector de Tamaño */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-[#8CA0BA]">Tamaño:</span>
-            <select
-              value={selectedPreset}
-              onChange={(e) => handlePresetChange(e.target.value)}
-              className="bg-[#162238] border border-[#23334D] rounded-lg px-2.5 py-1 text-[#E8EEF6] text-xs focus:outline-none focus:border-[#38BDF8]"
-            >
-              {DIMENSION_PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Dimensiones personalizadas si custom */}
-          {selectedPreset === "custom" && (
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-1 text-[#8CA0BA]">
-                Ancho (mm):
-                <input
-                  type="number"
-                  min="20"
-                  max="250"
-                  value={widthMm}
-                  onChange={(e) => setWidthMm(Number(e.target.value))}
-                  className="w-16 bg-[#162238] border border-[#23334D] rounded px-2 py-0.5 text-[#E8EEF6] text-center"
-                />
-              </label>
-              <label className="flex items-center gap-1 text-[#8CA0BA]">
-                Alto (mm):
-                <input
-                  type="number"
-                  min="15"
-                  max="200"
-                  value={heightMm}
-                  onChange={(e) => setHeightMm(Number(e.target.value))}
-                  className="w-16 bg-[#162238] border border-[#23334D] rounded px-2 py-0.5 text-[#E8EEF6] text-center"
-                />
-              </label>
-            </div>
-          )}
-
-          {/* Toggle Human-Readable */}
-          <label className="flex items-center gap-1.5 cursor-pointer text-[#8CA0BA] hover:text-[#E8EEF6]">
-            <input
-              type="checkbox"
-              checked={includeHumanReadable}
-              onChange={(e) => setIncludeHumanReadable(e.target.checked)}
-              className="rounded bg-[#162238] border-[#23334D] text-[#38BDF8] focus:ring-0"
-            />
-            <span>Texto legible</span>
-          </label>
-
-          {/* Toggle EAN comercial para productos */}
-          {entityType === "PRODUCT" && (
-            <label className="flex items-center gap-1.5 cursor-pointer text-[#8CA0BA] hover:text-[#E8EEF6]">
-              <input
-                type="checkbox"
-                checked={useBarcodeAsPayload}
-                onChange={(e) => setUseBarcodeAsPayload(e.target.checked)}
-                className="rounded bg-[#162238] border-[#23334D] text-[#38BDF8] focus:ring-0"
-              />
-              <span>Usar EAN comercial si existe</span>
-            </label>
-          )}
-
-          {/* Botón Actualizar Vista */}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void fetchLabels()}
-            className="ml-auto px-3 py-1 bg-[#23334D] hover:bg-[#2b3e5c] text-[#E8EEF6] font-medium rounded-lg transition-colors disabled:opacity-50"
-          >
-            {loading ? "Generando..." : "↻ Actualizar"}
-          </button>
-        </div>
-
-        {/* Mensaje de error si ocurre */}
-        {errorMsg && (
-          <div className="mx-6 mt-3 p-3 bg-[#F43F5E]/15 border border-[#F43F5E]/40 text-[#F43F5E] rounded-lg text-xs print:hidden">
-            ⚠️ {errorMsg}
-          </div>
-        )}
-
-        {/* Contenido / Cuadrícula de Etiquetas */}
-        <div className="flex-1 overflow-y-auto p-6 bg-[#0B1120] print:p-0 print:bg-white print:overflow-visible">
-          {loading && !batchData && (
-            <div className="flex flex-col items-center justify-center py-16 text-[#8CA0BA] text-sm gap-2">
-              <div className="w-8 h-8 border-2 border-[#38BDF8] border-t-transparent rounded-full animate-spin" />
-              <span>Renderizando vectores vectoriales de etiquetas...</span>
-            </div>
-          )}
-
-          {batchData && batchData.labels.length > 0 && (
-            <div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2 print:gap-2 print:m-0"
-              style={{ pageBreakInside: "avoid" }}
-            >
-              {batchData.labels.map((label: RenderedLabelDTO) => (
-                <div
-                  key={label.id}
-                  className="flex flex-col items-center justify-center p-3 bg-white rounded-lg border border-slate-300 shadow-sm print:shadow-none print:border-dashed print:border-slate-400 print:p-2"
-                  style={{ breakInside: "avoid", pageBreakInside: "avoid" }}
-                >
-                  <div
-                    className="w-full max-w-[280px] flex items-center justify-center overflow-hidden"
-                    dangerouslySetInnerHTML={{ __html: label.svg }}
-                  />
-                  <div className="mt-2 text-[10px] text-slate-500 font-mono tracking-tight flex items-center justify-between w-full print:hidden">
-                    <span>{label.code}</span>
-                    <span>{label.widthMm}×{label.heightMm}mm</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pie del Modal con Botón de Impresión */}
-        <div className="flex items-center justify-between px-6 py-4 bg-[#162238] border-t border-[#23334D] print:hidden">
-          <div className="text-xs text-[#8CA0BA]">
-            {batchData ? (
-              <span>
-                Listo para imprimir: <strong className="text-[#E8EEF6] font-mono">{batchData.count}</strong> etiquetas ({batchData.dimensions.widthMm}×{batchData.dimensions.heightMm}mm)
-              </span>
-            ) : null}
-          </div>
-
-          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-[#8CA0BA] hover:text-[#E8EEF6] hover:bg-[#23334D] rounded-lg transition-colors"
+              className="wms-label-modal-close"
+              aria-label="Cerrar modal"
             >
-              Cancelar
+              ✕
             </button>
+          </div>
+
+          {/* Barra de Configuración y Auto-Regeneración (no imprimible) */}
+          <div className="wms-label-modal-toolbar wms-no-print">
+            {/* Simbología */}
+            <div className="wms-label-toolbar-group">
+              <span className="wms-label-toolbar-label">Simbología:</span>
+              <div className="wms-label-segmented-control">
+                <button
+                  type="button"
+                  onClick={() => setSymbology("QR")}
+                  className={`wms-label-segment-btn ${symbology === "QR" ? "active" : ""}`}
+                >
+                  QR Code
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSymbology("CODE128")}
+                  className={`wms-label-segment-btn ${symbology === "CODE128" ? "active" : ""}`}
+                >
+                  Code 128 (1D)
+                </button>
+              </div>
+            </div>
+
+            {/* Presets de Tamaño */}
+            <div className="wms-label-toolbar-group">
+              <span className="wms-label-toolbar-label">Tamaño:</span>
+              <select
+                value={selectedPreset}
+                onChange={(e) => handlePresetChange(e.target.value)}
+                className="wms-label-select"
+              >
+                {DIMENSION_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Inputs personalizados si custom */}
+            {selectedPreset === "custom" && (
+              <div className="wms-label-toolbar-group">
+                <label className="wms-label-checkbox-label">
+                  Ancho:
+                  <input
+                    type="number"
+                    min="20"
+                    max="250"
+                    value={widthMm}
+                    onChange={(e) => setWidthMm(Number(e.target.value))}
+                    className="wms-label-number-input"
+                  />
+                  mm
+                </label>
+                <label className="wms-label-checkbox-label">
+                  Alto:
+                  <input
+                    type="number"
+                    min="15"
+                    max="200"
+                    value={heightMm}
+                    onChange={(e) => setHeightMm(Number(e.target.value))}
+                    className="wms-label-number-input"
+                  />
+                  mm
+                </label>
+              </div>
+            )}
+
+            {/* Texto legible */}
+            <label className="wms-label-checkbox-label">
+              <input
+                type="checkbox"
+                checked={includeHumanReadable}
+                onChange={(e) => setIncludeHumanReadable(e.target.checked)}
+              />
+              <span>Texto legible</span>
+            </label>
+
+            {/* Toggle EAN comercial para productos */}
+            {entityType === "PRODUCT" && (
+              <label className="wms-label-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={useBarcodeAsPayload}
+                  onChange={(e) => setUseBarcodeAsPayload(e.target.checked)}
+                />
+                <span>Usar EAN comercial si existe</span>
+              </label>
+            )}
+
+            {/* Botón manual de actualización */}
             <button
               type="button"
-              onClick={handlePrint}
-              disabled={loading || !batchData || batchData.labels.length === 0}
-              className="px-4 py-2 text-xs font-semibold bg-[#38BDF8] text-[#0B1120] hover:bg-[#38BDF8]/90 disabled:opacity-50 rounded-lg shadow-md transition-all flex items-center gap-2"
+              disabled={loading || itemsState.length === 0}
+              onClick={() => void fetchLabels()}
+              className="wms-btn wms-btn-secondary wms-btn-sm"
+              style={{ marginLeft: "auto" }}
             >
-              <span>🖨️</span>
-              <span>Imprimir Cuadrícula</span>
+              {loading ? "Generando..." : "↻ Actualizar"}
             </button>
+          </div>
+
+          {/* Mensaje de error si falla la llamada */}
+          {errorMsg && (
+            <div className="wms-label-modal-error wms-no-print">
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
+          {/* Cuerpo del Modal */}
+          <div className="wms-label-modal-body">
+            {/* 1. Vista previa interactiva en pantalla (no imprimible) */}
+            <div className="wms-no-print">
+              {loading && !batchData && (
+                <div className="wms-label-modal-loading">
+                  <div className="wms-label-spinner" />
+                  <span>Renderizando vectores de códigos de barras...</span>
+                </div>
+              )}
+
+              {itemsState.length === 0 && (
+                <div className="wms-label-modal-empty">
+                  <span>📭 No hay elementos en la cola de impresión.</span>
+                  <span style={{ fontSize: "0.75rem" }}>
+                    Cierra este diálogo y selecciona ítems desde la tabla.
+                  </span>
+                </div>
+              )}
+
+              {itemsState.length > 0 && batchData && (
+                <div className="wms-label-modal-preview-grid">
+                  {itemsState.map((item) => {
+                    const label = labelsMap.get(item.code);
+                    return (
+                      <div key={item.id} className="wms-label-preview-card">
+                        {/* Contenedor del SVG renderizado */}
+                        <div className="wms-label-card-svg-container">
+                          {label ? (
+                            <div
+                              style={{ width: "100%", display: "flex", justifyContent: "center" }}
+                              dangerouslySetInnerHTML={{ __html: label.svg }}
+                            />
+                          ) : (
+                            <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                              Generando SVG...
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Metadatos y Payload */}
+                        <div className="wms-label-preview-info">
+                          <div className="wms-label-preview-code-row">
+                            <span className="wms-label-preview-title" title={item.title}>
+                              {item.title}
+                            </span>
+                            {item.copies > 1 && (
+                              <span className="wms-label-preview-badge-copies">
+                                ×{item.copies}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="wms-label-preview-code-row">
+                            <span className="wms-label-preview-payload">
+                              {label?.barcodePayload ?? item.code}
+                            </span>
+                            <span className="wms-label-preview-dims">
+                              {widthMm}×{heightMm} mm
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Controles de copias y botón quitar */}
+                        <div className="wms-label-preview-actions">
+                          <div className="wms-label-copies-control">
+                            <span>Copias:</span>
+                            <button
+                              type="button"
+                              className="wms-label-qty-btn"
+                              onClick={() => handleCopiesDelta(item.id, -1)}
+                              disabled={item.copies <= 1}
+                              aria-label={`Disminuir copias de ${item.code}`}
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              max="50"
+                              value={item.copies}
+                              onChange={(e) => handleSetCopies(item.id, Number(e.target.value))}
+                              className="wms-label-qty-input"
+                              aria-label={`Número de copias para ${item.code}`}
+                            />
+                            <button
+                              type="button"
+                              className="wms-label-qty-btn"
+                              onClick={() => handleCopiesDelta(item.id, 1)}
+                              disabled={item.copies >= 50}
+                              aria-label={`Aumentar copias de ${item.code}`}
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="wms-label-remove-btn"
+                            aria-label={`Quitar ${item.code} de la cola`}
+                          >
+                            ✕ Quitar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Hoja dedicada de impresión (@media print únicamente) */}
+            <div className="wms-label-print-sheet">
+              {expandedPrintLabels.map((card) => (
+                <div
+                  key={card.key}
+                  className="wms-label-print-card"
+                  style={{
+                    width: `${card.label.widthMm}mm`,
+                    height: `${card.label.heightMm}mm`,
+                  }}
+                  dangerouslySetInnerHTML={{ __html: card.label.svg }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Pie del Modal con resumen y botón de impresión (no imprimible) */}
+          <div className="wms-label-modal-footer wms-no-print">
+            <div className="wms-label-footer-summary">
+              {itemsState.length > 0 && batchData ? (
+                <span>
+                  Total listo: <strong>{totalCopies}</strong> {totalCopies === 1 ? "etiqueta" : "etiquetas"} ({itemsState.length} ítems, {widthMm}×{heightMm} mm)
+                </span>
+              ) : (
+                <span>Selecciona o ajusta ítems para imprimir</span>
+              )}
+            </div>
+
+            <div className="wms-label-footer-actions">
+              <button
+                type="button"
+                onClick={onClose}
+                className="wms-btn wms-btn-secondary wms-btn-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={loading || itemsState.length === 0 || expandedPrintLabels.length === 0}
+                className="wms-btn wms-btn-primary wms-btn-sm"
+              >
+                <span>🖨️ Imprimir Cuadrícula</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
+
+  // Si estamos en entorno navegador (browser), montar vía portal en document.body
+  if (typeof document !== "undefined" && document.body) {
+    return createPortal(modalContent, document.body);
+  }
+
+  // Fallback seguro para SSR o testing estático en Node
+  return modalContent;
 }
