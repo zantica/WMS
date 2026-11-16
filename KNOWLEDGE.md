@@ -62,9 +62,14 @@
 
 **Por qué**: Hace las sumas de auditoría triviales y evita bugs de sign-flip. Para saber cuánto salió de una ubicación: `SUM(quantity) WHERE fromLocationId = X`. Para cuánto entró: `SUM(quantity) WHERE toLocationId = X`.
 
-### 5. Códigos de ubicación como strings ordenables lexicográficamente
+### 5. Códigos de ubicación como strings ordenables lexicográficamente y Topología Física (F9.2)
 
-**Decisión**: Los códigos de ubicación siguen el formato `PASILLO-ESTANTERIA-NIVEL` (ej. `A-01-02`). La ruta de picking se genera simplemente con `ORDER BY location.code ASC`.
+**Decisión**:
+1. Los códigos de ubicación siguen el formato normalizado con zero-padding fijo de al menos 2 dígitos en todos sus segmentos numéricos (ej. `01-01-01-01` o `A-01-02-03`). La función pura `normalizeLocationCode()` y el generador en bloque garantizan que `ORDER BY location.code ASC` sea estrictamente equivalente al orden físico real (`A-01-01-01 < A-01-01-09 < A-01-01-10 < A-01-01-12`).
+2. Separación entre **Rol Operativo** (`LocationType`: `RECEIVING`, `STORAGE`, `PACKING`, `DISPATCH`) y **Estructura Física** (`StorageType`: `RACK`, `SHELVING`, `FLOOR`).
+3. Matriz de validación arquitectónica: `RACK` y `SHELVING` requieren `aisle`, `rack` y `level >= 1`; `FLOOR` (bahías en suelo) exige nivel `"01"` y rechaza niveles superiores con `INVALID_STORAGE_TOPOLOGY` (422).
+4. Ocupación %: `occupancyRate (%) = Math.round((occupiedLocations / activeLocations) * 100)`. Las celdas con `status === 'BLOCKED'` quedan excluidas del divisor de capacidad activa.
+5. Inmutabilidad en Rollback: `DELETE /api/v1/locations/batches/:batchId` rechaza con `LOCATION_BATCH_IN_USE` (409) si alguna ubicación del lote tiene saldos de stock (`onHand > 0` o `allocated > 0`), transacciones en `InventoryTransaction` o pasos en `TaskStep`.
 
 **Por qué**: Un algoritmo TSP (Travelling Salesman Problem) es overkill para almacenes de <500 ubicaciones. El orden alfabético de los códigos, bien diseñados, ya produce un recorrido eficiente en S (primero toda la columna A de arriba a abajo, luego B, etc.). El jefe de almacén controla la eficiencia del picking simplemente nombrando bien sus ubicaciones.
 

@@ -200,12 +200,29 @@
       "milestone": "Hito 9 — Maestro Operativo, Topología Física y Vista Gráfica",
       "title": "Topología Física (RACK / SHELVING / FLOOR), Alta Estructurada de Ubicaciones y Vista Gráfica del Layout",
       "boundedContext": "Core / Topology & Web Dashboard",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Extender Location en Prisma y @wms/shared-types separando rol operativo (LocationType: RECEIVING, STORAGE, PACKING, DISPATCH), tipo físico (StorageType: RACK, SHELVING, FLOOR), estado operativo (LocationStatus: ACTIVE, BLOCKED) y metadatos de layout (zone, aisle, rack, level, position, generationBatchId) con índice compuesto (tenantId, warehouseId, zone, aisle)",
+        "Normalización estricta de códigos (normalizeLocationCode) con padding fijo de ceros en segmentos numéricos tanto en alta individual (POST /api/v1/locations) como en generador en bloque para preservar ORDER BY code ASC; test explícito con >= 12 posiciones por nivel verificando orden lexicográfico (A-01-01 < A-01-09 < A-01-10 < A-01-12)",
+        "Matriz de validación de metadatos según StorageType en capa de servicio (RACK y SHELVING requieren zone, aisle, rack, level >= 01 y position; FLOOR requiere zone, rack=bahía, position, aisle opcional y level siempre '01') con tests negativos que rechacen RACK sin level y FLOOR con level > 1",
+        "Dos endpoints de layout desacoplados con puerto TopologyRepositoryPort: GET /api/v1/locations/layout/:warehouseId (árbol macro Zona -> Pasillo con % ocupación = ubicaciones con saldo / ubicaciones activas, bloqueadas, OH, reservado y ATP unificado) y GET /api/v1/locations/layout/:warehouseId/aisles/:aisle (matriz micro de celdas del pasillo expandido)",
+        "Generador estructurado POST /api/v1/locations/generate-block con modo dryRun (reportando colisiones con códigos existentes), commit upsert idempotente en transacción con generationBatchId auditable, y rollback por lote DELETE /api/v1/locations/batches/:batchId si ninguna ubicación del lote tiene saldos ni movimientos",
+        "Vista gráfica interactiva del Layout en @wms/web (/locations) sin librerías pesadas (CSS Grid + HTML semántico S5 dark-data-dense): mapa macro con contenedor scrollable, alzado frontal invertido (Nivel N arriba -> Nivel 01 abajo) para RACK/SHELVING y bahías en planta para FLOOR, umbral de colapso (>200 celdas por pasillo colapsa a resumen por rack), leyenda incluyendo BLOCKED, e integración post-generación con LabelPrintModal",
+        "Tests unitarios y de integración (incluyendo verificación de paridad de enums @wms/domain <-> Prisma y uso de índice en consulta de layout) con cobertura >= 80% en use-cases"
+      ]
+    },
+    {
+      "id": "F9.3",
+      "milestone": "Hito 9 — Maestro Operativo, Topología Física y Vista Gráfica",
+      "title": "Internacionalización Multi-Idioma (ES / EN / PT) Tipada con Persistencia en Cookie y Autodetección de Navegador",
+      "boundedContext": "Web Supervisor Dashboard & Shared Types",
       "status": "pending",
       "acceptanceCriteria": [
-        "Extender Location en Prisma y @wms/shared-types separando rol operativo (LocationType: RECEIVING, STORAGE, PACKING, DISPATCH) del tipo físico (StorageType: RACK, SHELVING, FLOOR) y metadatos de layout (zone, aisle, rack, level)",
-        "Endpoints para alta individual/estructurada de ubicaciones físicas (generación por bloque Zona/Pasillo/Rack/Niveles) y consulta agregada de layout con ocupación/stock por ubicación",
-        "Vista gráfica interactiva del Layout de Almacén en @wms/web (Zona -> Pasillo -> Rack/Estantería/Piso -> Nivel) mostrando estado de ocupación, stock y acceso rápido a alta física de ubicaciones",
-        "Tests unitarios y de integración validando unicidad por (warehouseId, code), aislamiento tenantId/RLS y generación de ubicaciones"
+        "Motor i18n puro y 100% type-safe en @wms/shared-types (SupportedLocale = 'es' | 'en' | 'pt', diccionarios con paridad de claves verificada por TypeScript, interpolación tipada y formateo numérico/fechas con Intl nativo) sin dependencias externas pesadas",
+        "Extensión retrocompatible de los resolutores visuales en @wms/shared-types (resolveTaskStatusVisual, resolveTaskTypeVisual, resolveStepStatusVisual, resolveOrderStatusVisual) aceptando locale opcional (default 'es')",
+        "Resolución jerárquica de idioma con puerto/adaptador desacoplado: 1) Cookie 'wms_locale' (es|en|pt, SameSite=Lax, Path=/, 1 año), 2) Autodetección del navegador (Accept-Language / navigator.languages normalizando variantes regionales como es-MX, en-US, pt-BR), 3) Fallback 'es'",
+        "Contexto i18n (LocaleProvider + hook useTranslation) y selector de idioma (ES | EN | PT) en DashboardShell de @wms/web, actualizando cookie y atributo lang, y traduciendo todas las vistas del panel (/ , /catalog, /locations, /users, /inventory, /operations y LabelPrintModal) sin romper rutas",
+        "Suite de tests unitarios verificando paridad completa de diccionarios (es/en/pt), resolución Cookie -> Browser -> Fallback, interpolación y cambio de idioma en sesión"
       ]
     },
     {
@@ -268,6 +285,19 @@
         "Decisiones de comportamiento aprobadas: moveStock respeta available (qty <= available); confirm-task-step usa consume (EXCEEDS_ALLOCATED) y cancel/exception usan releaseUpTo; se rechazan re-escaneos en EXCEPTION/SKIPPED (STEP_ALREADY_RESOLVED) y sobre-escaneo (SCAN_EXCEEDS_EXPECTED); tarea pasa a IN_PROGRESS al primer escaneo; paso resuelto = no PENDING; PICKING no se escribe",
         "DomainError se mapea a WmsError en el borde conservando los códigos HTTP/error públicos existentes (sin cambio de contrato, CP-3); test de paridad enums @wms/domain <-> Prisma",
         "Tests con repositorios in-memory (sustituyen vi.mock de @wms/db donde aplique) en suites happy path y 'romper a propósito', más tests de integración contra PostgreSQL real para locking y concurrencia (sin mocks de BD); cobertura use-cases >= 80%; ADR si hay decisiones no obvias; suite global verde"
+      ]
+    },
+    {
+      "id": "TECH-VITE",
+      "milestone": "Refactor Técnico / Frontend Architecture",
+      "title": "Migración de @wms/web de Next.js App Router a Vite + React SPA (Unificación de Toolchain y Despliegue Estático)",
+      "boundedContext": "Web Dashboard / Frontend Tooling",
+      "status": "pending",
+      "acceptanceCriteria": [
+        "Reemplazo de Next.js por Vite + React (@vitejs/plugin-react) en apps/web, unificando el pipeline de bundling con Vitest",
+        "Enrutador de cliente puro (React Router o TanStack Router) preservando la estructura de rutas existentes (/catalog, /inventory, /locations, /operations, /users)",
+        "Configuración de proxy de desarrollo (server.proxy en vite.config.ts) hacia @wms/api y build estático de producción (dist/) sin necesidad de servidor Node intermedio",
+        "Preservación íntegra de estilos Tailwind, diseño S5/tokens, contexto supervisor-session, API client y tests existentes con paso al 100%"
       ]
     }
   ]

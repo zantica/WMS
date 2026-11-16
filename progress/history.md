@@ -251,3 +251,17 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Esquema de prefijos tipados (`LOC:`, `SKU:`, `EAN:`, `LPN:`, `ORDER:`, `TASK:`, `USER:`) y DTOs de etiquetas en `@wms/shared-types` (`barcode-payload.ts`).
   - Puerto `LabelRendererPort` y `LocationRepositoryPort` en `@wms/api` con generadores en TypeScript puro para QR (ISO/IEC 18004) y Code128 (ISO/IEC 15417), `SvgLabelRendererAdapter` con dimensiones en mm, casos de uso `generateLocationLabels` / `generateProductLabels` (92.63% cobertura) y rutas `POST /api/v1/labels/locations` y `POST /api/v1/labels/products`.
   - Integración en `@wms/web` (`/catalog`, `/locations`) con `LabelPrintModal` y reglas `@media print`, más habilitación de `*.test.tsx` en `apps/web/vitest.config.ts` (19/19 tests en verde).
+
+---
+
+## [2026-11-16] Feature `F9.2` y Cierre del Hito 9 — Topología Física (`RACK` / `SHELVING` / `FLOOR`), Alta Estructurada de Ubicaciones y Vista Gráfica del Layout
+- **Estado**: `done` (`VEREDICTO: APPROVED`) — **Hito 9 100% Completado**
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F9.2.md`](./impl_F9.2.md)
+  - Revisión: [`progress/review_F9.2.md`](./review_F9.2.md)
+  - ADR: [`docs/adr/008-physical-topology-layout.md`](../docs/adr/008-physical-topology-layout.md)
+- **Cambios clave**:
+  - Extensión de `Location` en `@wms/db` y `@wms/shared-types` separando rol operativo (`LocationType`), estructura física (`StorageType`: `RACK`, `SHELVING`, `FLOOR`), estado operativo (`LocationStatus`: `ACTIVE`, `BLOCKED`) y coordenadas (`zone`, `aisle`, `rack`, `level`, `position`, `generationBatchId`) con índices compuestos `@@index([tenantId, warehouseId, zone, aisle])` y `@@index([tenantId, generationBatchId])`.
+  - Funciones puras en `@wms/shared-types/src/topology.ts` (`normalizeLocationCode`, `formatStructuredLocationCode`, `validateStorageTypeMetadata`, `calculateAtp`) garantizando zero-padding fijo (`01`..`99`) para preservar `ORDER BY code ASC` y matriz de validación por `StorageType` (`FLOOR` restringido a `level === "01"`).
+  - Puerto hexagonal `TopologyRepositoryPort` en `@wms/api` con adaptadores `PrismaTopologyRepository` e `InMemoryTopologyRepository`, casos de uso en `manage-locations.ts` (`88%` cobertura), dos endpoints de layout (`GET /api/v1/locations/layout/:warehouseId` y `GET /api/v1/locations/layout/:warehouseId/aisles/:aisle`), generador estructurado `POST /api/v1/locations/generate-block` con `dryRun`/colisiones/upsert idempotente y rollback atómico `DELETE /api/v1/locations/batches/:batchId` protegido contra saldos/movimientos del Ledger.
+  - Vista gráfica interactiva en `@wms/web` (`/locations`) bajo `S5 dark-data-dense` / `P2` / `T3` con `0` colores hex crudos, drill-down macro a pasillo (alzado frontal invertido para `RACK`/`SHELVING` y bahías en planta para `FLOOR`), umbral de colapso (`> 200` celdas por pasillo) e impresión masiva de etiquetas del lote generado con `LabelPrintModal`.

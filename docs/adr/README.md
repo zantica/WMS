@@ -21,3 +21,4 @@ cuando una feature introduce una decisión de diseño relevante (conflictos offl
 | [005](./005-offline-sync-queue-and-local-cache.md) | Motor `OfflineSyncQueue` Hexagonal, Caché Local de Tareas y Cuarentena en Móvil | Aceptado | `F6.2` |
 | [006](./006-shared-domain-package.md) | Paquete de dominio compartido `@wms/domain` (TypeScript puro, sin infraestructura) | Aceptado | `DOM-1` |
 | [007](./007-api-domain-adoption-uow.md) | Adopción de `@wms/domain` en `@wms/api` mediante `UnitOfWork` y repositorios hexagonales | Aceptado | `DOM-2` |
+| [008](./008-physical-topology-layout.md) | Topología Física (`RACK`/`SHELVING`/`FLOOR`), Padding de Ceros y Layout con Divulgación Progresiva | Aceptado | `F9.2` |
