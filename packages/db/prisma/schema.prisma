@@ -73,15 +73,23 @@ model Warehouse {
 }
 
 model Location {
-  id          String       @id @default(cuid())
-  tenantId    String
-  warehouseId String
+  id                String         @id @default(cuid())
+  tenantId          String
+  warehouseId       String
   /// Código escaneable: ej. "PAS01-EST02-NIV01" — impreso como QR en la estantería
-  code        String
-  type        LocationType
-  description String?
-  isActive    Boolean      @default(true)
-  createdAt   DateTime     @default(now())
+  code              String
+  type              LocationType
+  storageType       StorageType    @default(RACK)
+  status            LocationStatus @default(ACTIVE)
+  zone              String         @default("MAIN")
+  aisle             String?
+  rack              String         @default("01")
+  level             String         @default("01")
+  position          String         @default("01")
+  generationBatchId String?
+  description       String?
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
 
   warehouse Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   balances  InventoryBalance[]
@@ -92,6 +100,8 @@ model Location {
   @@unique([warehouseId, code])
   @@index([tenantId])
   @@index([tenantId, type])
+  @@index([tenantId, warehouseId, zone, aisle])
+  @@index([tenantId, generationBatchId])
   @@map("locations")
 }
 
@@ -100,6 +110,17 @@ enum LocationType {
   STORAGE    // Estanterías — stock disponible para picking
   PACKING    // Mesa de armado — stock en proceso de despacho
   DISPATCH   // Zona de salida — stock listo para courier
+}
+
+enum StorageType {
+  RACK
+  SHELVING
+  FLOOR
+}
+
+enum LocationStatus {
+  ACTIVE
+  BLOCKED
 }
 
 model Category {
