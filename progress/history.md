@@ -294,3 +294,16 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Extensión retrocompatible de los resolutores visuales en `design-tokens.ts` (`resolveTaskStatusVisual`, `resolveTaskTypeVisual`, `resolveStepStatusVisual`, `resolveOrderStatusVisual`) aceptando `locale?: SupportedLocale`.
   - Integración en `@wms/web`: `LocaleProvider`, `useTranslation()`, adaptadores de cookie (`SameSite=Lax; Path=/; Max-Age=31536000`) y `<html lang>`, selector regional en `DashboardShell` y traducción completa de `/`, `/catalog`, `/locations`, `/users`, `/inventory`, `/operations` y `LabelPrintModal`.
   - Verificación independiente ejecutada: `pnpm build` (6/6 paquetes), `@wms/shared-types test` (14/14), `@wms/web test` (35/35) y `@wms/api test` (365 passed, 8 skipped de integración PG) con exit code `0`.
+
+---
+
+## [2026-11-17] Feature `TECH-VITE` — Migración de `@wms/web` de Next.js App Router a Vite + React SPA
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_TECH-VITE.md`](./impl_TECH-VITE.md)
+  - Revisión: [`progress/review_TECH-VITE.md`](./review_TECH-VITE.md)
+- **Cambios clave**:
+  - Reemplazo completo de Next.js (`next`, `next.config.mjs`, `next-env.d.ts`, `src/app/`, `.next/`) por Vite 5 + `@vitejs/plugin-react` + `react-router-dom` en `apps/web/`, unificando bundling y Vitest en `apps/web/vite.config.ts` (con proxy dev `/api` y `/health` -> `http://localhost:3001`, alias `@wms/shared-types` -> `packages/shared-types/src/index.ts` y salida estática `dist/`).
+  - Enrutador cliente (`AppRoutes` + `BrowserRouter` en `src/App.tsx`) preservando `/`, `/catalog`, `/inventory`, `/locations`, `/operations`, `/users` y fallback SPA 404 (`*` -> `not-found-page.tsx`).
+  - Composition root en `src/main.tsx` + función pura `resolveBootstrapSession` en `src/bootstrap.ts` aislando `import.meta.env.VITE_*` del resto de componentes/contextos (CP-7).
+  - Verificación independiente ejecutada: `pnpm build` (6/6 paquetes), `pnpm --filter @wms/web build` (`dist/` estático), `pnpm --filter @wms/web test:coverage` (7 archivos / 48 tests passed, 95.72% líneas / 83.52% ramas / 100% funciones) y `pnpm --filter @wms/api test:coverage` (28 archivos / 365 tests passed, 93.17% líneas) con exit code `0`.

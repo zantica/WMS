@@ -306,7 +306,7 @@
       "milestone": "Refactor Técnico / Frontend Architecture",
       "title": "Migración de @wms/web de Next.js App Router a Vite + React SPA (Unificación de Toolchain y Despliegue Estático)",
       "boundedContext": "Web Dashboard / Frontend Tooling",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
         "Reemplazo de Next.js por Vite + React (@vitejs/plugin-react) en apps/web, unificando el pipeline de bundling con Vitest",
         "Enrutador de cliente puro (React Router o TanStack Router) preservando la estructura de rutas existentes (/catalog, /inventory, /locations, /operations, /users)",
