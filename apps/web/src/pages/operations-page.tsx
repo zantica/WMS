@@ -1,6 +1,4 @@
-"use client";
-
-// apps/web/src/app/operations/page.tsx
+// apps/web/src/pages/operations-page.tsx
 // Panel de Monitoreo de Pedidos (SalesOrderDTO) y Cola de Tareas Activas (WarehouseTaskDTO).
 // Permite crear pedidos, lanzar reserva ATP (allocate), cancelar pedidos liberando reservas (cancel F3.1) y despachar (dispatch).
 
@@ -17,15 +15,15 @@ import type {
   SalesOrderDTO,
   WarehouseTaskDTO,
 } from "@wms/shared-types";
-import { useSupervisorSession } from "../../context/supervisor-session";
-import { useTranslation } from "../../context/locale-context";
+import { useSupervisorSession } from "../context/supervisor-session";
+import { useTranslation } from "../context/locale-context";
 import {
   ORDER_STATUS_LIST,
   resolveOrderStatusVisual,
   resolveTaskStatusVisual,
   summarizeOrdersByStatus,
   summarizeTasksMonitor,
-} from "../../lib/dashboard-metrics";
+} from "../lib/dashboard-metrics";
 
 export default function OperationsMonitorPage(): JSX.Element {
   const { client, session } = useSupervisorSession();

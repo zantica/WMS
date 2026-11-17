@@ -1,5 +1,3 @@
-"use client";
-
 // apps/web/src/context/supervisor-session.tsx
 // Contexto React para la sesión del Supervisor en el Dashboard Web (@wms/web).
 // Gestiona la conexión multi-tenant (x-api-key / Authorization: Bearer), el warehouse activo y persistencia en localStorage.

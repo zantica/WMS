@@ -1,6 +1,4 @@
-"use client";
-
-// apps/web/src/app/locations/page.tsx
+// apps/web/src/pages/locations-page.tsx
 // Topología Física del Almacén, Distribución por Zonas y Vista Gráfica del Layout (F9.2).
 //
 // ## Design tokens — Warehouse Topology & Physical Layout (F9.2)
@@ -40,10 +38,10 @@ import {
   SPECIAL_FLOOR_AISLE,
   computeTopologySummary,
   resolveStorageTypeVisual,
-} from "../../lib/dashboard-metrics";
-import { useSupervisorSession } from "../../context/supervisor-session";
-import { LabelPrintModal } from "../../components/labels/label-print-modal";
-import { useTranslation } from "../../context/locale-context";
+} from "../lib/dashboard-metrics";
+import { useSupervisorSession } from "../context/supervisor-session";
+import { LabelPrintModal } from "../components/labels/label-print-modal";
+import { useTranslation } from "../context/locale-context";
 
 type ViewMode = "MACRO" | "AISLE_DETAIL";
 type CellDensity = "NORMAL" | "COMPACT";

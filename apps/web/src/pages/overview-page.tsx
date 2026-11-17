@@ -1,9 +1,7 @@
-"use client";
-
-// apps/web/src/app/page.tsx
+// apps/web/src/pages/overview-page.tsx
 // Vista principal del Dashboard de Supervisores: HUD contable (OnHand − Allocated = ATP), pipeline de pedidos y últimos movimientos del Ledger.
 
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type {
   InventoryBalanceDTO,
@@ -265,7 +263,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
             </strong>{" "}
             {t("web.overview.withException")}
           </div>
-          <Link href="/operations" className="wms-banner-link">
+          <Link to="/operations" className="wms-banner-link">
             {t("web.overview.resolveInOps")}
           </Link>
         </section>
@@ -276,7 +274,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
           <div className="wms-card-title">
             <span>{t("web.overview.pipelineTitle")}</span>
             <Link
-              href="/operations"
+              to="/operations"
               className="wms-btn wms-btn-outline wms-btn-sm"
             >
               {t("web.overview.manageOrdersBtn")}
@@ -327,7 +325,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
           <div className="wms-card-title">
             <span>{t("web.overview.recentTxTitle")}</span>
             <Link
-              href="/inventory"
+              to="/inventory"
               className="wms-btn wms-btn-outline wms-btn-sm"
             >
               {t("web.overview.auditKardexBtn")}

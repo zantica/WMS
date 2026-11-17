@@ -8,10 +8,14 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "rootDir": ".",
     "outDir": "dist",
     "noEmit": true,
+    "types": [
+      "vite/client",
+      "node"
+    ],
     "paths": {
       "@wms/shared-types": [
         "../../packages/shared-types/dist/index.d.ts"
@@ -23,25 +27,16 @@
         "./node_modules/@types/react/jsx-runtime.d.ts"
       ]
     },
-    "allowJs": true,
-    "incremental": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
+    "isolatedModules": true
   },
   "include": [
-    "next-env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
-    ".next/types/**/*.ts"
+    "vite.config.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    ".next"
+    "dist"
   ]
 }

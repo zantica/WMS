@@ -1,6 +1,4 @@
-"use client";
-
-// apps/web/src/app/catalog/page.tsx
+// apps/web/src/pages/catalog-page.tsx
 // Vista de Maestro de Producto WMS y Categorías Configurables con Divulgación Progresiva.
 //
 // ## Design tokens — Catalog Master Data Management
@@ -17,9 +15,9 @@ import {
   type JSX,
 } from "react";
 import type { CategoryDTO, ProductDTO } from "@wms/shared-types";
-import { useSupervisorSession } from "../../context/supervisor-session";
-import { useTranslation } from "../../context/locale-context";
-import { LabelPrintModal } from "../../components/labels/label-print-modal";
+import { useSupervisorSession } from "../context/supervisor-session";
+import { useTranslation } from "../context/locale-context";
+import { LabelPrintModal } from "../components/labels/label-print-modal";
 
 type CatalogTab = "products" | "categories";
 

@@ -1,10 +1,7 @@
-"use client";
-
 // apps/web/src/components/dashboard-shell.tsx
 // Shell interactivo del Dashboard Web: navegación lateral industrial, telemetría de conexión y configuración multi-tenant.
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useLocation } from "react-router-dom";
 import React, { useState, type JSX, type ReactNode } from "react";
 import {
   LOCALE_METADATA,
@@ -66,7 +63,7 @@ export interface DashboardShellProps {
 }
 
 export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const { session, updateSession, testConnection } = useSupervisorSession();
   const { locale, setLocale, t } = useTranslation();
   const [configOpen, setConfigOpen] = useState(false);
@@ -98,7 +95,6 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
       <aside className="wms-sidebar">
         <div className="wms-brand">
           <div className="wms-brand-badge" aria-hidden="true">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/icons/navelo-icon.svg"
               alt=""
@@ -128,7 +124,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                to={item.href}
                 aria-current={isActive ? "page" : undefined}
                 className={`wms-nav-link ${isActive ? "wms-nav-link-active" : ""}`}
               >

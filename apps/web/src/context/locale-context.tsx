@@ -1,5 +1,3 @@
-"use client";
-
 // apps/web/src/context/locale-context.tsx
 // Contexto i18n de @wms/web con adaptadores de navegador (cookie wms_locale + navigator.languages + <html lang>).
 

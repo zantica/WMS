@@ -1,6 +1,4 @@
-"use client";
-
-// apps/web/src/app/users/page.tsx
+// apps/web/src/pages/users-page.tsx
 // Gobierno de Usuarios y Roles del Tenant (RBAC) con Divulgación Progresiva.
 //
 // ## Design tokens — Tenant Users & Access Governance
@@ -17,9 +15,9 @@ import {
   type JSX,
 } from "react";
 import type { TenantUserDTO, UserRole } from "@wms/shared-types";
-import { useSupervisorSession } from "../../context/supervisor-session";
-import { useTranslation } from "../../context/locale-context";
-import { computeUsersSummary } from "../../lib/dashboard-metrics";
+import { useSupervisorSession } from "../context/supervisor-session";
+import { useTranslation } from "../context/locale-context";
+import { computeUsersSummary } from "../lib/dashboard-metrics";
 
 export default function TenantUsersPage(): JSX.Element {
   const { client, session } = useSupervisorSession();

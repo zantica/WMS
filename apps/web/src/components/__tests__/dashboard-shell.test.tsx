@@ -5,28 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { LocaleProvider } from "../../context/locale-context.js";
 import { DashboardShell } from "../dashboard-shell.js";
-
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
-}));
-
-vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: {
-    href: string;
-    children: React.ReactNode;
-  }) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
 
 vi.mock("../../context/supervisor-session", () => ({
   useSupervisorSession: () => ({
@@ -35,20 +17,23 @@ vi.mock("../../context/supervisor-session", () => ({
       apiKey: "demo-api-key-12345",
       warehouseId: "wh-demo",
       supervisorName: "Ana Torres",
+      isConnected: true,
     },
-    saveSession: vi.fn(),
-    resetSession: vi.fn(),
+    updateSession: vi.fn(),
+    testConnection: vi.fn(),
   }),
 }));
 
 describe("DashboardShell — Marca Navelo y Assets de Marca", () => {
   it("renderiza el icono de Navelo en .wms-brand-badge en lugar de texto plano", () => {
     const html = renderToStaticMarkup(
-      <LocaleProvider initialLocale="es-ES">
-        <DashboardShell>
-          <div data-testid="child-content">Contenido de prueba</div>
-        </DashboardShell>
-      </LocaleProvider>,
+      <MemoryRouter initialEntries={["/"]}>
+        <LocaleProvider initialLocale="es-ES">
+          <DashboardShell>
+            <div data-testid="child-content">Contenido de prueba</div>
+          </DashboardShell>
+        </LocaleProvider>
+      </MemoryRouter>,
     );
 
     expect(html).toContain('class="wms-brand-badge"');
@@ -57,13 +42,30 @@ describe("DashboardShell — Marca Navelo y Assets de Marca", () => {
     expect(html).toContain('width="36"');
     expect(html).toContain('height="36"');
     expect(html).toContain('data-testid="child-content"');
+    expect(html).toContain('aria-current="page"');
   });
 
-  it("verifica la existencia de los assets de marca en apps/web", () => {
+  it("marca como activo el enlace correspondiente al pathname actual en React Router", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={["/locations"]}>
+        <LocaleProvider initialLocale="es-ES">
+          <DashboardShell>
+            <div>Mapa</div>
+          </DashboardShell>
+        </LocaleProvider>
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain(
+      'aria-current="page" class="wms-nav-link wms-nav-link-active" href="/locations"',
+    );
+  });
+
+  it("verifica la existencia de los assets de marca en apps/web/public", () => {
     const webRoot = path.resolve(__dirname, "../../..");
-    const faviconPath = path.join(webRoot, "src/app/favicon.ico");
-    const iconSvgPath = path.join(webRoot, "src/app/icon.svg");
-    const appleIconPath = path.join(webRoot, "src/app/apple-icon.png");
+    const faviconPath = path.join(webRoot, "public/favicon.ico");
+    const iconSvgPath = path.join(webRoot, "public/icon.svg");
+    const appleIconPath = path.join(webRoot, "public/apple-icon.png");
     const publicIconSvg = path.join(webRoot, "public/icons/navelo-icon.svg");
     const publicIcon192 = path.join(webRoot, "public/icons/navelo-icon-192.png");
     const publicIcon512 = path.join(webRoot, "public/icons/navelo-icon-512.png");

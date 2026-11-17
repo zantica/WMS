@@ -3,6 +3,7 @@
 
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LOCALE_COOKIE_MAX_AGE_SECONDS,
@@ -21,25 +22,6 @@ import {
 } from "../locale-context.js";
 import { DashboardShell } from "../../components/dashboard-shell.js";
 import { LabelPrintModal } from "../../components/labels/label-print-modal.js";
-
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
-}));
-
-vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: {
-    href: string;
-    children: React.ReactNode;
-  }) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
 
 vi.mock("../supervisor-session", () => ({
   useSupervisorSession: () => ({
@@ -103,11 +85,13 @@ describe("@wms/web LocaleProvider & i18n integration", () => {
 
   it("renderiza DashboardShell con selector regional (5 opciones) y navegación traducida", () => {
     const htmlEn = renderToStaticMarkup(
-      <LocaleProvider initialLocale="en-US">
-        <DashboardShell>
-          <div>Child</div>
-        </DashboardShell>
-      </LocaleProvider>,
+      <MemoryRouter initialEntries={["/"]}>
+        <LocaleProvider initialLocale="en-US">
+          <DashboardShell>
+            <div>Child</div>
+          </DashboardShell>
+        </LocaleProvider>
+      </MemoryRouter>,
     );
 
     expect(htmlEn).toContain('data-testid="wms-locale-select"');
@@ -121,11 +105,13 @@ describe("@wms/web LocaleProvider & i18n integration", () => {
     expect(htmlEn).toContain("Test connection (/health)");
 
     const htmlPtBr = renderToStaticMarkup(
-      <LocaleProvider initialLocale="pt-BR">
-        <DashboardShell>
-          <div>Child</div>
-        </DashboardShell>
-      </LocaleProvider>,
+      <MemoryRouter initialEntries={["/"]}>
+        <LocaleProvider initialLocale="pt-BR">
+          <DashboardShell>
+            <div>Child</div>
+          </DashboardShell>
+        </LocaleProvider>
+      </MemoryRouter>,
     );
     expect(htmlPtBr).toContain("Depósito ativo");
     expect(htmlPtBr).toContain("Estoque e kardex");

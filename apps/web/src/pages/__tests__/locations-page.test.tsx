@@ -1,10 +1,10 @@
-// apps/web/src/app/locations/__tests__/locations-page.test.tsx
+// apps/web/src/pages/__tests__/locations-page.test.tsx
 // Tests de renderizado para WarehouseLocationsPage (F9.2) usando renderToStaticMarkup.
 
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import WarehouseLocationsPage from "../page.js";
+import WarehouseLocationsPage from "../locations-page.js";
 
 const mockListLocations = vi.fn().mockResolvedValue([
   {
@@ -65,7 +65,7 @@ const mockGetWarehouseLayoutSummary = vi.fn().mockResolvedValue({
 
 const mockListBalances = vi.fn().mockResolvedValue([]);
 
-vi.mock("../../../context/supervisor-session", () => ({
+vi.mock("../../context/supervisor-session", () => ({
   useSupervisorSession: () => ({
     client: {
       getWarehouseLayoutSummary: mockGetWarehouseLayoutSummary,

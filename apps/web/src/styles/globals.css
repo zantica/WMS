@@ -1,7 +1,11 @@
-/* apps/web/src/app/globals.css */
+/* apps/web/src/styles/globals.css */
 /* Design System S5 dark-data-dense + Paleta P2 Refinada + Tipografía T3 (@wms/web) */
 
 :root {
+  /* Tipografía T3 */
+  --font-sans: "DM Sans";
+  --font-mono: "JetBrains Mono";
+
   /* Paleta semántica principal (S5 / P2) */
   --bg: #061815;
   --surface: #0a221d;

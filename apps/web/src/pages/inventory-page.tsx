@@ -1,6 +1,4 @@
-"use client";
-
-// apps/web/src/app/inventory/page.tsx
+// apps/web/src/pages/inventory-page.tsx
 // Vista de Balances de Inventario (OnHand vs Allocated vs ATP), Ajustes Manuales y Libro Mayor Inmutable (Kardex).
 
 import {
@@ -16,16 +14,16 @@ import type {
   ProductDTO,
   TxReason,
 } from "@wms/shared-types";
-import { useSupervisorSession } from "../../context/supervisor-session";
-import { useTranslation } from "../../context/locale-context";
+import { useSupervisorSession } from "../context/supervisor-session";
+import { useTranslation } from "../context/locale-context";
 import type {
   KardexPagination,
   KardexTransactionItem,
-} from "../../lib/api-client";
+} from "../lib/api-client";
 import {
   computeInventoryKpis,
   filterKardexTransactions,
-} from "../../lib/dashboard-metrics";
+} from "../lib/dashboard-metrics";
 
 const TX_REASON_OPTIONS: readonly (TxReason | "ALL")[] = [
   "ALL",

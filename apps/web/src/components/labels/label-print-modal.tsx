@@ -1,5 +1,3 @@
-"use client";
-
 // apps/web/src/components/labels/label-print-modal.tsx
 // Modal de generación y vista previa interactiva de etiquetas logísticas con aislamiento de impresión.
 // Soporta portal DOM en document.body, presets en mm, auto-regeneración viva, ajuste de copias por item
