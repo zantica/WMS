@@ -142,7 +142,7 @@ describe("LabelPrintModal (@wms/web)", () => {
     expect(html).toContain('class="wms-label-print-sheet"');
   });
 
-  it("muestra opción de EAN comercial cuando entityType es PRODUCT", () => {
+  it("muestra opción de EAN comercial marcada por defecto cuando entityType es PRODUCT", () => {
     const items = [
       { id: "p1", code: "TSHIRT-BLK", title: "Camiseta Negra", subtitle: "Ropa" },
     ];
@@ -159,6 +159,9 @@ describe("LabelPrintModal (@wms/web)", () => {
     expect(html).toContain("Impresión de Etiquetas de Producto");
     expect(html).toContain("Usar EAN comercial si existe");
     expect(html).toContain("Code 128 (1D)");
+    expect(html).toContain(
+      '<input type="checkbox" checked=""/><span>Usar EAN comercial si existe</span>',
+    );
   });
 
   it("renderiza la cuadrícula interactiva y la hoja de impresión con datos generados", () => {

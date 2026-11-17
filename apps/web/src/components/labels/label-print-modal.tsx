@@ -147,7 +147,9 @@ export function LabelPrintModal({
   const [widthMm, setWidthMm] = useState<number>(70);
   const [heightMm, setHeightMm] = useState<number>(35);
   const [includeHumanReadable, setIncludeHumanReadable] = useState<boolean>(true);
-  const [useBarcodeAsPayload, setUseBarcodeAsPayload] = useState<boolean>(false);
+  const [useBarcodeAsPayload, setUseBarcodeAsPayload] = useState<boolean>(
+    entityType === "PRODUCT",
+  );
 
   // Datos generados desde la API
   const [batchData, setBatchData] = useState<LabelBatchResponseDTO | null>(
