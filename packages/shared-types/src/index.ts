@@ -306,7 +306,7 @@ export interface UpdateCategoryInput {
 }
 
 export interface CreateProductInput {
-  sku: string;
+  sku?: string | undefined;
   name: string;
   barcode?: string | undefined;
   description?: string | undefined;
