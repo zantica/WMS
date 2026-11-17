@@ -226,6 +226,20 @@
       ]
     },
     {
+      "id": "F9.4",
+      "milestone": "Hito 9 — Maestro Operativo, Topología Física y Vista Gráfica",
+      "title": "Generación Automática de SKU por Categoría y Código de Barras en Alta de Producto",
+      "boundedContext": "Core / Topology & Catalog",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Contrato CreateProductInput con sku y barcode opcionales en @wms/shared-types y validación Zod en Fastify",
+        "Autogeneración inteligente de SKU al omitirlo: si tiene categoría, usa el código de categoría como prefijo ({CATEGORY_CODE}-001, {CATEGORY_CODE}-002...) con padding de 3 dígitos; si no tiene categoría, usa prefijo por defecto (GEN-001 o PROD-001), garantizando unicidad y resolución de colisiones por tenant",
+        "Autogeneración de código de barras al omitirlo: genera un código de barras único y compatible con lectores (formato EAN-13 estándar de uso interno con dígito de control o Code128 unívoco), garantizando no colisión por tenant",
+        "Adaptación del formulario de alta en @wms/web (/catalog) indicando opcionalidad y sugerencia de autogeneración",
+        "Tests unitarios en use-cases (manage-products.test.ts) y rutas HTTP (catalog-users-routes.test.ts) con cobertura >= 80% y cumplimiento de CHECKPOINTS.md"
+      ]
+    },
+    {
       "id": "F5.1",
       "milestone": "Hito 5 — Onboarding Flash: Bulk Import y Etiquetas QR",
       "title": "Carga masiva (Bulk Import) desacoplada con modo dryRun, normalización y estrategia ColumnMapper",

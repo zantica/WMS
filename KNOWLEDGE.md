@@ -83,6 +83,12 @@
 
 **En desarrollo**: El header `x-dev-tenant-id` actúa como bypass para no necesitar Clerk configurado. **Nunca llegará a producción** — hay un chequeo `process.env.NODE_ENV !== 'production'`.
 
+### 7. Autogeneración de SKU y Código de Barras en Catálogo (F9.4)
+
+**Decisión**: Al omitir `sku` en el alta de producto, se genera deterministamente `{CATEGORY_CODE}-{001}` con padding de 3 dígitos (o `GEN-001` si no tiene categoría asociada) resolviendo colisiones secuencialmente en el tenant. Al omitir `barcode`, se autogenera un código de barras estándar EAN-13 interno de distribución restringida (prefijo `20`, 10 dígitos con `crypto.randomInt` de `node:crypto` —regla SonarCloud CP-7— y checksum ponderado GS1 módulo 10).
+
+**Por qué**: Optimiza los tiempos de alta manual en almacén, evita errores humanos de tipado y garantiza compatibilidad inmediata con escáneres láser 1D/2D e impresoras de etiquetas.
+
 ---
 
 ## Bugs encontrados y corregidos

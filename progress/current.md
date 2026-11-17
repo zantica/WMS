@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
 - **Última actualización**: 2026-11-17
-- **Estado General**: ✅ **`F9.2` completada y aprobada (`APPROVED` en `progress/review_F9.2.md`) — Siguiente: `F9.3` (i18n ES/EN/PT) y luego `F5.1` (Bulk Import)**
+- **Estado General**: ✅ **`F9.4` completada y aprobada (`APPROVED` en `progress/review_F9.4.md`) — Siguiente: `F9.3` (i18n ES/EN/PT) y luego `F5.1` (Bulk Import)**
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
@@ -17,9 +17,12 @@
   5. ✅ **`FIX-SONAR-DUP`** — Remediación de duplicación SonarCloud: `.sonarcloud.properties` + refactorización DRY en tareas móviles (`done`)
   6. ✅ **`F9.1`** — Maestro de Producto WMS, Categorías configurables, Búsqueda por SKU y Gestión de Usuarios/Roles (`done`, `APPROVED` en [`progress/review_F9.1.md`](./review_F9.1.md))
   7. ✅ **`F9.2`** — Topología Física (`RACK` / `SHELVING` / `FLOOR`), Alta Estructurada y Vista Gráfica del Layout (`done`, `APPROVED` en [`progress/review_F9.2.md`](./review_F9.2.md))
-  8. ⏳ **`F9.3`** — Internacionalización Multi-Idioma (`es` / `en` / `pt`) Tipada en `@wms/shared-types` + `@wms/web` con Persistencia en Cookie y Autodetección de Navegador (`pending`, **Prioridad 1 — justo después de `F9.2`**)
-  9. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`, **Prioridad 2**)
-  10. ✅ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`done`, `APPROVED` en [`progress/review_F5.2.md`](./review_F5.2.md))
+  8. ✅ **`F9.4`** — Generación Automática de SKU por Categoría (`ROPA-001`) y Código de Barras en Alta de Producto (`done`, `APPROVED` en [`progress/review_F9.4.md`](./review_F9.4.md))
+  9. ⏳ **`F9.3`** — Internacionalización Multi-Idioma (`es` / `en` / `pt`) Tipada en `@wms/shared-types` + `@wms/web` con Persistencia en Cookie y Autodetección de Navegador (`pending`)
+  10. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`)
+  11. ✅ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`done`, `APPROVED` en [`progress/review_F5.2.md`](./review_F5.2.md))
+- **Sesión Actual (2026-11-17 — Hito 9 `F9.4` Completada)**:
+  - ✅ **`F9.4`** (`done`, review `APPROVED` en [`progress/review_F9.4.md`](./review_F9.4.md)): Extensión del caso de uso `createProduct` en `apps/api/src/use-cases/catalog/manage-products.ts` para soportar `sku` opcional (con cálculo y prefijo por código de categoría, ej. `ROPA-001`, y fallback general `GEN-001` si no hay categoría) y `barcode` opcional (generación automática de código de barras numérico tipo EAN-13 interno con checksum o Code128 unívoco sin colisión). Contrato `CreateProductInput` actualizado en `@wms/shared-types`, ruta `POST /api/v1/products` con validación Zod (`sku` y `barcode` opcionales), adaptación en UI `/catalog` (`apps/web`) y suite exhaustiva de tests unitarios y de rutas.
 - **Sesión Actual (2026-11-17 — Hito 9 `F9.2` Completada)**:
   - ✅ **`F9.2`** (`done`, review `APPROVED` en [`progress/review_F9.2.md`](./review_F9.2.md), ADR 008 en [`docs/adr/008-physical-topology-layout.md`](../docs/adr/008-physical-topology-layout.md)) — Separación `LocationType` vs `StorageType` (`RACK`/`SHELVING`/`FLOOR`) y `LocationStatus` (`ACTIVE`/`BLOCKED`), índice compuesto `(tenantId, warehouseId, zone, aisle)`, normalización lexicográfica con zero-padding (`normalizeLocationCode`), matriz de validación por `StorageType`, dos endpoints de layout detrás de `TopologyRepositoryPort`, generador en bloque con `dryRun`/colisiones/upsert idempotente y rollback por `batchId`, y vista gráfica interactiva en `@wms/web` (`/locations`) con alzado frontal invertido, bahías de suelo, umbral de colapso (>200 celdas) e integración directa con `LabelPrintModal`.
 - **Sesión (2026-11-13 — Hito 9 `F9.1`)**:

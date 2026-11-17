@@ -265,3 +265,17 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Funciones puras en `@wms/shared-types/src/topology.ts` (`normalizeLocationCode`, `formatStructuredLocationCode`, `validateStorageTypeMetadata`, `calculateAtp`) garantizando zero-padding fijo (`01`..`99`) para preservar `ORDER BY code ASC` y matriz de validación por `StorageType` (`FLOOR` restringido a `level === "01"`).
   - Puerto hexagonal `TopologyRepositoryPort` en `@wms/api` con adaptadores `PrismaTopologyRepository` e `InMemoryTopologyRepository`, casos de uso en `manage-locations.ts` (`88%` cobertura), dos endpoints de layout (`GET /api/v1/locations/layout/:warehouseId` y `GET /api/v1/locations/layout/:warehouseId/aisles/:aisle`), generador estructurado `POST /api/v1/locations/generate-block` con `dryRun`/colisiones/upsert idempotente y rollback atómico `DELETE /api/v1/locations/batches/:batchId` protegido contra saldos/movimientos del Ledger.
   - Vista gráfica interactiva en `@wms/web` (`/locations`) bajo `S5 dark-data-dense` / `P2` / `T3` con `0` colores hex crudos, drill-down macro a pasillo (alzado frontal invertido para `RACK`/`SHELVING` y bahías en planta para `FLOOR`), umbral de colapso (`> 200` celdas por pasillo) e impresión masiva de etiquetas del lote generado con `LabelPrintModal`.
+
+---
+
+## [2026-11-17] Feature `F9.4` — Generación Automática de SKU por Categoría y Código de Barras en Alta de Producto
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F9.4.md`](./impl_F9.4.md)
+  - Revisión: [`progress/review_F9.4.md`](./review_F9.4.md)
+- **Cambios clave**:
+  - Contrato `CreateProductInput` en `@wms/shared-types` con `sku?: string | undefined` y validación Zod en `POST /api/v1/products` con `sku` y `barcode` opcionales.
+  - Caso de uso `createProduct` en `apps/api/src/use-cases/catalog/manage-products.ts` con autogeneración secuencial determinista de SKU basada en categoría (`{CATEGORY_CODE}-001`, `{CATEGORY_CODE}-002`, etc., con fallback general `GEN-001` si no tiene categoría) con resolución incremental de colisiones por tenant.
+  - Autogeneración de código de barras EAN-13 interno de distribución restringida (prefijo `20`, 10 dígitos generados con `crypto.randomInt` de `node:crypto` sin `Math.random()` conforme a SonarCloud CP-7, y checksum ponderado GS1 módulo 10).
+  - Adaptación en `@wms/web` (`/catalog`): labels y placeholders indicando la autogeneración automática si se dejan vacíos, y exclusión de cadenas vacías al invocar el cliente API.
+  - Verificación independiente ejecutada: 100% verde en `pnpm build` (6/6 paquetes), `pnpm test` en web (29/29 tests) y `pnpm --filter @wms/api test:coverage` (365 tests pasados, cobertura `manage-products.ts` al 99.2% de líneas y 90.47% de ramas).
