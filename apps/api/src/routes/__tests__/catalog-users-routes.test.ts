@@ -243,6 +243,34 @@ describe("Rutas HTTP de Catálogo, Categorías y Usuarios (F9.1)", () => {
       expect(json.data.weightGrams).toBe(220);
     });
 
+    it("POST /api/v1/products — autogenera SKU y Barcode EAN-13 cuando se omiten (F9.4)", async () => {
+      const cat = await catalogRepo.createCategory(tenantId, {
+        code: "DEPORTE",
+        name: "Deportes",
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/products",
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+        },
+        payload: {
+          name: "Balón Baloncesto",
+          categoryId: cat.id,
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const json = res.json();
+      expect(json.success).toBe(true);
+      expect(json.data.sku).toBe("DEPORTE-001");
+      expect(json.data.categoryCode).toBe("DEPORTE");
+      expect(json.data.barcode).toBeDefined();
+      expect(json.data.barcode.startsWith("20")).toBe(true);
+      expect(json.data.barcode).toHaveLength(13);
+    });
+
     it("GET /api/v1/products — devuelve lista con paginación y filtros", async () => {
       const cat = await catalogRepo.createCategory(tenantId, {
         code: "ELEC",

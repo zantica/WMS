@@ -275,7 +275,7 @@ export class InMemoryCatalogRepository implements CatalogRepositoryPort {
     const product: StoredProduct = {
       id: `prod_${crypto.randomUUID()}`,
       tenantId,
-      sku: input.sku.trim(),
+      sku: (input.sku ?? "").trim(),
       name: input.name.trim(),
       barcode: input.barcode?.trim() ?? null,
       description: input.description?.trim() ?? null,

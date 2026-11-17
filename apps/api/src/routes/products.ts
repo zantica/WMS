@@ -24,9 +24,9 @@ const ListProductsQuerySchema = z.object({
 });
 
 const CreateProductSchema = z.object({
-  sku: z.string().min(1).max(100),
+  sku: z.string().trim().min(1).max(100).optional(),
   name: z.string().min(1).max(255),
-  barcode: z.string().max(50).optional(),
+  barcode: z.string().trim().max(50).optional(),
   description: z.string().max(1000).optional(),
   categoryId: z.string().nullable().optional(),
   weightGrams: z.number().int().positive().optional(),

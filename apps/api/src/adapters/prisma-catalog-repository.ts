@@ -278,7 +278,7 @@ export class PrismaCatalogRepositoryAdapter implements CatalogRepositoryPort {
     const created = await prisma.product.create({
       data: {
         tenantId,
-        sku: input.sku.trim(),
+        sku: (input.sku ?? "").trim(),
         name: input.name.trim(),
         barcode: input.barcode?.trim() ?? null,
         description: input.description?.trim() ?? null,

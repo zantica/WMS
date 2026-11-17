@@ -6,7 +6,9 @@ import {
   updateCategory,
 } from "../manage-categories.js";
 import {
+  calculateEan13Checksum,
   createProduct,
+  generateEan13Barcode,
   getProductById,
   searchProducts,
   updateProduct,
@@ -224,11 +226,15 @@ describe("Caso de Uso: Maestro de Productos y Búsqueda por SKU (F9.1)", () => {
   });
 
   describe("3. Errores de Dominio y Validación", () => {
-    it("rechaza SKU vacío con 400 VALIDATION_ERROR", async () => {
+    it("rechaza SKU vacío en actualización con 400 VALIDATION_ERROR", async () => {
+      const prod = await createProduct(catalogRepo, tenantA, {
+        sku: "PROD-ACTUALIZABLE",
+        name: "Producto Inicial",
+      });
+
       await expect(
-        createProduct(catalogRepo, tenantA, {
+        updateProduct(catalogRepo, tenantA, prod.id, {
           sku: "   ",
-          name: "Válido",
         }),
       ).rejects.toThrow(
         expect.objectContaining({
@@ -500,6 +506,195 @@ describe("Caso de Uso: Maestro de Productos y Búsqueda por SKU (F9.1)", () => {
           statusCode: 404,
         }),
       );
+    });
+  });
+
+  describe("5. Autogeneración de SKU y Código de Barras (F9.4)", () => {
+    it("autogenera SKU con formato {CATEGORIA}-001 cuando se asocia una categoría activa", async () => {
+      const cat = await createCategory(catalogRepo, tenantA, "ADMIN", {
+        code: "ROPA",
+        name: "Ropa y Textiles",
+      });
+
+      const prod = await createProduct(catalogRepo, tenantA, {
+        name: "Camiseta Básica",
+        categoryId: cat.id,
+      });
+
+      expect(prod.sku).toBe("ROPA-001");
+      expect(prod.categoryCode).toBe("ROPA");
+      expect(prod.barcode).toBeDefined();
+      expect(prod.barcode?.startsWith("20")).toBe(true);
+      expect(prod.barcode).toHaveLength(13);
+    });
+
+    it("genera secuencia consecutiva {CATEGORIA}-001, {CATEGORIA}-002, etc.", async () => {
+      const cat = await createCategory(catalogRepo, tenantA, "ADMIN", {
+        code: "ELEC",
+        name: "Electrónica",
+      });
+
+      const p1 = await createProduct(catalogRepo, tenantA, {
+        name: "Teclado USB",
+        categoryId: cat.id,
+      });
+      const p2 = await createProduct(catalogRepo, tenantA, {
+        name: "Ratón Óptico",
+        categoryId: cat.id,
+      });
+      const p3 = await createProduct(catalogRepo, tenantA, {
+        name: "Auriculares Jack",
+        categoryId: cat.id,
+      });
+
+      expect(p1.sku).toBe("ELEC-001");
+      expect(p2.sku).toBe("ELEC-002");
+      expect(p3.sku).toBe("ELEC-003");
+    });
+
+    it("salta colisión si ya existe un SKU registrado manualmente", async () => {
+      const cat = await createCategory(catalogRepo, tenantA, "ADMIN", {
+        code: "CALZADO",
+        name: "Calzado Deportivo",
+      });
+
+      // Crear manualmente CALZADO-002 antes de generar el segundo
+      await createProduct(catalogRepo, tenantA, {
+        sku: "CALZADO-002",
+        name: "Zapatillas Manuales",
+        categoryId: cat.id,
+      });
+
+      // Primer autogenerado debe ser CALZADO-001 (libre)
+      const p1 = await createProduct(catalogRepo, tenantA, {
+        name: "Zapatillas Runner",
+        categoryId: cat.id,
+      });
+      expect(p1.sku).toBe("CALZADO-001");
+
+      // Segundo autogenerado debe detectar que CALZADO-002 está ocupado y saltar a CALZADO-003
+      const p2 = await createProduct(catalogRepo, tenantA, {
+        name: "Zapatillas Trail",
+        categoryId: cat.id,
+      });
+      expect(p2.sku).toBe("CALZADO-003");
+    });
+
+    it("autogenera SKU con prefijo por defecto GEN-001 cuando no se indica categoría", async () => {
+      const p1 = await createProduct(catalogRepo, tenantA, {
+        name: "Genérico 1",
+      });
+      const p2 = await createProduct(catalogRepo, tenantA, {
+        name: "Genérico 2",
+        sku: "   ", // whitespace también activa autogeneración
+      });
+
+      expect(p1.sku).toBe("GEN-001");
+      expect(p2.sku).toBe("GEN-002");
+    });
+
+    it("autogenera Barcode EAN-13 válido con prefijo 20, 13 dígitos y checksum ponderado correcto", async () => {
+      const prod = await createProduct(catalogRepo, tenantA, {
+        name: "Producto con Barcode Autogenerado",
+      });
+
+      expect(prod.barcode).toBeDefined();
+      const barcode = prod.barcode!;
+      expect(barcode).toHaveLength(13);
+      expect(barcode.startsWith("20")).toBe(true);
+      expect(/^\d{13}$/.test(barcode)).toBe(true);
+
+      const first12 = barcode.slice(0, 12);
+      const expectedChecksum = calculateEan13Checksum(first12);
+      expect(Number.parseInt(barcode.charAt(12), 10)).toBe(expectedChecksum);
+    });
+
+    it("respeta SKU y Barcode manuales suministrados explícitamente", async () => {
+      const cat = await createCategory(catalogRepo, tenantA, "ADMIN", {
+        code: "HOGAR",
+        name: "Hogar",
+      });
+
+      const prod = await createProduct(catalogRepo, tenantA, {
+        sku: "MUEBLE-CUSTOM-99",
+        name: "Mesa de Roble",
+        barcode: "8412345678905",
+        categoryId: cat.id,
+      });
+
+      expect(prod.sku).toBe("MUEBLE-CUSTOM-99");
+      expect(prod.barcode).toBe("8412345678905");
+      expect(prod.categoryCode).toBe("HOGAR");
+    });
+
+    it("detecta colisión si se intenta registrar manualmente un SKU ya existente", async () => {
+      await createProduct(catalogRepo, tenantA, {
+        sku: "UNICO-100",
+        name: "Original",
+      });
+
+      await expect(
+        createProduct(catalogRepo, tenantA, {
+          sku: "UNICO-100",
+          name: "Duplicado",
+        }),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: "VALIDATION_ERROR",
+          statusCode: 409,
+        }),
+      );
+    });
+
+    it("detecta colisión si se intenta registrar manualmente un Barcode ya existente", async () => {
+      await createProduct(catalogRepo, tenantA, {
+        sku: "PROD-CON-BARCODE-1",
+        name: "Primer Barcode",
+        barcode: "7701122334455",
+      });
+
+      await expect(
+        createProduct(catalogRepo, tenantA, {
+          sku: "PROD-CON-BARCODE-2",
+          name: "Segundo Barcode Colisionante",
+          barcode: "7701122334455",
+        }),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: "VALIDATION_ERROR",
+          statusCode: 409,
+        }),
+      );
+    });
+
+    it("calculateEan13Checksum calcula correctamente el dígito según el algoritmo estándar GS1", () => {
+      // 978014103614 -> último dígito conocido: 4
+      expect(calculateEan13Checksum("978014103614")).toBe(4);
+
+      // 400638133393 -> último dígito conocido: 1
+      expect(calculateEan13Checksum("400638133393")).toBe(1);
+
+      // Suma múltiplo de 10 -> checksum 0
+      // 200000000000 -> suma = 2 (i=0) -> modulo 10 = 2 -> 10-2=8
+      expect(calculateEan13Checksum("200000000000")).toBe(8);
+
+      // Error con longitud incorrecta
+      expect(() => calculateEan13Checksum("12345")).toThrow(
+        "El cálculo del dígito de control EAN-13 requiere exactamente 12 dígitos numéricos",
+      );
+      expect(() => calculateEan13Checksum("12345678901A")).toThrow(
+        "El cálculo del dígito de control EAN-13 requiere exactamente 12 dígitos numéricos",
+      );
+    });
+
+    it("generateEan13Barcode genera códigos válidos y conformes con EAN-13", () => {
+      for (let i = 0; i < 10; i++) {
+        const barcode = generateEan13Barcode();
+        expect(barcode).toHaveLength(13);
+        expect(barcode.startsWith("20")).toBe(true);
+        const checksum = calculateEan13Checksum(barcode.slice(0, 12));
+        expect(Number.parseInt(barcode.charAt(12), 10)).toBe(checksum);
+      }
     });
   });
 });

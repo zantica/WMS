@@ -1,6 +1,7 @@
 // apps/api/src/use-cases/catalog/manage-products.ts
 // Caso de uso: Gestión y búsqueda del maestro de productos del catálogo WMS.
 
+import { randomInt } from "node:crypto";
 import type {
   CreateProductInput,
   ListProductsFilters,
@@ -10,6 +11,41 @@ import type {
 } from "@wms/shared-types";
 import { WmsError } from "../../plugins/error-handler.js";
 import type { CatalogRepositoryPort } from "../../ports/catalog-repository.js";
+
+/**
+ * Calcula el dígito de control estándar para un código de barras EAN-13
+ * dado sus primeros 12 dígitos numéricos utilizando el algoritmo de ponderación módulo 10.
+ */
+export function calculateEan13Checksum(first12Digits: string): number {
+  if (first12Digits.length !== 12 || !/^\d{12}$/.test(first12Digits)) {
+    throw new Error(
+      "El cálculo del dígito de control EAN-13 requiere exactamente 12 dígitos numéricos",
+    );
+  }
+
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const digit = Number.parseInt(first12Digits.charAt(i), 10);
+    sum += i % 2 === 0 ? digit : digit * 3;
+  }
+
+  const remainder = sum % 10;
+  return remainder === 0 ? 0 : 10 - remainder;
+}
+
+/**
+ * Genera un código de barras EAN-13 interno de distribución restringida (prefijo '20')
+ * con 10 dígitos numéricos aleatorios generados de forma segura con crypto.randomInt
+ * y su respectivo dígito de control EAN-13 válido (CP-7).
+ */
+export function generateEan13Barcode(): string {
+  let digits = "20";
+  for (let i = 0; i < 10; i++) {
+    digits += randomInt(0, 10).toString();
+  }
+  const checksum = calculateEan13Checksum(digits);
+  return `${digits}${checksum}`;
+}
 
 export async function searchProducts(
   catalogRepo: CatalogRepositoryPort,
@@ -47,17 +83,8 @@ export async function createProduct(
   tenantId: string,
   input: CreateProductInput,
 ): Promise<ProductDTO> {
-  const normalizedSku = input.sku.trim();
-  if (normalizedSku.length === 0) {
-    throw new WmsError(
-      "VALIDATION_ERROR",
-      "El SKU del producto no puede estar vacío",
-      400,
-    );
-  }
-
-  const normalizedName = input.name.trim();
-  if (normalizedName.length === 0) {
+  const normalizedName = input.name?.trim();
+  if (!normalizedName || normalizedName.length === 0) {
     throw new WmsError(
       "VALIDATION_ERROR",
       "El nombre del producto no puede estar vacío",
@@ -65,9 +92,8 @@ export async function createProduct(
     );
   }
 
-  const normalizedBarcode = input.barcode?.trim() || undefined;
-
   // Validación de categoría si se proporciona
+  let categoryCode: string | null = null;
   if (input.categoryId) {
     const category = await catalogRepo.findCategoryById(
       tenantId,
@@ -87,32 +113,93 @@ export async function createProduct(
         422,
       );
     }
+    categoryCode = category.code;
   }
 
-  // Validación de unicidad de SKU y barcode
-  const conflict = await catalogRepo.findProductConflict(
-    tenantId,
-    normalizedSku,
-    normalizedBarcode,
-  );
+  // ── 1. Resolución de SKU (explícito o autogenerado F9.4) ─────
+  const rawSku = input.sku?.trim();
+  let resolvedSku = "";
 
-  if (conflict) {
-    const fieldName = conflict.conflictBy === "sku" ? "SKU" : "código de barras";
-    const value =
-      conflict.conflictBy === "sku" ? normalizedSku : normalizedBarcode;
-    throw new WmsError(
-      "VALIDATION_ERROR",
-      `Ya existe un producto con el ${fieldName} "${value}" en este tenant`,
-      409,
-      { conflictBy: conflict.conflictBy, existingProductId: conflict.product.id },
+  if (rawSku && rawSku.length > 0) {
+    resolvedSku = rawSku;
+    const skuConflict = await catalogRepo.findProductConflict(
+      tenantId,
+      resolvedSku,
+      undefined,
     );
+    if (skuConflict) {
+      throw new WmsError(
+        "VALIDATION_ERROR",
+        `Ya existe un producto con el SKU "${resolvedSku}" en este tenant`,
+        409,
+        { conflictBy: "sku", existingProductId: skuConflict.product.id },
+      );
+    }
+  } else {
+    const prefix = categoryCode ? categoryCode.trim().toUpperCase() : "GEN";
+    let seq = 1;
+    while (true) {
+      const seqStr = seq.toString().padStart(3, "0");
+      const candidateSku = `${prefix}-${seqStr}`;
+      const conflict = await catalogRepo.findProductConflict(
+        tenantId,
+        candidateSku,
+        undefined,
+      );
+      if (!conflict) {
+        resolvedSku = candidateSku;
+        break;
+      }
+      seq++;
+    }
+  }
+
+  // ── 2. Resolución de Barcode (explícito o autogenerado EAN-13 F9.4) ─
+  const rawBarcode = input.barcode?.trim();
+  let resolvedBarcode: string | undefined = undefined;
+
+  if (rawBarcode && rawBarcode.length > 0) {
+    resolvedBarcode = rawBarcode;
+    const barcodeConflict = await catalogRepo.findProductConflict(
+      tenantId,
+      resolvedSku,
+      resolvedBarcode,
+    );
+    if (barcodeConflict) {
+      const fieldName =
+        barcodeConflict.conflictBy === "sku" ? "SKU" : "código de barras";
+      const value =
+        barcodeConflict.conflictBy === "sku" ? resolvedSku : resolvedBarcode;
+      throw new WmsError(
+        "VALIDATION_ERROR",
+        `Ya existe un producto con el ${fieldName} "${value}" en este tenant`,
+        409,
+        {
+          conflictBy: barcodeConflict.conflictBy,
+          existingProductId: barcodeConflict.product.id,
+        },
+      );
+    }
+  } else {
+    while (true) {
+      const candidateBarcode = generateEan13Barcode();
+      const conflict = await catalogRepo.findProductConflict(
+        tenantId,
+        resolvedSku,
+        candidateBarcode,
+      );
+      if (!conflict) {
+        resolvedBarcode = candidateBarcode;
+        break;
+      }
+    }
   }
 
   return catalogRepo.createProduct(tenantId, {
     ...input,
-    sku: normalizedSku,
+    sku: resolvedSku,
     name: normalizedName,
-    barcode: normalizedBarcode,
+    barcode: resolvedBarcode,
     description: input.description?.trim(),
   });
 }
