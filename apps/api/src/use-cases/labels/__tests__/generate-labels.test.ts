@@ -178,13 +178,13 @@ describe("Generate Labels Use Cases (F5.2)", () => {
       expect(label.barcodePayload).toBe("TSHIRT-BLK-M");
       expect(label.humanReadableText).toBe("TSHIRT-BLK-M");
       expect(label.title).toBe("Camiseta Algodón Negra M");
-      expect(label.subtitle).toContain("Ropa y Textil");
+      expect(label.subtitle).toBe("Cat: Ropa y Textil • EAN: 7501234567890");
       expect(label.svg).toContain('width="80mm"');
       expect(label.svg).toContain("TSHIRT-BLK-M");
       expect(label.svg).not.toContain("SKU:TSHIRT-BLK-M");
     });
 
-    it("usa el barcode comercial limpio sin prefijo EAN: cuando useBarcodeAsPayload es true y tiene barcode", async () => {
+    it("usa el barcode comercial limpio sin prefijo EAN: cuando useBarcodeAsPayload es true y muestra SKU en subtitle", async () => {
       const result = await generateProductLabels(
         catalogRepo,
         inMemoryRenderer,
@@ -199,6 +199,8 @@ describe("Generate Labels Use Cases (F5.2)", () => {
       const label = result.labels[0]!;
       expect(label.barcodePayload).toBe("7501234567890");
       expect(label.humanReadableText).toBe("7501234567890");
+      expect(label.subtitle).toBe("Cat: Ropa y Textil • SKU: TSHIRT-BLK-M");
+      expect(label.subtitle).not.toContain("EAN:");
     });
 
     it("hace fallback a SKU limpio si useBarcodeAsPayload es true pero el producto no tiene barcode", async () => {

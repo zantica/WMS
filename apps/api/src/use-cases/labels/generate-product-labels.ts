@@ -61,13 +61,17 @@ export async function generateProductLabels(
 
   for (const prod of products) {
     const cleanBarcode = prod.barcode?.trim();
-    const payload =
-      useBarcodeAsPayload && cleanBarcode ? cleanBarcode : prod.sku.trim();
+    const usesBarcodePayload = Boolean(useBarcodeAsPayload && cleanBarcode);
+    const payload = usesBarcodePayload ? cleanBarcode! : prod.sku.trim();
 
     const title = prod.name;
     const categoryInfo = prod.categoryName ? `Cat: ${prod.categoryName}` : null;
-    const barcodeInfo = prod.barcode ? `EAN: ${prod.barcode}` : null;
-    const subtitle = [categoryInfo, barcodeInfo].filter(Boolean).join(" • ") || undefined;
+    const secondaryCodeInfo = usesBarcodePayload
+      ? `SKU: ${prod.sku.trim()}`
+      : cleanBarcode
+        ? `EAN: ${cleanBarcode}`
+        : null;
+    const subtitle = [categoryInfo, secondaryCodeInfo].filter(Boolean).join(" • ") || undefined;
     const humanReadableText = includeHumanReadable ? payload : undefined;
 
     const svg = await labelRenderer.renderLabel({
