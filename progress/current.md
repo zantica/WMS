@@ -1,7 +1,9 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
 - **Última actualización**: 2026-11-17
-- **Estado General**: ✅ **`FIX-LABEL-LAYOUT` completado y aprobado (`APPROVED` en `progress/review_FIX-LABEL-LAYOUT.md`) — Siguiente: `F5.1` (Bulk Import)**
+- **Estado General**: ✅ **`F10.1` completada y aprobada (`APPROVED` en `progress/review_F10.1.md`) — Siguiente: `F5.1` (Bulk Import)**
+- **Hito 10 — Sesión, Superuser y Diseño Atómico**:
+  - ✅ **`F10.1`** (`done`, `APPROVED` en [`progress/review_F10.1.md`](./review_F10.1.md), ADR 009 en [`docs/adr/009-session-jwt-bcrypt-atomic-ui.md`](../docs/adr/009-session-jwt-bcrypt-atomic-ui.md)) — Capa de sesión JWT dual (`Authorization: Bearer` + cookie `HttpOnly wms_session`) con `BcryptPasswordHasher` (`BCRYPT_SALT_ROUNDS`, default 12), rol `SUPERUSER` ("Dios del sistema", `admin@navelo.dev`), bootstrap inicial, alta de usuarios con contraseña, RBAC estricto y arquitectura de Diseño Atómico (`atoms/`, `molecules/`, `organisms/`, `templates/`) en `@wms/web` (`/login`, `/users`, `DashboardShell`).
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)

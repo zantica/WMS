@@ -307,3 +307,17 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Enrutador cliente (`AppRoutes` + `BrowserRouter` en `src/App.tsx`) preservando `/`, `/catalog`, `/inventory`, `/locations`, `/operations`, `/users` y fallback SPA 404 (`*` -> `not-found-page.tsx`).
   - Composition root en `src/main.tsx` + función pura `resolveBootstrapSession` en `src/bootstrap.ts` aislando `import.meta.env.VITE_*` del resto de componentes/contextos (CP-7).
   - Verificación independiente ejecutada: `pnpm build` (6/6 paquetes), `pnpm --filter @wms/web build` (`dist/` estático), `pnpm --filter @wms/web test:coverage` (7 archivos / 48 tests passed, 95.72% líneas / 83.52% ramas / 100% funciones) y `pnpm --filter @wms/api test:coverage` (28 archivos / 365 tests passed, 93.17% líneas) con exit code `0`.
+
+---
+
+## [2026-11-17] Feature `F10.1` — Capa de Sesión JWT con Bcrypt Salt Rounds, Superuser (`admin@navelo.dev`), Alta de Usuarios con Contraseña y UI en Diseño Atómico
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F10.1.md`](./impl_F10.1.md)
+  - Revisión: [`progress/review_F10.1.md`](./review_F10.1.md)
+  - ADR: [`docs/adr/009-session-jwt-bcrypt-atomic-ui.md`](../docs/adr/009-session-jwt-bcrypt-atomic-ui.md)
+- **Cambios clave**:
+  - Prisma & RLS: `UserRole` extendido con `SUPERUSER`, `passwordHash String?` en `User`, migración `20261117000000_session_superuser_auth` con lookup acotado `app.auth_email` y `app.auth_superuser_check` bajo `FORCE ROW LEVEL SECURITY`, y seed idempotente para `admin@navelo.dev`.
+  - Backend Hexagonal: puerto `PasswordHasherPort` + adaptador `BcryptPasswordHasher` (`BCRYPT_SALT_ROUNDS` inyectado desde `server.ts`, default 12), casos de uso `loginWithPassword`, `getCurrentSessionUser`, `getBootstrapStatus`, `bootstrapSuperuser` y `manage-users.ts` con RBAC `SUPERUSER` vs `ADMIN`, middleware `authPlugin` soportando `Bearer <JWT>` y cookie `HttpOnly` (`wms_session`), y rutas `/api/v1/auth/*` + `/api/v1/users`.
+  - Frontend Atomic Design (`apps/web`): capas `atoms/`, `molecules/`, `organisms/` y `templates/`, página `/login` (Login + Bootstrap Superuser), chip de sesión en `DashboardShell` y refactor de `/users` con alta de usuario con contraseña y cambio de permisos.
+  - Verificación independiente ejecutada: `pnpm build` (6/6 paquetes) y `pnpm --filter @wms/api test:coverage` (30 passed | 3 skipped de integración PG, 393 passed | 8 skipped, 93.59% cobertura en `use-cases`) con exit code `0`.

@@ -313,6 +313,21 @@
         "Configuración de proxy de desarrollo (server.proxy en vite.config.ts) hacia @wms/api y build estático de producción (dist/) sin necesidad de servidor Node intermedio",
         "Preservación íntegra de estilos Tailwind, diseño S5/tokens, contexto supervisor-session, API client y tests existentes con paso al 100%"
       ]
+    },
+    {
+      "id": "F10.1",
+      "milestone": "Hito 10 — Capa de Sesión, Superuser (admin@navelo.dev) y Diseño Atómico",
+      "title": "Capa de Sesión JWT con Bcrypt Salt Rounds, Superuser (admin@navelo.dev), Alta de Usuarios con Contraseña y UI en Diseño Atómico",
+      "boundedContext": "Core / Auth & Multi-Tenancy + Web Dashboard",
+      "status": "done",
+      "acceptanceCriteria": [
+        "Extender UserRole con SUPERUSER y modelo User en Prisma (passwordHash opcional para compatibilidad Clerk/seed, email único global o por sistema, migración SQL + RLS compatible con login y SUPERUSER 'Dios del sistema')",
+        "Puerto PasswordHasherPort con adaptador BcryptPasswordHasher (bcryptjs, salt rounds configurables vía BCRYPT_SALT_ROUNDS con default 12) y sin secretos hardcodeados (CP-7)",
+        "Middleware de sesión JWT en apps/api/src/plugins/auth.ts soportando Authorization: Bearer <JWT> y cookie HttpOnly (wms_session), además de x-api-key y x-dev-tenant-id en no-producción; soporte para rol SUPERUSER con acceso global y gestión de tenants/usuarios",
+        "Casos de uso y endpoints /api/v1/auth/*: POST /api/v1/auth/login (email + password -> JWT + cookie HttpOnly), GET /api/v1/auth/me (perfil/sesión actual), POST /api/v1/auth/logout, POST /api/v1/auth/bootstrap-superuser (alta de admin@navelo.dev si no existe o protegido por setup) y actualización de POST /api/v1/users + PATCH /api/v1/users/:id (alta con password opcional/requerida, cambio de rol/permisos y creación de superusers por SUPERUSER); seed inicial para admin@navelo.dev",
+        "Arquitectura de Diseño Atómico en apps/web (src/components/atoms/, molecules/, organisms/, templates/) para Login, Bootstrap/Alta de Superuser, Session Guard/Header de sesión y alta/edición de usuarios en /users sin romper las páginas existentes",
+        "Tests unitarios (TDD en use-cases/auth, auth plugin, rutas auth/users y componentes web) con cobertura >= 80% en use-cases y cumplimiento estricto de CHECKPOINTS.md (CP-1 a CP-7)"
+      ]
     }
   ]
 }

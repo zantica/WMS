@@ -89,6 +89,16 @@
 
 **Por qué**: Optimiza los tiempos de alta manual en almacén, evita errores humanos de tipado y garantiza compatibilidad inmediata con escáneres láser 1D/2D e impresoras de etiquetas.
 
+### 8. Capa de Sesión JWT Dual, Bcrypt Salt Rounds, Superuser (`admin@navelo.dev`) y Diseño Atómico (F10.1)
+
+**Decisión**:
+1. Autenticación local mediante `PasswordHasherPort` + `BcryptPasswordHasher` (`BCRYPT_SALT_ROUNDS` inyectado desde `server.ts`, default `12`, rango `10..14`).
+2. Middleware `authPlugin` acepta JWT tanto por `Authorization: Bearer <token>` (API/Mobile) como por cookie `HttpOnly` (`wms_session`, `SameSite=Lax; Path=/`, `Secure` en producción) para `@wms/web`.
+3. Rol `SUPERUSER` (`admin@navelo.dev`, "Dios del sistema") puede operar globalmente y cambiar de tenant mediante `x-tenant-id`, crear/gestionar `ADMIN` y `SUPERUSER`; ningún `ADMIN` de tenant puede crear, promover o modificar a un `SUPERUSER`.
+4. En `@wms/web`, los nuevos módulos de sesión y gestión de usuarios siguen Arquitectura de Diseño Atómico (`atoms/`, `molecules/`, `organisms/`, `templates/`).
+
+**Por qué**: Permite sesión segura en navegador sin exponer tokens en JS (cookie `HttpOnly`) manteniendo compatibilidad con clientes API/Mobile (`Bearer` / `x-api-key`), y separa la jerarquía de plataforma (`SUPERUSER`) de la administración de inquilino (`ADMIN`).
+
 ---
 
 ## Bugs encontrados y corregidos
