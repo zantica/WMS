@@ -15,7 +15,7 @@ import { generateKeyPairSync, createSign, createHmac } from "node:crypto";
 
 const mockPrisma = vi.hoisted(() => ({
   tenant: { findUnique: vi.fn() },
-  user: { findUnique: vi.fn() },
+  user: { findUnique: vi.fn(), findFirst: vi.fn() },
 }));
 
 vi.mock("@wms/db", () => ({
@@ -25,6 +25,7 @@ vi.mock("@wms/db", () => ({
 import {
   authPlugin,
   createJwtToken,
+  extractCookieToken,
   requireRole,
   verifyJwtToken,
 } from "../auth.js";
@@ -526,5 +527,52 @@ describe("authPlugin (hook global preHandler)", () => {
 
     expect(denied.statusCode).toBe(403);
     expect(allowed.statusCode).toBe(200);
+  });
+
+  it("autentica mediante cookie HttpOnly wms_session y permite acceso global a SUPERUSER (F10.1)", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: "super-id",
+      tenantId: "demo-tenant",
+      role: "SUPERUSER",
+      isActive: true,
+    });
+    mockPrisma.tenant.findUnique.mockResolvedValue({ id: "tenant-other" });
+
+    const app = await buildTestApp();
+    const token = createJwtToken(
+      { sub: "user_navelo_superuser", tenantId: "demo-tenant", role: "SUPERUSER" },
+      SECRET,
+    );
+
+    const whoamiRes = await app.inject({
+      method: "GET",
+      url: "/whoami",
+      headers: {
+        cookie: `foo=1; wms_session=${encodeURIComponent(token)}; bar=2`,
+      },
+    });
+    expect(whoamiRes.statusCode).toBe(200);
+    expect(whoamiRes.json()).toEqual({
+      tenantId: "demo-tenant",
+      userId: "super-id",
+      userRole: "SUPERUSER",
+    });
+
+    const adminCheck = await app.inject({
+      method: "GET",
+      url: "/admin-only",
+      headers: {
+        cookie: `wms_session=${encodeURIComponent(token)}`,
+        "x-tenant-id": "tenant-other",
+      },
+    });
+    expect(adminCheck.statusCode).toBe(200);
+  });
+
+  it("extractCookieToken extrae wms_session de forma segura", () => {
+    expect(extractCookieToken(undefined)).toBeNull();
+    expect(extractCookieToken("a=1; wms_session=abc.def.ghi; b=2")).toBe(
+      "abc.def.ghi",
+    );
   });
 });

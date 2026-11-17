@@ -14,6 +14,7 @@ export const DEFAULT_DIAGNOSTICS_LIMIT = 50;
 export const MAX_DIAGNOSTICS_LIMIT = 200;
 
 const ALLOWED_DIAGNOSTIC_ROLES: ReadonlySet<UserRole> = new Set([
+  "SUPERUSER",
   "ADMIN",
   "SUPERVISOR",
 ]);

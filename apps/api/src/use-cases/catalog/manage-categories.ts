@@ -11,7 +11,11 @@ import { WmsError } from "../../plugins/error-handler.js";
 import type { CatalogRepositoryPort } from "../../ports/catalog-repository.js";
 
 function assertCanManageCategories(actorRole: UserRole): void {
-  if (actorRole !== "ADMIN" && actorRole !== "SUPERVISOR") {
+  if (
+    actorRole !== "SUPERUSER" &&
+    actorRole !== "ADMIN" &&
+    actorRole !== "SUPERVISOR"
+  ) {
     throw new WmsError(
       "FORBIDDEN",
       "Solo administradores y supervisores pueden gestionar categorías de catálogo",

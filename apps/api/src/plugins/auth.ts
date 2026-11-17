@@ -3,11 +3,45 @@
 // Decora `request.tenantId`, `request.userId` y `request.userRole` para uso en rutas.
 
 import { createHmac, createVerify, timingSafeEqual } from "node:crypto";
-import type { FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { prisma } from "@wms/db";
-import { AUTH_CLERK_LOOKUP_GUC, type UserRole } from "@wms/shared-types";
+import {
+  AUTH_CLERK_LOOKUP_GUC,
+  SESSION_COOKIE_NAME,
+  type UserRole,
+} from "@wms/shared-types";
 import { WmsError } from "./error-handler.js";
+
+/**
+ * Extrae una cookie por nombre de la cabecera `Cookie` sin usar expresiones regulares vulnerables a ReDoS.
+ */
+export function extractCookieToken(
+  cookieHeader: string | undefined,
+  cookieName: string = SESSION_COOKIE_NAME,
+): string | null {
+  if (!cookieHeader || cookieHeader.trim().length === 0) {
+    return null;
+  }
+
+  const pairs = cookieHeader.split(";");
+  for (const pair of pairs) {
+    const eqIndex = pair.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const key = pair.slice(0, eqIndex).trim();
+    if (key !== cookieName) continue;
+    const rawValue = pair.slice(eqIndex + 1).trim();
+    if (!rawValue) return null;
+    try {
+      const decoded = decodeURIComponent(rawValue).trim();
+      return decoded.length > 0 ? decoded : null;
+    } catch {
+      return rawValue;
+    }
+  }
+
+  return null;
+}
 
 /**
  * Resuelve de forma controlada un usuario por `clerkId` durante el handshake inicial de autenticación.
@@ -78,6 +112,7 @@ declare module "fastify" {
 }
 
 const VALID_ROLES: ReadonlySet<UserRole> = new Set([
+  "SUPERUSER",
   "ADMIN",
   "SUPERVISOR",
   "OPERATOR",
@@ -349,6 +384,9 @@ export function requireRole(
 
   return async (request: Pick<FastifyRequest, "userRole">): Promise<void> => {
     const currentRole = request.userRole;
+    if (currentRole === "SUPERUSER") {
+      return;
+    }
     if (!currentRole || !allowedRoles.includes(currentRole)) {
       throw new WmsError(
         "UNAUTHORIZED",
@@ -363,34 +401,56 @@ export function requireRole(
   };
 }
 
-export const authPlugin = fp(async (app) => {
+function isPublicAuthPath(url: string): boolean {
+  const pathname = url.split("?")[0] ?? url;
+  if (
+    pathname === "/health" ||
+    pathname === "/docs" ||
+    pathname.startsWith("/docs/")
+  ) {
+    return true;
+  }
+  return (
+    pathname === "/api/v1/auth/login" ||
+    pathname === "/api/v1/auth/logout" ||
+    pathname === "/api/v1/auth/bootstrap-status" ||
+    pathname === "/api/v1/auth/bootstrap-superuser"
+  );
+}
+
+export interface AuthPluginOptions {
+  jwtSecret?: string | undefined;
+  clerkPublicKey?: string | undefined;
+}
+
+const authPluginImpl: FastifyPluginAsync<AuthPluginOptions> = async (
+  app,
+  options,
+) => {
   app.decorateRequest("tenantId", "");
   app.decorateRequest("userId", undefined);
   app.decorateRequest("userRole", undefined);
 
-  // Hook global: extrae tenantId, userId y userRole de JWT o API Key antes de cada request
-  app.addHook("preHandler", async (request) => {
-    // Las rutas públicas no necesitan auth
-    const PUBLIC_PATHS = ["/health", "/docs", "/docs/"];
-    if (PUBLIC_PATHS.some((p) => request.url.startsWith(p))) return;
+  // Hook global onRequest: extrae tenantId, userId y userRole de JWT (Bearer o cookie HttpOnly wms_session) o API Key
+  app.addHook("onRequest", async (request) => {
+    if (isPublicAuthPath(request.url)) return;
 
     const apiKey = request.headers["x-api-key"] as string | undefined;
     const authHeader = request.headers["authorization"];
+    const cookieToken = extractCookieToken(
+      request.headers["cookie"],
+      SESSION_COOKIE_NAME,
+    );
 
-    if (apiKey) {
-      // Autenticación por API Key (integraciones máquina-a-máquina y clientes autorizados)
-      const tenant = await prisma.tenant.findUnique({ where: { apiKey } });
-      if (!tenant) {
-        throw new WmsError("UNAUTHORIZED", "Invalid API key", 401);
-      }
-      request.tenantId = tenant.id;
-      request.userRole = "ADMIN";
-      return;
-    }
+    const jwtToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : cookieToken;
 
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice("Bearer ".length).trim();
-      const claims = verifyJwtToken(token);
+    if (jwtToken) {
+      const claims = verifyJwtToken(jwtToken, {
+        secret: options.jwtSecret,
+        clerkPublicKey: options.clerkPublicKey,
+      });
 
       if (claims.sub) {
         const user = await lookupUserByClerkIdForAuth(claims.sub);
@@ -404,6 +464,30 @@ export const authPlugin = fp(async (app) => {
             );
           }
 
+          if (user.role === "SUPERUSER") {
+            const requestedTenantId = (
+              request.headers["x-tenant-id"] as string | undefined
+            )?.trim();
+            if (requestedTenantId && requestedTenantId !== user.tenantId) {
+              const targetTenant = await prisma.tenant.findUnique({
+                where: { id: requestedTenantId },
+              });
+              if (!targetTenant) {
+                throw new WmsError(
+                  "UNAUTHORIZED",
+                  "Requested tenant does not exist",
+                  401,
+                );
+              }
+              request.tenantId = requestedTenantId;
+            } else {
+              request.tenantId = user.tenantId;
+            }
+            request.userId = user.id;
+            request.userRole = user.role;
+            return;
+          }
+
           if (claims.tenantId && claims.tenantId !== user.tenantId) {
             throw new WmsError(
               "TENANT_MISMATCH",
@@ -414,7 +498,7 @@ export const authPlugin = fp(async (app) => {
 
           request.tenantId = user.tenantId;
           request.userId = user.id;
-          request.userRole = user.role as UserRole;
+          request.userRole = user.role;
           return;
         }
       }
@@ -454,6 +538,21 @@ export const authPlugin = fp(async (app) => {
       return;
     }
 
+    if (apiKey) {
+      // Autenticación por API Key (integraciones máquina-a-máquina y clientes autorizados)
+      const tenant = await prisma.tenant.findUnique({ where: { apiKey } });
+      if (!tenant) {
+        throw new WmsError("UNAUTHORIZED", "Invalid API key", 401);
+      }
+      request.tenantId = tenant.id;
+      request.userRole = "ADMIN";
+      return;
+    }
+
     throw new WmsError("UNAUTHORIZED", "Authentication required", 401);
   });
+};
+
+export const authPlugin = fp(authPluginImpl, {
+  name: "auth",
 });

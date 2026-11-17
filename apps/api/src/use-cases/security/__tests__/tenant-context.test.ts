@@ -738,6 +738,40 @@ describe("F7.2 — TenantContextPort, withTenantContext y PostgreSQL FORCE RLS",
           rowTenantId: "tenant-a",
         }),
       ).toBe(false);
+
+      // 4. Lookup controlado por email (login) y check de SUPERUSER
+      expect(
+        evaluateRlsPolicyPredicate({
+          tableName: "users",
+          operation: "SELECT",
+          currentTenantId: null,
+          authEmail: "Admin@Navelo.dev",
+          rowEmail: "admin@navelo.dev",
+          rowTenantId: "tenant-a",
+        }),
+      ).toBe(true);
+
+      expect(
+        evaluateRlsPolicyPredicate({
+          tableName: "users",
+          operation: "SELECT",
+          currentTenantId: null,
+          authSuperuserCheck: true,
+          rowRole: "SUPERUSER",
+          rowTenantId: "tenant-a",
+        }),
+      ).toBe(true);
+
+      expect(
+        evaluateRlsPolicyPredicate({
+          tableName: "users",
+          operation: "SELECT",
+          currentTenantId: null,
+          authSuperuserCheck: true,
+          rowRole: "OPERATOR",
+          rowTenantId: "tenant-a",
+        }),
+      ).toBe(false);
     });
   });
 });

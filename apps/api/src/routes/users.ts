@@ -1,9 +1,14 @@
 // apps/api/src/routes/users.ts
-// Rutas de Fastify para la gestión de usuarios y roles del inquilino (Tenant).
+// Rutas de Fastify para la gestión de usuarios, contraseñas opcionales y roles del inquilino (RBAC).
 
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import type { ApiResponse, TenantUserDTO, UserRole } from "@wms/shared-types";
+import {
+  USER_ROLES,
+  type ApiResponse,
+  type TenantUserDTO,
+  type UserRole,
+} from "@wms/shared-types";
 import {
   createTenantUser,
   listTenantUsers,
@@ -11,7 +16,7 @@ import {
 } from "../use-cases/users/manage-users.js";
 
 const ListUsersQuerySchema = z.object({
-  role: z.enum(["ADMIN", "SUPERVISOR", "OPERATOR"]).optional(),
+  role: z.enum(USER_ROLES).optional(),
   includeInactive: z
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .optional(),
@@ -20,19 +25,23 @@ const ListUsersQuerySchema = z.object({
 const CreateUserSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email().max(255),
-  role: z.enum(["ADMIN", "SUPERVISOR", "OPERATOR"]),
+  role: z.enum(USER_ROLES),
   clerkId: z.string().max(100).optional(),
+  password: z.string().min(8).max(128).optional(),
+  tenantId: z.string().trim().min(1).max(128).optional(),
 });
 
 const UpdateUserSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   email: z.string().email().max(255).optional(),
-  role: z.enum(["ADMIN", "SUPERVISOR", "OPERATOR"]).optional(),
+  role: z.enum(USER_ROLES).optional(),
   isActive: z.boolean().optional(),
+  password: z.string().min(8).max(128).optional(),
+  tenantId: z.string().trim().min(1).max(128).optional(),
 });
 
 export const userRoutes: FastifyPluginAsync = async (app) => {
-  // GET /api/v1/users — Listar usuarios del tenant (ADMIN / SUPERVISOR)
+  // GET /api/v1/users — Listar usuarios del tenant (SUPERUSER / ADMIN / SUPERVISOR)
   app.get(
     "/",
     {
@@ -59,13 +68,13 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // POST /api/v1/users — Crear nuevo usuario en el tenant (solo ADMIN)
+  // POST /api/v1/users — Crear nuevo usuario en el tenant (SUPERUSER / ADMIN)
   app.post(
     "/",
     {
       schema: {
         tags: ["Users"],
-        summary: "Crear un nuevo usuario en el inquilino (solo ADMIN)",
+        summary: "Crear un nuevo usuario en el inquilino (SUPERUSER o ADMIN)",
       },
     },
     async (request, reply): Promise<ApiResponse<TenantUserDTO>> => {
@@ -77,6 +86,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         request.tenantId,
         actorRole,
         body,
+        app.passwordHasher,
       );
 
       return reply.status(201).send({
@@ -86,13 +96,13 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // PATCH /api/v1/users/:id — Modificar rol o datos de un usuario (solo ADMIN)
+  // PATCH /api/v1/users/:id — Modificar rol, contraseña o datos de un usuario (SUPERUSER / ADMIN)
   app.patch<{ Params: { id: string } }>(
     "/:id",
     {
       schema: {
         tags: ["Users"],
-        summary: "Actualizar un usuario o cambiar su rol (solo ADMIN)",
+        summary: "Actualizar un usuario, contraseña o rol (SUPERUSER o ADMIN)",
       },
     },
     async (request): Promise<ApiResponse<TenantUserDTO>> => {
@@ -110,6 +120,7 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
         actorUserId,
         request.params.id,
         body,
+        app.passwordHasher,
       );
 
       return {

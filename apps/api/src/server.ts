@@ -18,7 +18,12 @@ import { PrismaUserRepositoryAdapter } from "./adapters/prisma-user-repository.j
 import { PrismaLocationRepository } from "./adapters/prisma-location-repository.js";
 import { PrismaTopologyRepository } from "./adapters/prisma-topology-repository.js";
 import { SvgLabelRendererAdapter } from "./adapters/svg-label-renderer.js";
+import {
+  BcryptPasswordHasher,
+  resolveBcryptSaltRounds,
+} from "./adapters/bcrypt-password-hasher.js";
 import type { DiagnosticsStore } from "./ports/diagnostics-store.js";
+import type { PasswordHasherPort } from "./ports/password-hasher.js";
 import type { TenantContextPort } from "./ports/tenant-context.js";
 import type { CatalogRepositoryPort } from "./ports/catalog-repository.js";
 import type { UserRepositoryPort } from "./ports/user-repository.js";
@@ -36,6 +41,7 @@ import { receiptRoutes } from "./routes/receipts.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { diagnosticsRoutes } from "./routes/v1/diagnostics.js";
 import { labelRoutes } from "./routes/v1/labels.js";
+import { authRoutes } from "./routes/auth.js";
 import { healthRoute } from "./routes/health.js";
 
 const PORT = Number(process.env["PORT"] ?? 3001);
@@ -49,6 +55,7 @@ declare module "fastify" {
     locationRepository: LocationRepositoryPort;
     topologyRepository: TopologyRepositoryPort;
     labelRenderer: LabelRendererPort;
+    passwordHasher: PasswordHasherPort;
   }
 }
 
@@ -60,6 +67,12 @@ export interface BuildServerOptions {
   locationRepository?: LocationRepositoryPort | undefined;
   topologyRepository?: TopologyRepositoryPort | undefined;
   labelRenderer?: LabelRendererPort | undefined;
+  passwordHasher?: PasswordHasherPort | undefined;
+  bcryptSaltRounds?: number | undefined;
+  jwtSecret?: string | undefined;
+  clerkPublicKey?: string | undefined;
+  jwtExpiresInSeconds?: number | undefined;
+  bootstrapSetupSecret?: string | undefined;
   enableLogger?: boolean | undefined;
 }
 
@@ -98,9 +111,26 @@ export async function buildServer(options: BuildServerOptions = {}) {
     "topologyRepository",
     options.topologyRepository ?? new PrismaTopologyRepository(),
   );
+  const saltRounds =
+    options.bcryptSaltRounds ??
+    resolveBcryptSaltRounds(process.env["BCRYPT_SALT_ROUNDS"]);
+  const jwtSecret = options.jwtSecret ?? process.env["JWT_SECRET"];
+  const clerkPublicKey = options.clerkPublicKey ?? process.env["CLERK_JWT_KEY"];
+  const rawJwtExpires = Number(process.env["JWT_EXPIRES_IN_SECONDS"] ?? 28_800);
+  const jwtExpiresInSeconds =
+    options.jwtExpiresInSeconds ??
+    (Number.isFinite(rawJwtExpires) && rawJwtExpires > 0 ? rawJwtExpires : 28_800);
+  const bootstrapSetupSecret =
+    options.bootstrapSetupSecret ?? process.env["BOOTSTRAP_SETUP_SECRET"];
+  const isProduction = process.env["NODE_ENV"] === "production";
+
   app.decorate(
     "labelRenderer",
     options.labelRenderer ?? new SvgLabelRendererAdapter(),
+  );
+  app.decorate(
+    "passwordHasher",
+    options.passwordHasher ?? new BcryptPasswordHasher(saltRounds),
   );
 
   // ── Seguridad ──────────────────────────────────────────────
@@ -126,6 +156,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
         version: "1.0.0",
       },
       tags: [
+        { name: "Auth", description: "Autenticación JWT, cookie HttpOnly y bootstrap de Superuser" },
         { name: "Products", description: "Catálogo de productos, SKUs y dimensiones" },
         { name: "Categories", description: "Categorías operativas configurables del catálogo" },
         { name: "Users", description: "Gestión de usuarios y roles del inquilino (Tenant)" },
@@ -162,10 +193,20 @@ export async function buildServer(options: BuildServerOptions = {}) {
     diagnosticsStore: options.diagnosticsStore,
   });
   await app.register(errorHandler);
-  await app.register(authPlugin);
+  await app.register(authPlugin, {
+    jwtSecret,
+    clerkPublicKey,
+  });
 
   // ── Rutas ─────────────────────────────────────────────────
   await app.register(healthRoute);
+  await app.register(authRoutes, {
+    prefix: "/api/v1/auth",
+    jwtSecret,
+    jwtExpiresInSeconds,
+    bootstrapSetupSecret,
+    isProduction,
+  });
   await app.register(inventoryRoutes, { prefix: "/api/v1/inventory" });
   await app.register(productRoutes, { prefix: "/api/v1/products" });
   await app.register(categoryRoutes, { prefix: "/api/v1/categories" });

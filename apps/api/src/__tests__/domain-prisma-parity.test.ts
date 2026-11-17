@@ -8,7 +8,9 @@ import {
   StepStatus as PrismaStepStatus,
   TaskStatus as PrismaTaskStatus,
   TxReason as PrismaTxReason,
+  UserRole as PrismaUserRole,
 } from "@wms/db";
+import { USER_ROLES } from "@wms/shared-types";
 import {
   DomainError,
   ExceedsAllocatedError,
@@ -53,6 +55,12 @@ describe("Paridad @wms/domain <-> Prisma (@wms/db)", () => {
     const prismaValues = Object.values(PrismaTxReason).sort();
     const domainValues = [...TX_REASONS].sort();
     expect(domainValues).toEqual(prismaValues);
+  });
+
+  it("USER_ROLES (@wms/shared-types) coincide exactamente con Prisma UserRole", () => {
+    const prismaValues = Object.values(PrismaUserRole).sort();
+    const sharedValues = [...USER_ROLES].sort();
+    expect(sharedValues).toEqual(prismaValues);
   });
 
   it("mapea todas las subclases de DomainError a WmsError conservando los códigos públicos", () => {

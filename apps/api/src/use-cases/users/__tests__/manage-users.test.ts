@@ -1,11 +1,17 @@
 // apps/api/src/use-cases/users/__tests__/manage-users.test.ts
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryUserRepository } from "../../../adapters/in-memory-user-repository.js";
+import type { PasswordHasherPort } from "../../../ports/password-hasher.js";
 import {
   createTenantUser,
   listTenantUsers,
   updateTenantUser,
 } from "../manage-users.js";
+
+const mockHasher: PasswordHasherPort = {
+  hash: async (plain) => `hashed:${plain}`,
+  verify: async (plain, hash) => hash === `hashed:${plain}`,
+};
 
 describe("Caso de Uso: Gestión de Usuarios y Roles de Tenant (F9.1)", () => {
   let userRepo: InMemoryUserRepository;
@@ -468,6 +474,128 @@ describe("Caso de Uso: Gestión de Usuarios y Roles de Tenant (F9.1)", () => {
           statusCode: 404,
         }),
       );
+    });
+  });
+
+  describe("5. Contraseñas Bcrypt y Privilegios SUPERUSER (F10.1)", () => {
+    it("permite a SUPERUSER crear usuario con contraseña hasheada y gestionar otros tenants", async () => {
+      userRepo.seedTenant(tenantB);
+
+      const created = await createTenantUser(
+        userRepo,
+        tenantA,
+        "SUPERUSER",
+        {
+          name: "Admin Tenant B",
+          email: "admb@tenant-b.com",
+          role: "ADMIN",
+          password: "SecurePassword!99",
+          tenantId: tenantB,
+        },
+        mockHasher,
+      );
+
+      expect(created.tenantId).toBe(tenantB);
+      expect(created.role).toBe("ADMIN");
+
+      const authRecord = await userRepo.findUserByEmailForAuth(
+        "admb@tenant-b.com",
+        tenantB,
+      );
+      expect(authRecord?.passwordHash).toBe("hashed:SecurePassword!99");
+
+      const updated = await updateTenantUser(
+        userRepo,
+        tenantA,
+        "SUPERUSER",
+        "super_id",
+        created.id,
+        {
+          password: "NewPassword!123",
+          tenantId: tenantB,
+        },
+        mockHasher,
+      );
+      expect(updated.id).toBe(created.id);
+      const authAfter = await userRepo.findUserByEmailForAuth(
+        "admb@tenant-b.com",
+        tenantB,
+      );
+      expect(authAfter?.passwordHash).toBe("hashed:NewPassword!123");
+    });
+
+    it("rechaza contraseña menor de 8 caracteres (400) o ausencia de PasswordHasherPort (500)", async () => {
+      await expect(
+        createTenantUser(
+          userRepo,
+          tenantA,
+          "ADMIN",
+          {
+            name: "Short Pass",
+            email: "short@test.com",
+            role: "OPERATOR",
+            password: "123",
+          },
+          mockHasher,
+        ),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+
+      await expect(
+        createTenantUser(userRepo, tenantA, "ADMIN", {
+          name: "No Hasher",
+          email: "nohash@test.com",
+          role: "OPERATOR",
+          password: "ValidPassword!123",
+        }),
+      ).rejects.toMatchObject({ code: "CONFIGURATION_ERROR", statusCode: 500 });
+    });
+
+    it("impide que ADMIN cree, promueva o modifique cuentas SUPERUSER o cambie de tenant", async () => {
+      const superUser = await createTenantUser(
+        userRepo,
+        tenantA,
+        "SUPERUSER",
+        {
+          name: "Root",
+          email: "admin@navelo.dev",
+          role: "SUPERUSER",
+        },
+      );
+
+      await expect(
+        createTenantUser(userRepo, tenantA, "ADMIN", {
+          name: "Escalation",
+          email: "esc@test.com",
+          role: "SUPERUSER",
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+      await expect(
+        updateTenantUser(userRepo, tenantA, "ADMIN", "adm_id", superUser.id, {
+          isActive: false,
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+      const normal = await createTenantUser(userRepo, tenantA, "ADMIN", {
+        name: "Normal",
+        email: "normal@test.com",
+        role: "OPERATOR",
+      });
+
+      await expect(
+        updateTenantUser(userRepo, tenantA, "ADMIN", "adm_id", normal.id, {
+          role: "SUPERUSER",
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+
+      await expect(
+        createTenantUser(userRepo, tenantA, "ADMIN", {
+          name: "Cross",
+          email: "cross@test.com",
+          role: "OPERATOR",
+          tenantId: tenantB,
+        }),
+      ).rejects.toMatchObject({ code: "TENANT_MISMATCH", statusCode: 403 });
     });
   });
 });
