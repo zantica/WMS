@@ -18,12 +18,14 @@ import {
 } from "react";
 import type { CategoryDTO, ProductDTO } from "@wms/shared-types";
 import { useSupervisorSession } from "../../context/supervisor-session";
+import { useTranslation } from "../../context/locale-context";
 import { LabelPrintModal } from "../../components/labels/label-print-modal";
 
 type CatalogTab = "products" | "categories";
 
 export default function CatalogMasterPage(): JSX.Element {
   const { client, session } = useSupervisorSession();
+  const { t } = useTranslation();
 
   // Pestaña activa
   const [activeTab, setActiveTab] = useState<CatalogTab>("products");
@@ -300,17 +302,12 @@ export default function CatalogMasterPage(): JSX.Element {
       <div className="wms-page-header">
         <div>
           <div className="wms-eyebrow">
-            <span>◆ CATÁLOGO MAESTRO WMS</span>
+            <span>{t("web.catalog.eyebrow")}</span>
             <span>·</span>
             <span>{session.warehouseId}</span>
           </div>
-          <h1 className="wms-page-title">
-            Catálogo de Productos y Categorías Operativas
-          </h1>
-          <p className="wms-page-subtitle">
-            Administración centralizada de referencias SKU, especificaciones
-            técnicas, código de barras y taxonomía operativa de almacén.
-          </p>
+          <h1 className="wms-page-title">{t("web.catalog.pageTitle")}</h1>
+          <p className="wms-page-subtitle">{t("web.catalog.pageSubtitle")}</p>
         </div>
 
         <button
@@ -321,7 +318,7 @@ export default function CatalogMasterPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando…" : "Sincronizar catálogo"}
+          {loading ? t("web.catalog.syncingBtn") : t("web.catalog.syncBtn")}
         </button>
       </div>
 
@@ -353,7 +350,7 @@ export default function CatalogMasterPage(): JSX.Element {
             className={`wms-tab ${activeTab === "products" ? "wms-tab-active" : ""}`}
             onClick={() => setActiveTab("products")}
           >
-            <span>Productos</span>
+            <span>{t("web.catalog.tabProducts")}</span>
             <span className="wms-tab-badge">{products.length}</span>
           </button>
           <button
@@ -363,7 +360,7 @@ export default function CatalogMasterPage(): JSX.Element {
             className={`wms-tab ${activeTab === "categories" ? "wms-tab-active" : ""}`}
             onClick={() => setActiveTab("categories")}
           >
-            <span>Categorías</span>
+            <span>{t("web.catalog.tabCategories")}</span>
             <span className="wms-tab-badge">{categories.length}</span>
           </button>
         </nav>
@@ -382,7 +379,7 @@ export default function CatalogMasterPage(): JSX.Element {
                     : "Imprimir etiquetas de los productos seleccionados"
                 }
               >
-                🏷️ Imprimir Etiquetas {selectedProductIds.size > 0 ? `(${selectedProductIds.size})` : ""}
+                🏷️ {t("web.catalog.printLabelsBtn")} {selectedProductIds.size > 0 ? `(${selectedProductIds.size})` : ""}
               </button>
               <button
                 type="button"
@@ -391,7 +388,9 @@ export default function CatalogMasterPage(): JSX.Element {
                 }`}
                 onClick={() => setShowCreateProduct((prev) => !prev)}
               >
-                {showCreateProduct ? "✕ Ocultar formulario" : "+ Nuevo producto"}
+                {showCreateProduct
+                  ? t("web.catalog.hideFormBtn")
+                  : t("web.catalog.newProductBtn")}
               </button>
             </>
           ) : (
@@ -402,7 +401,9 @@ export default function CatalogMasterPage(): JSX.Element {
               }`}
               onClick={() => setShowCreateCategory((prev) => !prev)}
             >
-              {showCreateCategory ? "✕ Ocultar formulario" : "+ Nueva categoría"}
+              {showCreateCategory
+                ? t("web.catalog.hideFormBtn")
+                : t("web.catalog.newCategoryBtn")}
             </button>
           )}
         </div>
@@ -413,7 +414,7 @@ export default function CatalogMasterPage(): JSX.Element {
         <div className="wms-disclosure-box">
           <div className="wms-disclosure-header">
             <h2 className="wms-disclosure-title">
-              <span>◆ Alta de nuevo producto en catálogo</span>
+              <span>{t("web.catalog.formProductTitle")}</span>
             </h2>
             <button
               type="button"

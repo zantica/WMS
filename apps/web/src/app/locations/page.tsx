@@ -43,6 +43,7 @@ import {
 } from "../../lib/dashboard-metrics";
 import { useSupervisorSession } from "../../context/supervisor-session";
 import { LabelPrintModal } from "../../components/labels/label-print-modal";
+import { useTranslation } from "../../context/locale-context";
 
 type ViewMode = "MACRO" | "AISLE_DETAIL";
 type CellDensity = "NORMAL" | "COMPACT";
@@ -50,6 +51,7 @@ type CellFilter = "ALL" | "OCCUPIED" | "EMPTY" | "BLOCKED";
 
 export default function WarehouseLocationsPage(): JSX.Element {
   const { client, session } = useSupervisorSession();
+  const { t, formatNumber } = useTranslation();
 
   // ── Estados de Datos de Topología ───────────────────────────
   const [layoutSummary, setLayoutSummary] =
@@ -401,11 +403,10 @@ export default function WarehouseLocationsPage(): JSX.Element {
             <span>{session.warehouseId}</span>
           </div>
           <h1 className="wms-page-title">
-            Topología Física y Layout del Almacén
+            {t("web.locations.pageTitle")}
           </h1>
           <p className="wms-page-subtitle">
-            Alzado frontal, distribución en planta y gestión de capacidad del
-            almacén (S5 / F9.2)
+            {t("web.locations.pageSubtitle")} (S5 / F9.2)
           </p>
         </div>
 
@@ -420,7 +421,9 @@ export default function WarehouseLocationsPage(): JSX.Element {
               if (!isGeneratorOpen) setIsCreateSingleOpen(false);
             }}
           >
-            {isGeneratorOpen ? "✕ Cerrar generador" : "⚡ Generador en Bloque"}
+            {isGeneratorOpen
+              ? `✕ ${t("common.close")}`
+              : `⚡ ${t("web.locations.bulkGenBtn")}`}
           </button>
 
           <button
@@ -433,7 +436,9 @@ export default function WarehouseLocationsPage(): JSX.Element {
               if (!isCreateSingleOpen) setIsGeneratorOpen(false);
             }}
           >
-            {isCreateSingleOpen ? "✕ Cerrar alta" : "+ Alta Individual"}
+            {isCreateSingleOpen
+              ? `✕ ${t("common.close")}`
+              : `+ ${t("web.locations.individualBtn")}`}
           </button>
 
           <button
@@ -443,9 +448,9 @@ export default function WarehouseLocationsPage(): JSX.Element {
               selectedLocationCodes.size === 0 && allLocations.length === 0
             }
             onClick={() => setIsPrintModalOpen(true)}
-            title="Imprimir etiquetas de ubicaciones seleccionadas"
+            title={t("web.locations.printLabelsBtn")}
           >
-            🏷️ Imprimir Etiquetas
+            🏷️ {t("web.locations.printLabelsBtn")}
             {selectedLocationCodes.size > 0
               ? ` (${selectedLocationCodes.size})`
               : ""}
@@ -456,9 +461,9 @@ export default function WarehouseLocationsPage(): JSX.Element {
             className="wms-btn wms-btn-secondary"
             onClick={() => void loadMacroData()}
             disabled={loading}
-            title="Refrescar datos de topología"
+            title={t("common.refresh")}
           >
-            ↻ Sincronizar
+            ↻ {t("common.refresh")}
           </button>
         </div>
       </div>
@@ -496,43 +501,49 @@ export default function WarehouseLocationsPage(): JSX.Element {
       <div className="wms-grid-4" style={{ marginBottom: "1rem" }}>
         <div className="wms-kpi-card">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Ubicaciones</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiTotal")}</span>
           </div>
           <div className="wms-kpi-value">
-            {layoutSummary
-              ? layoutSummary.totalLocations
-              : topologyKpis.totalLocations}
+            {formatNumber(
+              layoutSummary
+                ? layoutSummary.totalLocations
+                : topologyKpis.totalLocations,
+            )}
           </div>
-          <div className="wms-kpi-foot">Capacidad instalada del almacén</div>
+          <div className="wms-kpi-foot">{t("domain.capacity")}</div>
         </div>
 
         <div className="wms-kpi-card wms-kpi-card-emerald">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Activas</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiActive")}</span>
           </div>
           <div className="wms-kpi-value" style={{ color: "var(--success)" }}>
-            {layoutSummary
-              ? layoutSummary.activeLocations
-              : topologyKpis.activeLocations}
+            {formatNumber(
+              layoutSummary
+                ? layoutSummary.activeLocations
+                : topologyKpis.activeLocations,
+            )}
           </div>
-          <div className="wms-kpi-foot">Habilitadas para almacenaje</div>
+          <div className="wms-kpi-foot">{t("statuses.active")}</div>
         </div>
 
         <div className="wms-kpi-card wms-kpi-card-rose">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Bloqueadas</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiBlocked")}</span>
           </div>
           <div className="wms-kpi-value" style={{ color: "var(--danger)" }}>
-            {layoutSummary
-              ? layoutSummary.blockedLocations
-              : topologyKpis.blockedLocations}
+            {formatNumber(
+              layoutSummary
+                ? layoutSummary.blockedLocations
+                : topologyKpis.blockedLocations,
+            )}
           </div>
-          <div className="wms-kpi-foot">Excluidas de asignación</div>
+          <div className="wms-kpi-foot">{t("statuses.blocked")}</div>
         </div>
 
         <div className="wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Ocupación %</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiOccupancyPct")}</span>
             <span className="wms-kpi-unit">%</span>
           </div>
           <div className="wms-kpi-value">
@@ -545,7 +556,7 @@ export default function WarehouseLocationsPage(): JSX.Element {
             {layoutSummary
               ? layoutSummary.occupiedLocations
               : topologyKpis.occupiedLocations}{" "}
-            con saldo físico
+            {t("locations.occupied")}
           </div>
         </div>
       </div>
@@ -554,48 +565,56 @@ export default function WarehouseLocationsPage(): JSX.Element {
       <div className="wms-grid-4" style={{ marginBottom: "1.25rem" }}>
         <div className="wms-kpi-card">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Ocupadas</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiOccupied")}</span>
           </div>
           <div className="wms-kpi-value">
-            {layoutSummary
-              ? layoutSummary.occupiedLocations
-              : topologyKpis.occupiedLocations}
+            {formatNumber(
+              layoutSummary
+                ? layoutSummary.occupiedLocations
+                : topologyKpis.occupiedLocations,
+            )}
           </div>
-          <div className="wms-kpi-foot">Celdas con OnHand &gt; 0</div>
+          <div className="wms-kpi-foot">OnHand &gt; 0</div>
         </div>
 
         <div className="wms-kpi-card">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Stock Físico (OnHand)</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiOnHand")}</span>
           </div>
           <div className="wms-kpi-value">
-            {layoutSummary
-              ? layoutSummary.totalOnHand
-              : topologyKpis.totalOnHand}
+            {formatNumber(
+              layoutSummary
+                ? layoutSummary.totalOnHand
+                : topologyKpis.totalOnHand,
+            )}
           </div>
-          <div className="wms-kpi-foot">Unidades físicas en custodia</div>
+          <div className="wms-kpi-foot">{t("domain.onHand")}</div>
         </div>
 
         <div className="wms-kpi-card wms-kpi-card-amber">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Reservado</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiReserved")}</span>
           </div>
           <div className="wms-kpi-value" style={{ color: "var(--warning)" }}>
-            {layoutSummary
-              ? layoutSummary.totalAllocated
-              : topologyKpis.totalAllocated}
+            {formatNumber(
+              layoutSummary
+                ? layoutSummary.totalAllocated
+                : topologyKpis.totalAllocated,
+            )}
           </div>
-          <div className="wms-kpi-foot">Comprometido en picking</div>
+          <div className="wms-kpi-foot">{t("domain.allocated")}</div>
         </div>
 
         <div className="wms-kpi-card wms-kpi-card-emerald">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Disponible (ATP)</span>
+            <span className="wms-kpi-label">{t("web.locations.kpiAtp")}</span>
           </div>
           <div className="wms-kpi-value" style={{ color: "var(--success)" }}>
-            {layoutSummary ? layoutSummary.totalAtp : topologyKpis.totalAtp}
+            {formatNumber(
+              layoutSummary ? layoutSummary.totalAtp : topologyKpis.totalAtp,
+            )}
           </div>
-          <div className="wms-kpi-foot">Stock neto disponible</div>
+          <div className="wms-kpi-foot">{t("domain.available")}</div>
         </div>
       </div>
 

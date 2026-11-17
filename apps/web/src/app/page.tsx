@@ -11,6 +11,7 @@ import type {
   WarehouseTaskDTO,
 } from "@wms/shared-types";
 import { useSupervisorSession } from "../context/supervisor-session";
+import { useTranslation } from "../context/locale-context";
 import type { KardexTransactionItem } from "../lib/api-client";
 import {
   computeInventoryKpis,
@@ -21,6 +22,7 @@ import {
 
 export default function SupervisorOverviewPage(): JSX.Element {
   const { client, session } = useSupervisorSession();
+  const { locale, t, formatNumber } = useTranslation();
   const [balances, setBalances] = useState<InventoryBalanceDTO[]>([]);
   const [orders, setOrders] = useState<SalesOrderDTO[]>([]);
   const [tasks, setTasks] = useState<WarehouseTaskDTO[]>([]);
@@ -81,11 +83,8 @@ export default function SupervisorOverviewPage(): JSX.Element {
               </>
             ) : null}
           </div>
-          <h1 className="wms-page-title">Torre de control operativa</h1>
-          <p className="wms-page-subtitle">
-            Visibilidad en tiempo real sobre saldos contables del ledger
-            inmutable, pipeline de pedidos y ejecución de piso.
-          </p>
+          <h1 className="wms-page-title">{t("web.overview.pageTitle")}</h1>
+          <p className="wms-page-subtitle">{t("web.overview.pageSubtitle")}</p>
         </div>
 
         <button
@@ -96,17 +95,14 @@ export default function SupervisorOverviewPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando telemetría…" : "Sincronizar panel"}
+          {loading ? t("web.overview.syncingBtn") : t("web.overview.syncBtn")}
         </button>
       </div>
 
       {errorMsg ? (
         <div className="wms-alert-banner" role="alert" aria-live="assertive">
           <div>
-            <strong>⚠ Fallo de sincronización con la API:</strong> {errorMsg}.
-            Verifica que <code>@wms/api</code> esté ejecutándose en{" "}
-            <code>{session.apiBaseUrl}</code> y que el header{" "}
-            <code>x-api-key</code> sea válido.
+            <strong>⚠ {t("web.overview.apiSyncError")}</strong> {errorMsg}.
           </div>
           <button
             type="button"
@@ -115,25 +111,25 @@ export default function SupervisorOverviewPage(): JSX.Element {
               void loadOverview();
             }}
           >
-            Reintentar ahora
+            {t("web.overview.retryNow")}
           </button>
         </div>
       ) : null}
 
       {/* Elemento memorable: HUD de Métricas Contables con iluminación perimetral */}
-      <section className="wms-grid-4" aria-label="Indicadores clave del almacén">
+      <section className="wms-grid-4" aria-label={t("web.overview.pageTitle")}>
         <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Stock físico (OnHand)</span>
-            <span className="wms-tag wms-tag-slate">FÍSICO</span>
+            <span className="wms-kpi-label">{t("web.overview.kpiOnHand")}</span>
+            <span className="wms-tag wms-tag-slate">{t("web.overview.tagPhysical")}</span>
           </div>
           <div className="wms-kpi-value">
             {loading && balances.length === 0 ? (
-              <span className="wms-skeleton" aria-label="Cargando OnHand" />
+              <span className="wms-skeleton" aria-label={t("common.loading")} />
             ) : (
               <>
-                {inventoryKpis.totalOnHand}
-                <span className="wms-kpi-unit">uds</span>
+                {formatNumber(inventoryKpis.totalOnHand)}
+                <span className="wms-kpi-unit">{t("web.overview.units")}</span>
               </>
             )}
           </div>
@@ -143,52 +139,52 @@ export default function SupervisorOverviewPage(): JSX.Element {
             </span>
             <span>·</span>
             <span className="wms-mono">
-              {inventoryKpis.uniqueLocationsWithStock} ubicaciones activas
+              {inventoryKpis.uniqueLocationsWithStock} {t("web.overview.activeLocations")}
             </span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-amber">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Stock reservado (Allocated)</span>
-            <span className="wms-tag wms-tag-amber">▲ RESERVA</span>
+            <span className="wms-kpi-label">{t("web.overview.kpiAllocated")}</span>
+            <span className="wms-tag wms-tag-amber">{t("web.overview.tagReserved")}</span>
           </div>
           <div className="wms-kpi-value wms-text-warning">
             {loading && balances.length === 0 ? (
-              <span className="wms-skeleton" aria-label="Cargando Allocated" />
+              <span className="wms-skeleton" aria-label={t("common.loading")} />
             ) : (
               <>
-                {inventoryKpis.totalAllocated}
-                <span className="wms-kpi-unit">uds</span>
+                {formatNumber(inventoryKpis.totalAllocated)}
+                <span className="wms-kpi-unit">{t("web.overview.units")}</span>
               </>
             )}
           </div>
           <div className="wms-kpi-foot">
-            <span>Tasa de compromiso:</span>
+            <span>{t("web.overview.commitmentRate")}</span>
             <strong className="wms-mono wms-text-primary">
               {inventoryKpis.utilizationRate}%
             </strong>
-            <span>del OnHand</span>
+            <span>{t("web.overview.ofOnHand")}</span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-emerald">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Disponible prometible (ATP)</span>
-            <span className="wms-tag wms-tag-emerald">✓ PROMETIBLE</span>
+            <span className="wms-kpi-label">{t("web.overview.kpiAtp")}</span>
+            <span className="wms-tag wms-tag-emerald">{t("web.overview.tagPromisable")}</span>
           </div>
           <div className="wms-kpi-value wms-text-success">
             {loading && balances.length === 0 ? (
-              <span className="wms-skeleton" aria-label="Cargando ATP" />
+              <span className="wms-skeleton" aria-label={t("common.loading")} />
             ) : (
               <>
-                {inventoryKpis.totalAtp}
-                <span className="wms-kpi-unit">uds</span>
+                {formatNumber(inventoryKpis.totalAtp)}
+                <span className="wms-kpi-unit">{t("web.overview.units")}</span>
               </>
             )}
           </div>
           <div className="wms-kpi-foot">
-            <span className="wms-mono">Invariante: OnHand − Allocated</span>
+            <span className="wms-mono">{t("web.overview.invariantFormula")}</span>
           </div>
         </div>
 
@@ -198,25 +194,25 @@ export default function SupervisorOverviewPage(): JSX.Element {
           }`}
         >
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Pedidos y tareas en piso</span>
+            <span className="wms-kpi-label">{t("web.overview.kpiOrdersTasks")}</span>
             <span
               className={`wms-tag ${
                 hasOperationalAlerts ? "wms-tag-rose" : "wms-tag-blue"
               }`}
             >
-              {hasOperationalAlerts ? "⚠ ATENCIÓN" : "● FLUJO OK"}
+              {hasOperationalAlerts ? t("web.overview.tagAttention") : t("web.overview.tagFlowOk")}
             </span>
           </div>
           <div className="wms-kpi-value wms-text-accent">
             {loading && orders.length === 0 && tasks.length === 0 ? (
-              <span className="wms-skeleton" aria-label="Cargando pedidos" />
+              <span className="wms-skeleton" aria-label={t("common.loading")} />
             ) : (
               <>
                 {ordersSummary.activeOrdersCount}
-                <span className="wms-kpi-unit">pedidos</span>
+                <span className="wms-kpi-unit">{t("web.overview.ordersUnit")}</span>
                 {" / "}
                 {tasksSummary.totalTasks}
-                <span className="wms-kpi-unit">tareas</span>
+                <span className="wms-kpi-unit">{t("web.overview.tasksUnit")}</span>
               </>
             )}
           </div>
@@ -226,7 +222,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
             </span>
             <span>·</span>
             <span className="wms-mono">
-              {tasksSummary.tasksWithExceptions.length} con excepción
+              {tasksSummary.tasksWithExceptions.length} {t("web.overview.withException")}
             </span>
           </div>
         </div>
@@ -235,40 +231,42 @@ export default function SupervisorOverviewPage(): JSX.Element {
       {/* Barra de verificación en vivo del invariante contable */}
       <section
         className="wms-invariant-bar"
-        aria-label="Ecuación de integridad del Ledger"
+        aria-label={t("web.overview.ledgerEquation")}
       >
         <div className="wms-invariant-formula">
-          <span className="wms-muted">ECUACIÓN DEL LEDGER:</span>
-          <strong>OnHand ({inventoryKpis.totalOnHand} uds)</strong>
+          <span className="wms-muted">{t("web.overview.ledgerEquation")}</span>
+          <strong>
+            OnHand ({formatNumber(inventoryKpis.totalOnHand)} {t("web.overview.units")})
+          </strong>
           <span>−</span>
           <strong className="wms-text-warning">
-            Allocated ({inventoryKpis.totalAllocated} uds)
+            Allocated ({formatNumber(inventoryKpis.totalAllocated)} {t("web.overview.units")})
           </strong>
           <span>=</span>
           <strong className="wms-text-success">
-            ATP ({inventoryKpis.totalAtp} uds)
+            ATP ({formatNumber(inventoryKpis.totalAtp)} {t("web.overview.units")})
           </strong>
         </div>
         <span className="wms-tag wms-tag-emerald">
-          ✓ Invariante contable verificado
+          {t("web.overview.invariantVerified")}
         </span>
       </section>
 
       {hasOperationalAlerts ? (
         <section className="wms-alert-banner" role="status" aria-live="polite">
           <div>
-            <strong>⚠ Atención del supervisor requerida:</strong> Se detectaron{" "}
+            <strong>{t("web.overview.alertSupervisor")}</strong>{" "}
             <strong className="wms-mono">
               {ordersSummary.onHoldOrders.length}
             </strong>{" "}
-            pedido(s) retenidos en <code>ON_HOLD</code> por rotura de stock y{" "}
+            <code>ON_HOLD</code> ·{" "}
             <strong className="wms-mono">
               {tasksSummary.tasksWithExceptions.length}
             </strong>{" "}
-            tarea(s) operativas con pasos en excepción.
+            {t("web.overview.withException")}
           </div>
           <Link href="/operations" className="wms-banner-link">
-            Resolver en monitor de operaciones →
+            {t("web.overview.resolveInOps")}
           </Link>
         </section>
       ) : null}
@@ -276,21 +274,21 @@ export default function SupervisorOverviewPage(): JSX.Element {
       <section className="wms-grid-2">
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Estado del pipeline de pedidos</span>
+            <span>{t("web.overview.pipelineTitle")}</span>
             <Link
               href="/operations"
               className="wms-btn wms-btn-outline wms-btn-sm"
             >
-              Gestionar cartera →
+              {t("web.overview.manageOrdersBtn")}
             </Link>
           </div>
           <div className="wms-table-wrap">
             <table className="wms-table">
               <thead>
                 <tr>
-                  <th>Estado operativo</th>
-                  <th className="wms-num">Pedidos</th>
-                  <th>Siguiente acción recomendada</th>
+                  <th>{t("web.overview.statusCol")}</th>
+                  <th className="wms-num">{t("web.overview.ordersCol")}</th>
+                  <th>{t("web.overview.nextActionCol")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -303,7 +301,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
                     "ON_HOLD",
                   ] as const
                 ).map((status) => {
-                  const visual = resolveOrderStatusVisual(status);
+                  const visual = resolveOrderStatusVisual(status, locale);
                   return (
                     <tr key={status}>
                       <td>
@@ -327,22 +325,22 @@ export default function SupervisorOverviewPage(): JSX.Element {
 
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Últimos movimientos del ledger (Kardex)</span>
+            <span>{t("web.overview.recentTxTitle")}</span>
             <Link
               href="/inventory"
               className="wms-btn wms-btn-outline wms-btn-sm"
             >
-              Auditar kardex completo →
+              {t("web.overview.auditKardexBtn")}
             </Link>
           </div>
           <div className="wms-table-wrap">
             <table className="wms-table">
               <thead>
                 <tr>
-                  <th>Motivo</th>
-                  <th>SKU</th>
-                  <th>Flujo de ubicación</th>
-                  <th className="wms-num">Cant. (uds)</th>
+                  <th>{t("web.overview.reasonCol")}</th>
+                  <th>{t("web.overview.skuCol")}</th>
+                  <th>{t("web.overview.locationFlowCol")}</th>
+                  <th className="wms-num">{t("web.overview.qtyCol")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,7 +349,7 @@ export default function SupervisorOverviewPage(): JSX.Element {
                     <td colSpan={4}>
                       <span
                         className="wms-skeleton"
-                        aria-label="Cargando movimientos recientes"
+                        aria-label={t("common.loading")}
                       />
                     </td>
                   </tr>
@@ -360,12 +358,10 @@ export default function SupervisorOverviewPage(): JSX.Element {
                     <td colSpan={4}>
                       <div className="wms-empty-state">
                         <div className="wms-empty-title">
-                          Sin transacciones registradas en el ledger
+                          {t("web.overview.emptyTxTitle")}
                         </div>
                         <div className="wms-empty-hint">
-                          Registra una recepción de mercancía o ejecuta un
-                          ajuste contable en el módulo de inventario para
-                          inaugurar la trazabilidad.
+                          {t("web.overview.emptyTxHint")}
                         </div>
                       </div>
                     </td>

@@ -19,6 +19,7 @@ import type {
   RenderedLabelDTO,
 } from "@wms/shared-types";
 import { useSupervisorSession } from "../../context/supervisor-session";
+import { useTranslation } from "../../context/locale-context";
 
 export interface LabelItemTarget {
   id: string;
@@ -128,6 +129,7 @@ export function LabelPrintModal({
   initialBatchData,
 }: LabelPrintModalProps): JSX.Element | null {
   const { client } = useSupervisorSession();
+  const { t } = useTranslation();
 
   // Estado local de ítems con copias modificables y capacidad de eliminación
   const [itemsState, setItemsState] = useState<ModalItemState[]>(() =>
@@ -292,10 +294,16 @@ export function LabelPrintModal({
               <span className="wms-label-modal-icon">🏷️</span>
               <div>
                 <h2 id="label-modal-title" className="wms-label-modal-title">
-                  Impresión de Etiquetas {entityType === "LOCATION" ? "de Ubicación" : "de Producto"}
+                  {entityType === "LOCATION"
+                    ? t("web.labelModal.titleLocation")
+                    : t("web.labelModal.titleProduct")}
                 </h2>
                 <p className="wms-label-modal-subtitle">
-                  {itemsState.length} {itemsState.length === 1 ? "elemento en cola" : "elementos en cola"} ({totalCopies} copias a imprimir)
+                  {itemsState.length}{" "}
+                  {itemsState.length === 1
+                    ? t("web.labelModal.itemInQueue")
+                    : t("web.labelModal.itemsInQueue")}{" "}
+                  {t("web.labelModal.copiesToPrint", { count: totalCopies })}
                 </p>
               </div>
             </div>
@@ -303,7 +311,7 @@ export function LabelPrintModal({
               type="button"
               onClick={onClose}
               className="wms-label-modal-close"
-              aria-label="Cerrar modal"
+              aria-label={t("web.labelModal.closeModalAria")}
             >
               ✕
             </button>
@@ -313,28 +321,32 @@ export function LabelPrintModal({
           <div className="wms-label-modal-toolbar wms-no-print">
             {/* Simbología */}
             <div className="wms-label-toolbar-group">
-              <span className="wms-label-toolbar-label">Simbología:</span>
+              <span className="wms-label-toolbar-label">
+                {t("web.labelModal.symbologyLabel")}
+              </span>
               <div className="wms-label-segmented-control">
                 <button
                   type="button"
                   onClick={() => setSymbology("QR")}
                   className={`wms-label-segment-btn ${symbology === "QR" ? "active" : ""}`}
                 >
-                  QR Code
+                  {t("web.labelModal.qrCode")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSymbology("CODE128")}
                   className={`wms-label-segment-btn ${symbology === "CODE128" ? "active" : ""}`}
                 >
-                  Code 128 (1D)
+                  {t("web.labelModal.code128")}
                 </button>
               </div>
             </div>
 
             {/* Presets de Tamaño */}
             <div className="wms-label-toolbar-group">
-              <span className="wms-label-toolbar-label">Tamaño:</span>
+              <span className="wms-label-toolbar-label">
+                {t("web.labelModal.sizeLabel")}
+              </span>
               <select
                 value={selectedPreset}
                 onChange={(e) => handlePresetChange(e.target.value)}
@@ -352,7 +364,7 @@ export function LabelPrintModal({
             {selectedPreset === "custom" && (
               <div className="wms-label-toolbar-group">
                 <label className="wms-label-checkbox-label">
-                  Ancho:
+                  {t("web.labelModal.widthLabel")}
                   <input
                     type="number"
                     min="20"
@@ -364,7 +376,7 @@ export function LabelPrintModal({
                   mm
                 </label>
                 <label className="wms-label-checkbox-label">
-                  Alto:
+                  {t("web.labelModal.heightLabel")}
                   <input
                     type="number"
                     min="15"
@@ -385,7 +397,7 @@ export function LabelPrintModal({
                 checked={includeHumanReadable}
                 onChange={(e) => setIncludeHumanReadable(e.target.checked)}
               />
-              <span>Texto legible</span>
+              <span>{t("web.labelModal.humanReadable")}</span>
             </label>
 
             {/* Toggle EAN comercial para productos */}
@@ -396,7 +408,7 @@ export function LabelPrintModal({
                   checked={useBarcodeAsPayload}
                   onChange={(e) => setUseBarcodeAsPayload(e.target.checked)}
                 />
-                <span>Usar EAN comercial si existe</span>
+                <span>{t("web.labelModal.useCommercialEan")}</span>
               </label>
             )}
 
@@ -408,7 +420,9 @@ export function LabelPrintModal({
               className="wms-btn wms-btn-secondary wms-btn-sm"
               style={{ marginLeft: "auto" }}
             >
-              {loading ? "Generando..." : "↻ Actualizar"}
+              {loading
+                ? t("web.labelModal.generatingBtn")
+                : t("web.labelModal.refreshBtn")}
             </button>
           </div>
 
@@ -432,9 +446,9 @@ export function LabelPrintModal({
 
               {itemsState.length === 0 && (
                 <div className="wms-label-modal-empty">
-                  <span>📭 No hay elementos en la cola de impresión.</span>
+                  <span>{t("web.labelModal.emptyTitle")}</span>
                   <span style={{ fontSize: "0.75rem" }}>
-                    Cierra este diálogo y selecciona ítems desde la tabla.
+                    {t("web.labelModal.emptyHint")}
                   </span>
                 </div>
               )}
@@ -485,7 +499,7 @@ export function LabelPrintModal({
                         {/* Controles de copias y botón quitar */}
                         <div className="wms-label-preview-actions">
                           <div className="wms-label-copies-control">
-                            <span>Copias:</span>
+                            <span>{t("web.labelModal.copiesLabel")}</span>
                             <button
                               type="button"
                               className="wms-label-qty-btn"
@@ -521,7 +535,7 @@ export function LabelPrintModal({
                             className="wms-label-remove-btn"
                             aria-label={`Quitar ${item.code} de la cola`}
                           >
-                            ✕ Quitar
+                            {t("web.labelModal.removeBtn")}
                           </button>
                         </div>
                       </div>
@@ -552,10 +566,15 @@ export function LabelPrintModal({
             <div className="wms-label-footer-summary">
               {itemsState.length > 0 && batchData ? (
                 <span>
-                  Total listo: <strong>{totalCopies}</strong> {totalCopies === 1 ? "etiqueta" : "etiquetas"} ({itemsState.length} ítems, {widthMm}×{heightMm} mm)
+                  {t("web.labelModal.totalReady")}{" "}
+                  <strong>{totalCopies}</strong>{" "}
+                  {totalCopies === 1
+                    ? t("web.labelModal.labelSingular")
+                    : t("web.labelModal.labelPlural")}{" "}
+                  ({itemsState.length} ítems, {widthMm}×{heightMm} mm)
                 </span>
               ) : (
-                <span>Selecciona o ajusta ítems para imprimir</span>
+                <span>{t("web.labelModal.selectHint")}</span>
               )}
             </div>
 
@@ -565,7 +584,7 @@ export function LabelPrintModal({
                 onClick={onClose}
                 className="wms-btn wms-btn-secondary wms-btn-sm"
               >
-                Cancelar
+                {t("web.labelModal.cancelBtn")}
               </button>
               <button
                 type="button"
@@ -573,7 +592,7 @@ export function LabelPrintModal({
                 disabled={loading || itemsState.length === 0 || expandedPrintLabels.length === 0}
                 className="wms-btn wms-btn-primary wms-btn-sm"
               >
-                <span>🖨️ Imprimir Cuadrícula</span>
+                <span>{t("web.labelModal.printGridBtn")}</span>
               </button>
             </div>
           </div>

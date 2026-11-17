@@ -17,6 +17,7 @@ import type {
   TxReason,
 } from "@wms/shared-types";
 import { useSupervisorSession } from "../../context/supervisor-session";
+import { useTranslation } from "../../context/locale-context";
 import type {
   KardexPagination,
   KardexTransactionItem,
@@ -40,6 +41,7 @@ const TX_REASON_OPTIONS: readonly (TxReason | "ALL")[] = [
 
 export default function InventoryAndKardexPage(): JSX.Element {
   const { client, session } = useSupervisorSession();
+  const { t, formatNumber } = useTranslation();
   const [balances, setBalances] = useState<InventoryBalanceDTO[]>([]);
   const [transactions, setTransactions] = useState<KardexTransactionItem[]>([]);
   const [pagination, setPagination] = useState<KardexPagination>({
@@ -158,18 +160,12 @@ export default function InventoryAndKardexPage(): JSX.Element {
       <div className="wms-page-header">
         <div>
           <div className="wms-eyebrow">
-            <span>● LEDGER INMUTABLE</span>
+            <span>{t("web.inventory.eyebrow")}</span>
             <span>·</span>
             <span>{session.warehouseId}</span>
           </div>
-          <h1 className="wms-page-title">
-            Saldos de inventario y libro mayor (Kardex)
-          </h1>
-          <p className="wms-page-subtitle">
-            Auditoría contable append-only (<code>InventoryTransaction</code>) y
-            snapshots en vivo (<code>InventoryBalance</code>: OnHand − Allocated
-            = ATP).
-          </p>
+          <h1 className="wms-page-title">{t("web.inventory.pageTitle")}</h1>
+          <p className="wms-page-subtitle">{t("web.inventory.pageSubtitle")}</p>
         </div>
 
         <button
@@ -180,7 +176,9 @@ export default function InventoryAndKardexPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando ledger…" : "Sincronizar saldos y kardex"}
+          {loading
+            ? t("web.inventory.syncingBtn")
+            : t("web.inventory.syncBtn")}
         </button>
       </div>
 
@@ -201,51 +199,51 @@ export default function InventoryAndKardexPage(): JSX.Element {
       <section className="wms-grid-4" aria-label="Métricas de saldos contables">
         <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Total OnHand (Físico)</span>
-            <span className="wms-tag wms-tag-slate">FÍSICO</span>
+            <span className="wms-kpi-label">{t("web.inventory.kpiOnHand")}</span>
+            <span className="wms-tag wms-tag-slate">{t("web.overview.tagPhysical")}</span>
           </div>
           <div className="wms-kpi-value">
-            {kpis.totalOnHand}
-            <span className="wms-kpi-unit">uds</span>
+            {formatNumber(kpis.totalOnHand)}
+            <span className="wms-kpi-unit">{t("web.overview.units")}</span>
           </div>
           <div className="wms-kpi-foot">
             <span className="wms-mono">
-              {kpis.uniqueProductsWithStock} productos con stock
+              {kpis.uniqueProductsWithStock} SKUs
             </span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-amber">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Total Allocated (Reservado)</span>
-            <span className="wms-tag wms-tag-amber">▲ RESERVA</span>
+            <span className="wms-kpi-label">{t("web.inventory.kpiAllocated")}</span>
+            <span className="wms-tag wms-tag-amber">{t("web.overview.tagReserved")}</span>
           </div>
           <div className="wms-kpi-value wms-text-warning">
-            {kpis.totalAllocated}
-            <span className="wms-kpi-unit">uds</span>
+            {formatNumber(kpis.totalAllocated)}
+            <span className="wms-kpi-unit">{t("web.overview.units")}</span>
           </div>
           <div className="wms-kpi-foot">
-            <span>Comprometido en ALLOCATED / PICKING</span>
+            <span>ALLOCATED / PICKING</span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-emerald">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Available To Promise (ATP)</span>
+            <span className="wms-kpi-label">{t("web.inventory.kpiAtp")}</span>
             <span className="wms-tag wms-tag-emerald">✓ ATP</span>
           </div>
           <div className="wms-kpi-value wms-text-success">
-            {kpis.totalAtp}
-            <span className="wms-kpi-unit">uds</span>
+            {formatNumber(kpis.totalAtp)}
+            <span className="wms-kpi-unit">{t("web.overview.units")}</span>
           </div>
           <div className="wms-kpi-foot">
-            <span>Disponible para nuevas reservas</span>
+            <span>{t("domain.available")}</span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Tasa de compromiso</span>
+            <span className="wms-kpi-label">{t("web.inventory.kpiRatio")}</span>
             <span className="wms-tag wms-tag-blue">RATIO</span>
           </div>
           <div className="wms-kpi-value wms-text-accent">
@@ -262,21 +260,21 @@ export default function InventoryAndKardexPage(): JSX.Element {
       <section className="wms-grid-2">
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Saldos en vivo (InventoryBalance)</span>
+            <span>{t("web.inventory.liveBalancesTitle")}</span>
             <span className="wms-tag wms-tag-emerald">
-              {balances.length} registros
+              {t("web.inventory.recordsCount", { count: balances.length })}
             </span>
           </div>
           <div className="wms-table-wrap">
             <table className="wms-table">
               <thead>
                 <tr>
-                  <th>Ubicación</th>
-                  <th>SKU</th>
-                  <th>Producto</th>
-                  <th className="wms-num">OnHand</th>
-                  <th className="wms-num">Allocated</th>
-                  <th className="wms-num">ATP (uds)</th>
+                  <th>{t("web.inventory.locationCol")}</th>
+                  <th>{t("web.inventory.skuCol")}</th>
+                  <th>{t("web.inventory.productCol")}</th>
+                  <th className="wms-num">{t("web.inventory.onHandCol")}</th>
+                  <th className="wms-num">{t("web.inventory.allocatedCol")}</th>
+                  <th className="wms-num">{t("web.inventory.atpCol")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -331,23 +329,21 @@ export default function InventoryAndKardexPage(): JSX.Element {
           onSubmit={(e) => void handleCreateAdjustment(e)}
         >
           <div className="wms-card-title">
-            <span>Registrar ajuste contable (ADJUSTMENT)</span>
+            <span>{t("web.inventory.adjFormTitle")}</span>
             <span className="wms-tag wms-tag-amber">Serializable + Lock</span>
           </div>
           <p className="wms-page-subtitle">
-            Genera una transacción inmutable en{" "}
-            <code>inventory_transactions</code> y actualiza atómicamente{" "}
-            <code>onHandQty</code> bajo aislamiento serializable.
+            <code>inventory_transactions</code> · <code>onHandQty</code>
           </p>
           <div className="wms-grid-2">
             <label className="wms-field">
-              <span>Ubicación destino *</span>
+              <span>{t("web.inventory.destLocationLabel")}</span>
               <select
                 required
                 value={adjLocationId}
                 onChange={(e) => setAdjLocationId(e.target.value)}
               >
-                <option value="">Seleccionar ubicación…</option>
+                <option value="">{t("web.inventory.selectLocation")}</option>
                 {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>
                     {loc.code} ({loc.type})
@@ -357,13 +353,13 @@ export default function InventoryAndKardexPage(): JSX.Element {
             </label>
 
             <label className="wms-field">
-              <span>Producto afectado *</span>
+              <span>{t("web.inventory.affectedProductLabel")}</span>
               <select
                 required
                 value={adjProductId}
                 onChange={(e) => setAdjProductId(e.target.value)}
               >
-                <option value="">Seleccionar producto…</option>
+                <option value="">{t("web.inventory.selectProduct")}</option>
                 {products.map((prod) => (
                   <option key={prod.id} value={prod.id}>
                     {prod.sku} — {prod.name}
@@ -373,7 +369,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
             </label>
 
             <label className="wms-field">
-              <span>Delta de cantidad (+ añade, − descuenta) *</span>
+              <span>{t("web.inventory.qtyDeltaLabel")}</span>
               <input
                 type="number"
                 required
@@ -384,7 +380,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
             </label>
 
             <label className="wms-field">
-              <span>Motivo de auditoría (mín. 5 caracteres) *</span>
+              <span>{t("web.inventory.auditNotesLabel")}</span>
               <input
                 type="text"
                 required
@@ -397,7 +393,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
           </div>
           <div className="wms-form-footer">
             <button type="submit" className="wms-btn wms-btn-emerald">
-              Ejecutar ajuste en ledger
+              {t("web.inventory.submitAdjBtn")}
             </button>
           </div>
         </form>
@@ -405,16 +401,15 @@ export default function InventoryAndKardexPage(): JSX.Element {
 
       <section className="wms-card">
         <div className="wms-card-title">
-          <span>Libro mayor inmutable (Kardex de transacciones)</span>
+          <span>{t("web.inventory.kardexTitle")}</span>
           <span className="wms-tag wms-tag-blue">
-            Página {pagination.page} de {pagination.pages} ({pagination.total}{" "}
-            movimientos)
+            {pagination.page} / {pagination.pages} ({pagination.total})
           </span>
         </div>
 
         <div className="wms-filter-bar">
           <label className="wms-field">
-            <span>Filtrar por motivo (TxReason)</span>
+            <span>{t("web.inventory.filterReasonLabel")}</span>
             <select
               value={reasonFilter}
               onChange={(e) => {
@@ -424,19 +419,19 @@ export default function InventoryAndKardexPage(): JSX.Element {
             >
               {TX_REASON_OPTIONS.map((r) => (
                 <option key={r} value={r}>
-                  {r === "ALL" ? "TODOS LOS MOTIVOS" : r}
+                  {r === "ALL" ? t("web.inventory.allReasons") : r}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="wms-field">
-            <span>Búsqueda rápida (SKU, ubicación, referencia, notas)</span>
+            <span>{t("web.inventory.searchLabel")}</span>
             <input
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Ej: PROD-001, A-01-01, ALLOCATION_CANCEL…"
+              placeholder="PROD-001, A-01-01…"
             />
           </label>
 
@@ -447,7 +442,7 @@ export default function InventoryAndKardexPage(): JSX.Element {
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
-              ← Anterior
+              {t("web.inventory.prevBtn")}
             </button>
             <button
               type="button"
@@ -455,14 +450,14 @@ export default function InventoryAndKardexPage(): JSX.Element {
               disabled={page >= pagination.pages}
               onClick={() => setPage((p) => p + 1)}
             >
-              Siguiente →
+              {t("web.inventory.nextBtn")}
             </button>
           </div>
         </div>
 
         {hasActiveFilters ? (
           <div className="wms-active-filters" aria-live="polite">
-            <span>Filtros activos:</span>
+            <span>{t("web.inventory.activeFilters")}</span>
             {reasonFilter !== "ALL" ? (
               <span className="wms-filter-chip">Motivo: {reasonFilter}</span>
             ) : null}

@@ -18,6 +18,7 @@ import type {
   WarehouseTaskDTO,
 } from "@wms/shared-types";
 import { useSupervisorSession } from "../../context/supervisor-session";
+import { useTranslation } from "../../context/locale-context";
 import {
   ORDER_STATUS_LIST,
   resolveOrderStatusVisual,
@@ -28,6 +29,7 @@ import {
 
 export default function OperationsMonitorPage(): JSX.Element {
   const { client, session } = useSupervisorSession();
+  const { locale, t } = useTranslation();
   const [orders, setOrders] = useState<SalesOrderDTO[]>([]);
   const [tasks, setTasks] = useState<WarehouseTaskDTO[]>([]);
   const [products, setProducts] = useState<ProductDTO[]>([]);
@@ -183,18 +185,12 @@ export default function OperationsMonitorPage(): JSX.Element {
       <div className="wms-page-header">
         <div>
           <div className="wms-eyebrow">
-            <span>▲ EJECUCIÓN DE PISO</span>
+            <span>{t("web.operations.eyebrow")}</span>
             <span>·</span>
             <span>{session.warehouseId}</span>
           </div>
-          <h1 className="wms-page-title">
-            Monitor de pedidos y ejecución de tareas
-          </h1>
-          <p className="wms-page-subtitle">
-            Control de reserva FEFO/FIFO, liberación atómica de reservas por
-            cancelación (<code>F3.1</code>) y seguimiento de pasos de operarios
-            en tiempo real.
-          </p>
+          <h1 className="wms-page-title">{t("web.operations.pageTitle")}</h1>
+          <p className="wms-page-subtitle">{t("web.operations.pageSubtitle")}</p>
         </div>
 
         <button
@@ -205,7 +201,9 @@ export default function OperationsMonitorPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando operaciones…" : "Sincronizar operaciones"}
+          {loading
+            ? t("web.operations.syncingBtn")
+            : t("web.operations.syncBtn")}
         </button>
       </div>
 
@@ -226,64 +224,64 @@ export default function OperationsMonitorPage(): JSX.Element {
       <section className="wms-grid-4" aria-label="Indicadores de operaciones">
         <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Pedidos activos</span>
+            <span className="wms-kpi-label">{t("web.operations.kpiActiveOrders")}</span>
             <span className="wms-tag wms-tag-blue">CARTERA</span>
           </div>
           <div className="wms-kpi-value">
             {ordersSummary.activeOrdersCount}
-            <span className="wms-kpi-unit">pedidos</span>
+            <span className="wms-kpi-unit">{t("web.overview.ordersUnit")}</span>
           </div>
           <div className="wms-kpi-foot">
             <span className="wms-mono">
-              De {ordersSummary.totalOrders} pedidos listados
+              {ordersSummary.totalOrders} {t("web.overview.ordersUnit")}
             </span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-rose">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Retenidos en ON_HOLD</span>
+            <span className="wms-kpi-label">{t("web.operations.kpiOnHold")}</span>
             <span className="wms-tag wms-tag-rose">⚠ ROTURA</span>
           </div>
           <div className="wms-kpi-value wms-text-danger">
             {ordersSummary.onHoldOrders.length}
-            <span className="wms-kpi-unit">pedidos</span>
+            <span className="wms-kpi-unit">{t("web.overview.ordersUnit")}</span>
           </div>
           <div className="wms-kpi-foot">
-            <span>Pendientes de reabastecimiento o re-alocación</span>
+            <span>ON_HOLD</span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-emerald">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Listos para despacho (PACKED)</span>
-            <span className="wms-tag wms-tag-emerald">✓ MUELLE</span>
+            <span className="wms-kpi-label">{t("web.operations.kpiPacked")}</span>
+            <span className="wms-tag wms-tag-emerald">✓ PACKED</span>
           </div>
           <div className="wms-kpi-value wms-text-success">
             {ordersSummary.readyToDispatchOrders.length}
-            <span className="wms-kpi-unit">pedidos</span>
+            <span className="wms-kpi-unit">{t("web.overview.ordersUnit")}</span>
           </div>
           <div className="wms-kpi-foot">
-            <span>En mesa de empaquetado / muelle de salida</span>
+            <span>{t("domain.dispatch")}</span>
           </div>
         </div>
 
         <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Tareas operativas en piso</span>
-            <span className="wms-tag wms-tag-amber">▲ EJECUCIÓN</span>
+            <span className="wms-kpi-label">{t("web.operations.kpiFloorTasks")}</span>
+            <span className="wms-tag wms-tag-amber">▲ OPS</span>
           </div>
           <div className="wms-kpi-value wms-text-accent">
             {tasksMonitor.totalTasks}
-            <span className="wms-kpi-unit">tareas</span>
+            <span className="wms-kpi-unit">{t("web.overview.tasksUnit")}</span>
           </div>
           <div className="wms-kpi-foot">
             <span className="wms-mono">
-              {tasksMonitor.inProgressCount} en curso
+              {tasksMonitor.inProgressCount} {t("statuses.inProgress")}
             </span>
             <span>·</span>
             <span className="wms-mono">
-              {tasksMonitor.tasksWithExceptions.length} con excepción
+              {tasksMonitor.tasksWithExceptions.length} {t("web.overview.withException")}
             </span>
           </div>
         </div>
@@ -291,10 +289,10 @@ export default function OperationsMonitorPage(): JSX.Element {
 
       <section className="wms-grid-2">
         <form className="wms-card" onSubmit={(e) => void handleCreateOrder(e)}>
-          <h2 className="wms-card-title">Crear pedido de venta manual</h2>
+          <h2 className="wms-card-title">{t("web.operations.createOrderTitle")}</h2>
           <div className="wms-grid-2">
             <label className="wms-field">
-              <span>Referencia externa</span>
+              <span>{t("web.operations.extRefLabel")}</span>
               <input
                 type="text"
                 value={externalRef}
@@ -303,7 +301,7 @@ export default function OperationsMonitorPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Cliente destinatario</span>
+              <span>{t("web.operations.customerLabel")}</span>
               <input
                 type="text"
                 value={customerName}
@@ -312,13 +310,13 @@ export default function OperationsMonitorPage(): JSX.Element {
               />
             </label>
             <label className="wms-field">
-              <span>Producto solicitado *</span>
+              <span>{t("web.operations.productLabel")}</span>
               <select
                 required
                 value={selectedProductId}
                 onChange={(e) => setSelectedProductId(e.target.value)}
               >
-                <option value="">Seleccionar SKU…</option>
+                <option value="">{t("web.operations.selectSku")}</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.sku} — {p.name}
@@ -328,7 +326,7 @@ export default function OperationsMonitorPage(): JSX.Element {
             </label>
             <div className="wms-grid-2">
               <label className="wms-field">
-                <span>Cantidad (uds) *</span>
+                <span>{t("web.operations.qtyLabel")}</span>
                 <input
                   type="number"
                   min={1}
@@ -338,7 +336,7 @@ export default function OperationsMonitorPage(): JSX.Element {
                 />
               </label>
               <label className="wms-field">
-                <span>Prioridad (0–100)</span>
+                <span>{t("web.operations.priorityLabel")}</span>
                 <input
                   type="number"
                   min={0}
@@ -351,32 +349,31 @@ export default function OperationsMonitorPage(): JSX.Element {
           </div>
           <div className="wms-form-footer">
             <button type="submit" className="wms-btn wms-btn-emerald">
-              Registrar pedido (PENDING)
+              {t("web.operations.submitOrderBtn")}
             </button>
           </div>
         </form>
 
         <div className="wms-card">
           <div className="wms-card-title">
-            <span>Cola de tareas activas (WarehouseTask)</span>
+            <span>{t("web.operations.tasksQueueTitle")}</span>
             <span className="wms-tag wms-tag-blue">
-              {tasksMonitor.totalTasks} tareas
+              {t("web.operations.tasksCount", { count: tasksMonitor.totalTasks })}
             </span>
           </div>
 
           {loading && tasksMonitor.rows.length === 0 ? (
             <span
               className="wms-skeleton"
-              aria-label="Cargando tareas operativas"
+              aria-label={t("common.loading")}
             />
           ) : tasksMonitor.rows.length === 0 ? (
             <div className="wms-empty-state">
               <div className="wms-empty-title">
-                Sin tareas operativas en ejecución
+                {t("web.operations.emptyTasksTitle")}
               </div>
               <div className="wms-empty-hint">
-                Lanza la reserva ATP de un pedido en estado PENDING para generar
-                automáticamente tareas de picking guiado.
+                {t("web.operations.emptyTasksHint")}
               </div>
             </div>
           ) : (
@@ -396,12 +393,13 @@ export default function OperationsMonitorPage(): JSX.Element {
                     {(() => {
                       const taskVisual = resolveTaskStatusVisual(
                         row.hasException ? "EXCEPTION" : row.task.status,
+                        locale,
                       );
                       return (
                         <span
                           className={`wms-tag ${taskVisual.colors.webTagClass}`}
                         >
-                          {taskVisual.symbol} {row.task.status}
+                          {taskVisual.symbol} {taskVisual.shortLabel}
                         </span>
                       );
                     })()}
@@ -418,11 +416,11 @@ export default function OperationsMonitorPage(): JSX.Element {
 
                   <div className="wms-cell-stats">
                     <span className="wms-muted">
-                      Pasos: {row.completedSteps}/{row.totalSteps} (
+                      {t("web.operations.stepsLabel")} {row.completedSteps}/{row.totalSteps} (
                       {row.percent}%)
                     </span>
                     <span className="wms-muted">
-                      Escaneado: {row.scannedUnits}/{row.expectedUnits} uds
+                      {t("web.operations.scannedLabel")} {row.scannedUnits}/{row.expectedUnits} {t("web.overview.units")}
                     </span>
                     {row.exceptionSteps > 0 ? (
                       <strong className="wms-text-danger">

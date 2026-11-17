@@ -7,6 +7,7 @@ import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import type { JSX, ReactNode } from "react";
 import "./globals.css";
 import { SupervisorSessionProvider } from "../context/supervisor-session";
+import { LocaleProvider } from "../context/locale-context";
 import { DashboardShell } from "../components/dashboard-shell";
 
 const dmSans = DM_Sans({
@@ -27,6 +28,7 @@ export const metadata: Metadata = {
   title: "WMS Control Tower — Panel de supervisión operativa",
   description:
     "Panel web multi-tenant para supervisión de catálogo, mapa de ubicaciones, ledger inmutable (Kardex) y monitoreo de pedidos y tareas en tiempo real.",
+  manifest: "/manifest.webmanifest",
 };
 
 export interface RootLayoutProps {
@@ -35,11 +37,13 @@ export interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps): JSX.Element {
   return (
-    <html lang="es" className={`${dmSans.variable} ${jetbrainsMono.variable}`}>
+    <html lang="es-ES" className={`${dmSans.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <SupervisorSessionProvider>
-          <DashboardShell>{children}</DashboardShell>
-        </SupervisorSessionProvider>
+        <LocaleProvider>
+          <SupervisorSessionProvider>
+            <DashboardShell>{children}</DashboardShell>
+          </SupervisorSessionProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

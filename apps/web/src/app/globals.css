@@ -156,16 +156,23 @@ textarea:focus-visible {
 }
 
 .wms-brand-badge {
-  background-color: var(--accent-tint);
-  border: 1px solid var(--accent-border);
-  color: var(--accent);
-  font-family: var(--font-mono), monospace;
-  font-weight: 700;
-  font-size: 0.8125rem;
-  padding: 0.45rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-md);
-  letter-spacing: 0.06em;
+  flex-shrink: 0;
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.wms-brand-icon {
+  width: 36px;
+  height: 36px;
+  display: block;
+  object-fit: contain;
+  border-radius: var(--radius-md);
 }
 
 .wms-brand-title {

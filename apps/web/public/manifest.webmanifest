@@ -1,0 +1,26 @@
+{
+  "name": "Navelo WMS Control Tower",
+  "short_name": "Navelo WMS",
+  "description": "Panel web multi-tenant para supervisión de catálogo, mapa de ubicaciones, ledger inmutable y operaciones.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#061815",
+  "theme_color": "#0F6E56",
+  "icons": [
+    {
+      "src": "/icons/navelo-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/navelo-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/navelo-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

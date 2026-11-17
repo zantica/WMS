@@ -5,44 +5,58 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type JSX, type ReactNode } from "react";
+import React, { useState, type JSX, type ReactNode } from "react";
+import {
+  LOCALE_METADATA,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+  type TranslationKey,
+} from "@wms/shared-types";
+import { useTranslation } from "../context/locale-context";
 import { useSupervisorSession } from "../context/supervisor-session";
 
-const NAV_ITEMS = [
+interface NavItemConfig {
+  href: string;
+  labelKey: TranslationKey;
+  subtitleKey: TranslationKey;
+  badge: string;
+}
+
+const NAV_ITEMS: readonly NavItemConfig[] = [
   {
     href: "/",
-    label: "Torre de control",
-    subtitle: "KPIs contables y alertas",
+    labelKey: "web.shell.dashboardTitle",
+    subtitleKey: "web.shell.dashboardSub",
     badge: "LIVE",
   },
   {
     href: "/catalog",
-    label: "Catálogo maestro",
-    subtitle: "Productos y categorías",
+    labelKey: "web.shell.catalogTitle",
+    subtitleKey: "web.shell.catalogSub",
     badge: "SKU",
   },
   {
     href: "/locations",
-    label: "Topología y zonas",
-    subtitle: "Mapa físico y ubicaciones",
+    labelKey: "web.shell.locationsTitle",
+    subtitleKey: "web.shell.locationsSub",
     badge: "ZONES",
   },
   {
     href: "/users",
-    label: "Usuarios y roles",
-    subtitle: "Accesos del tenant",
+    labelKey: "web.shell.usersTitle",
+    subtitleKey: "web.shell.usersSub",
     badge: "RBAC",
   },
   {
     href: "/inventory",
-    label: "Inventario y kardex",
-    subtitle: "Saldos ATP y ledger inmutable",
+    labelKey: "web.shell.inventoryTitle",
+    subtitleKey: "web.shell.inventorySub",
     badge: "LEDGER",
   },
   {
     href: "/operations",
-    label: "Pedidos y tareas",
-    subtitle: "Reserva, picking y despacho",
+    labelKey: "web.shell.operationsTitle",
+    subtitleKey: "web.shell.operationsSub",
     badge: "OPS",
   },
 ] as const;
@@ -54,6 +68,7 @@ export interface DashboardShellProps {
 export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
   const pathname = usePathname();
   const { session, updateSession, testConnection } = useSupervisorSession();
+  const { locale, setLocale, t } = useTranslation();
   const [configOpen, setConfigOpen] = useState(false);
   const [pingMessage, setPingMessage] = useState<string | null>(null);
   const [isPinging, setIsPinging] = useState(false);
@@ -77,24 +92,34 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
   return (
     <div className="wms-shell">
       <a href="#wms-main-content" className="wms-skip-link">
-        Saltar al contenido principal
+        {t("web.shell.skipLink")}
       </a>
 
       <aside className="wms-sidebar">
         <div className="wms-brand">
           <div className="wms-brand-badge" aria-hidden="true">
-            WMS
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/navelo-icon.svg"
+              alt=""
+              aria-hidden="true"
+              width={36}
+              height={36}
+              className="wms-brand-icon"
+            />
           </div>
           <div>
-            <div className="wms-brand-title">WMS Control Tower</div>
+            <div className="wms-brand-title">{t("web.shell.brandTitle")}</div>
             <div className="wms-brand-subtitle">
-              Supervisión operativa · S5 Dark
+              {t("web.shell.brandSubtitle")}
             </div>
           </div>
         </div>
 
-        <nav className="wms-nav" aria-label="Navegación principal">
-          <div className="wms-nav-section-label">Módulos operativos</div>
+        <nav className="wms-nav" aria-label={t("web.shell.navMainLabel")}>
+          <div className="wms-nav-section-label">
+            {t("web.shell.modulesLabel")}
+          </div>
           {NAV_ITEMS.map((item) => {
             const isActive =
               item.href === "/"
@@ -108,8 +133,8 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
                 className={`wms-nav-link ${isActive ? "wms-nav-link-active" : ""}`}
               >
                 <div>
-                  <div className="wms-nav-label">{item.label}</div>
-                  <div className="wms-nav-sub">{item.subtitle}</div>
+                  <div className="wms-nav-label">{t(item.labelKey)}</div>
+                  <div className="wms-nav-sub">{t(item.subtitleKey)}</div>
                 </div>
                 <span className="wms-nav-pill">{item.badge}</span>
               </Link>
@@ -117,18 +142,20 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
           })}
         </nav>
 
-        <div className="wms-sidebar-footer" aria-label="Contexto de sesión">
+        <div className="wms-sidebar-footer" aria-label={t("settings.profile")}>
           <div className="wms-footer-row">
-            <span className="wms-muted">Almacén activo</span>
+            <span className="wms-muted">{t("web.shell.activeWarehouse")}</span>
             <strong className="wms-mono">{session.warehouseId}</strong>
           </div>
           <div className="wms-footer-row">
-            <span className="wms-muted">Supervisor</span>
+            <span className="wms-muted">{t("web.shell.supervisor")}</span>
             <strong>{session.supervisorName}</strong>
           </div>
           <div className="wms-footer-row">
-            <span className="wms-muted">Aislamiento DB</span>
-            <span className="wms-tag wms-tag-emerald">● RLS Activo</span>
+            <span className="wms-muted">{t("web.shell.dbIsolation")}</span>
+            <span className="wms-tag wms-tag-emerald">
+              {t("web.shell.rlsActive")}
+            </span>
           </div>
         </div>
       </aside>
@@ -146,11 +173,13 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
                 aria-hidden="true"
               />
               <span className="wms-mono">
-                {session.isConnected ? "API ONLINE" : "API OFFLINE"}
+                {session.isConnected
+                  ? t("web.shell.apiOnline")
+                  : t("web.shell.apiOffline")}
               </span>
             </span>
 
-            <span className="wms-topbar-url wms-mono" title="Endpoint de API activo">
+            <span className="wms-topbar-url wms-mono" title={t("web.shell.apiBaseUrlLabel")}>
               {session.apiBaseUrl}
             </span>
 
@@ -166,6 +195,25 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
           </div>
 
           <div className="wms-topbar-actions">
+            <label
+              className="wms-locale-selector"
+              aria-label={t("web.shell.languageLabel")}
+            >
+              <select
+                data-testid="wms-locale-select"
+                aria-label={t("web.shell.languageLabel")}
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as SupportedLocale)}
+                className="wms-btn wms-btn-outline wms-btn-sm wms-mono"
+              >
+                {SUPPORTED_LOCALES.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {LOCALE_METADATA[loc].shortLabel} ·{" "}
+                    {LOCALE_METADATA[loc].nativeName}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               className="wms-btn wms-btn-secondary wms-btn-sm"
@@ -174,7 +222,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               }}
               disabled={isPinging}
             >
-              {isPinging ? "Verificando…" : "Probar conexión (/health)"}
+              {isPinging ? t("web.shell.pingingBtn") : t("web.shell.pingBtn")}
             </button>
             <button
               type="button"
@@ -182,7 +230,9 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               aria-expanded={configOpen}
               onClick={() => setConfigOpen((prev) => !prev)}
             >
-              {configOpen ? "Cerrar ajustes" : "Configurar tenant / API"}
+              {configOpen
+                ? t("web.shell.closeConfigBtn")
+                : t("web.shell.openConfigBtn")}
             </button>
           </div>
         </header>
@@ -190,11 +240,11 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
         {configOpen ? (
           <section
             className="wms-connection-panel"
-            aria-label="Parámetros de conexión multi-tenant"
+            aria-label={t("web.shell.configPanelLabel")}
           >
             <div className="wms-grid-4">
               <label className="wms-field">
-                <span>URL base de @wms/api</span>
+                <span>{t("web.shell.apiBaseUrlLabel")}</span>
                 <input
                   type="url"
                   value={session.apiBaseUrl}
@@ -206,7 +256,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               </label>
 
               <label className="wms-field">
-                <span>Header x-api-key (Tenant)</span>
+                <span>{t("web.shell.apiKeyLabel")}</span>
                 <input
                   type="text"
                   value={session.apiKey}
@@ -216,7 +266,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               </label>
 
               <label className="wms-field">
-                <span>Identificador de almacén</span>
+                <span>{t("web.shell.warehouseIdLabel")}</span>
                 <input
                   type="text"
                   value={session.warehouseId}
@@ -228,7 +278,7 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               </label>
 
               <label className="wms-field">
-                <span>JWT Bearer token (Opcional)</span>
+                <span>{t("web.shell.bearerTokenLabel")}</span>
                 <input
                   type="password"
                   value={session.bearerToken ?? ""}

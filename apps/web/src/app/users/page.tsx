@@ -18,10 +18,12 @@ import {
 } from "react";
 import type { TenantUserDTO, UserRole } from "@wms/shared-types";
 import { useSupervisorSession } from "../../context/supervisor-session";
+import { useTranslation } from "../../context/locale-context";
 import { computeUsersSummary } from "../../lib/dashboard-metrics";
 
 export default function TenantUsersPage(): JSX.Element {
   const { client, session } = useSupervisorSession();
+  const { t } = useTranslation();
 
   // Datos
   const [users, setUsers] = useState<TenantUserDTO[]>([]);
@@ -142,16 +144,12 @@ export default function TenantUsersPage(): JSX.Element {
       <div className="wms-page-header">
         <div>
           <div className="wms-eyebrow">
-            <span>◆ GOBIERNO DE USUARIOS Y ACCESOS</span>
+            <span>{t("web.users.eyebrow")}</span>
             <span>·</span>
             <span>{session.warehouseId}</span>
           </div>
-          <h1 className="wms-page-title">Control de Usuarios y Roles (RBAC)</h1>
-          <p className="wms-page-subtitle">
-            Gestión de miembros del inquilino, delegación de privilegios
-            operativos (Admin, Supervisor, Operador) y administración de
-            estados.
-          </p>
+          <h1 className="wms-page-title">{t("web.users.pageTitle")}</h1>
+          <p className="wms-page-subtitle">{t("web.users.pageSubtitle")}</p>
         </div>
 
         <button
@@ -162,7 +160,7 @@ export default function TenantUsersPage(): JSX.Element {
           }}
           disabled={loading}
         >
-          {loading ? "Sincronizando…" : "Sincronizar usuarios"}
+          {loading ? t("web.users.syncingBtn") : t("web.users.syncBtn")}
         </button>
       </div>
 
@@ -184,7 +182,7 @@ export default function TenantUsersPage(): JSX.Element {
       <section className="wms-grid-4" style={{ marginBottom: "1.25rem" }}>
         <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Total Miembros</span>
+            <span className="wms-kpi-label">{t("web.users.kpiTotal")}</span>
             <span className="wms-tag wms-tag-blue">TENANT</span>
           </div>
           <div className="wms-kpi-value">{summary.totalUsers}</div>
@@ -205,7 +203,7 @@ export default function TenantUsersPage(): JSX.Element {
 
         <div className="wms-card wms-kpi-card wms-kpi-card-amber">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Administradores</span>
+            <span className="wms-kpi-label">{t("web.users.kpiAdmins")}</span>
             <span className="wms-tag wms-tag-amber">ADMIN</span>
           </div>
           <div className="wms-kpi-value">{summary.adminCount}</div>
@@ -216,7 +214,7 @@ export default function TenantUsersPage(): JSX.Element {
 
         <div className="wms-card wms-kpi-card wms-kpi-card-cyan">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Supervisores</span>
+            <span className="wms-kpi-label">{t("web.users.kpiSupervisors")}</span>
             <span className="wms-tag wms-tag-blue">SUPERVISOR</span>
           </div>
           <div className="wms-kpi-value">{summary.supervisorCount}</div>
@@ -227,7 +225,7 @@ export default function TenantUsersPage(): JSX.Element {
 
         <div className="wms-card wms-kpi-card wms-kpi-card-emerald">
           <div className="wms-kpi-header">
-            <span className="wms-kpi-label">Operadores de Piso</span>
+            <span className="wms-kpi-label">{t("web.users.kpiOperators")}</span>
             <span className="wms-tag wms-tag-emerald">OPERATOR</span>
           </div>
           <div className="wms-kpi-value">{summary.operatorCount}</div>
@@ -241,7 +239,7 @@ export default function TenantUsersPage(): JSX.Element {
       <div className="wms-row-between" style={{ marginBottom: "1.25rem" }}>
         <div className="wms-actions-row">
           <span className="wms-tag wms-tag-slate">
-            {users.length} cuentas registradas en el tenant
+            {t("web.users.accountsInTenant", { count: users.length })}
           </span>
         </div>
 
@@ -253,7 +251,9 @@ export default function TenantUsersPage(): JSX.Element {
             }`}
             onClick={() => setShowCreateUser((prev) => !prev)}
           >
-            {showCreateUser ? "✕ Ocultar formulario" : "+ Registrar usuario"}
+            {showCreateUser
+              ? t("web.users.hideFormBtn")
+              : t("web.users.registerUserBtn")}
           </button>
         </div>
       </div>
@@ -263,20 +263,20 @@ export default function TenantUsersPage(): JSX.Element {
         <div className="wms-disclosure-box">
           <div className="wms-disclosure-header">
             <h2 className="wms-disclosure-title">
-              <span>◆ Registro de nuevo usuario en el tenant</span>
+              <span>{t("web.users.formTitle")}</span>
             </h2>
             <button
               type="button"
               className="wms-btn wms-btn-outline wms-btn-sm"
               onClick={() => setShowCreateUser(false)}
             >
-              ✕ Cerrar
+              ✕ {t("common.close")}
             </button>
           </div>
           <form onSubmit={(e) => void handleCreateUser(e)}>
             <div className="wms-grid-3">
               <label className="wms-field">
-                <span>Nombre completo *</span>
+                <span>{t("web.users.fullNameLabel")}</span>
                 <input
                   type="text"
                   required
@@ -286,7 +286,7 @@ export default function TenantUsersPage(): JSX.Element {
                 />
               </label>
               <label className="wms-field">
-                <span>Email corporativo *</span>
+                <span>{t("web.users.emailLabel")}</span>
                 <input
                   type="email"
                   required
@@ -296,7 +296,7 @@ export default function TenantUsersPage(): JSX.Element {
                 />
               </label>
               <label className="wms-field">
-                <span>Rol operativo *</span>
+                <span>{t("web.users.roleLabel")}</span>
                 <select
                   value={userRole}
                   onChange={(e) => setUserRole(e.target.value as UserRole)}
@@ -315,10 +315,10 @@ export default function TenantUsersPage(): JSX.Element {
                 className="wms-btn wms-btn-outline"
                 onClick={() => setShowCreateUser(false)}
               >
-                Cancelar
+                {t("common.cancel")}
               </button>
               <button type="submit" className="wms-btn wms-btn-primary">
-                Registrar usuario
+                {t("web.users.submitBtn")}
               </button>
             </div>
           </form>
@@ -329,9 +329,9 @@ export default function TenantUsersPage(): JSX.Element {
       <section className="wms-card">
         <div className="wms-row-between" style={{ marginBottom: "1rem" }}>
           <div className="wms-card-title" style={{ margin: 0 }}>
-            <span>Miembros del inquilino y asignación de roles</span>
+            <span>{t("web.users.membersTitle")}</span>
             <span className="wms-tag wms-tag-slate">
-              {users.length} miembros
+              {t("web.users.membersCount", { count: users.length })}
             </span>
           </div>
         </div>
@@ -340,10 +340,10 @@ export default function TenantUsersPage(): JSX.Element {
           <table className="wms-table">
             <thead>
               <tr>
-                <th>Usuario</th>
-                <th>Rol Operativo</th>
-                <th>Estado</th>
-                <th style={{ textAlign: "right" }}>Acción</th>
+                <th>{t("web.users.userCol")}</th>
+                <th>{t("web.users.roleCol")}</th>
+                <th>{t("web.users.statusCol")}</th>
+                <th style={{ textAlign: "right" }}>{t("web.users.actionCol")}</th>
               </tr>
             </thead>
             <tbody>
@@ -352,7 +352,7 @@ export default function TenantUsersPage(): JSX.Element {
                   <td colSpan={4}>
                     <span
                       className="wms-skeleton"
-                      aria-label="Cargando usuarios"
+                      aria-label={t("common.loading")}
                     />
                   </td>
                 </tr>
@@ -361,11 +361,10 @@ export default function TenantUsersPage(): JSX.Element {
                   <td colSpan={4}>
                     <div className="wms-empty-state">
                       <div className="wms-empty-title">
-                        Sin usuarios registrados
+                        {t("web.users.emptyTitle")}
                       </div>
                       <div className="wms-empty-hint">
-                        Pulsa en "+ Registrar usuario" para invitar miembros a
-                        este tenant.
+                        {t("web.users.emptyHint")}
                       </div>
                     </div>
                   </td>
@@ -404,7 +403,9 @@ export default function TenantUsersPage(): JSX.Element {
                           usr.isActive ? "wms-tag-emerald" : "wms-tag-slate"
                         }`}
                       >
-                        {usr.isActive ? "● ACTIVO" : "○ INACTIVO"}
+                        {usr.isActive
+                          ? t("web.users.activeBadge")
+                          : t("web.users.inactiveBadge")}
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
@@ -417,7 +418,9 @@ export default function TenantUsersPage(): JSX.Element {
                         }`}
                         onClick={() => void handleToggleUserStatus(usr)}
                       >
-                        {usr.isActive ? "Desactivar" : "Reactivar"}
+                        {usr.isActive
+                          ? t("web.users.deactivateBtn")
+                          : t("web.users.reactivateBtn")}
                       </button>
                     </td>
                   </tr>
