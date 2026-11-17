@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
 - **Última actualización**: 2026-11-17
-- **Estado General**: ✅ **`TECH-VITE` completada y aprobada (`APPROVED` en `progress/review_TECH-VITE.md`) — Siguiente: `F5.1` (Bulk Import)**
+- **Estado General**: ✅ **`FIX-LABEL-PAYLOAD` completado y aprobado (`APPROVED` en `progress/review_FIX-LABEL-PAYLOAD.md`) — Siguiente: `F5.1` (Bulk Import)**
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
