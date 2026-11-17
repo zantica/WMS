@@ -16,8 +16,11 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 export const TENANT_CONTEXT_GUC = "app.current_tenant_id" as const;
 export const AUTH_CLERK_LOOKUP_GUC = "app.auth_clerk_id" as const;
+export const AUTH_EMAIL_LOOKUP_GUC = "app.auth_email" as const;
+export const AUTH_SUPERUSER_CHECK_GUC = "app.auth_superuser_check" as const;
 
 export const SAFE_TENANT_ID_REGEX = /^[a-zA-Z0-9._:-]{1,128}$/;
+export const SAFE_AUTH_EMAIL_REGEX = /^[^\s'"\\;]{3,255}$/;
 
 export interface RlsTableDefinition {
   tableName: string;
@@ -184,6 +187,14 @@ export function buildTenantRlsSqlStatements(): string[] {
           `      NULLIF(current_setting('${AUTH_CLERK_LOOKUP_GUC}', true), '') IS NOT NULL`,
           `      AND "clerkId" = NULLIF(current_setting('${AUTH_CLERK_LOOKUP_GUC}', true), '')`,
           `    )`,
+          `    OR (`,
+          `      NULLIF(current_setting('${AUTH_EMAIL_LOOKUP_GUC}', true), '') IS NOT NULL`,
+          `      AND lower("email") = lower(NULLIF(current_setting('${AUTH_EMAIL_LOOKUP_GUC}', true), ''))`,
+          `    )`,
+          `    OR (`,
+          `      NULLIF(current_setting('${AUTH_SUPERUSER_CHECK_GUC}', true), '') = 'true'`,
+          `      AND "role" = 'SUPERUSER'`,
+          `    )`,
           `  )`,
           `  WITH CHECK (`,
           `    NULLIF(current_setting('${TENANT_CONTEXT_GUC}', true), '') IS NOT NULL`,
@@ -273,8 +284,12 @@ export function evaluateRlsPolicyPredicate(params: {
   operation: "SELECT" | "INSERT" | "UPDATE" | "DELETE";
   currentTenantId?: string | null | undefined;
   authClerkId?: string | null | undefined;
+  authEmail?: string | null | undefined;
+  authSuperuserCheck?: boolean | undefined;
   rowTenantId?: string | null | undefined;
   rowClerkId?: string | null | undefined;
+  rowEmail?: string | null | undefined;
+  rowRole?: string | null | undefined;
   parentTenantId?: string | null | undefined;
 }): boolean {
   const def = RLS_PROTECTED_TABLES.find(
@@ -296,6 +311,11 @@ export function evaluateRlsPolicyPredicate(params: {
       ? params.authClerkId
       : null;
 
+  const activeAuthEmail =
+    typeof params.authEmail === "string" && params.authEmail.trim().length > 0
+      ? params.authEmail.trim().toLowerCase()
+      : null;
+
   const isWriteCheck =
     params.operation === "INSERT" || params.operation === "UPDATE";
 
@@ -314,7 +334,20 @@ export function evaluateRlsPolicyPredicate(params: {
       typeof params.rowClerkId === "string" &&
       params.rowClerkId === activeAuthClerk;
 
-    return matchesTenant || matchesClerkLookup;
+    const matchesEmailLookup =
+      activeAuthEmail !== null &&
+      typeof params.rowEmail === "string" &&
+      params.rowEmail.trim().toLowerCase() === activeAuthEmail;
+
+    const matchesSuperuserCheck =
+      params.authSuperuserCheck === true && params.rowRole === "SUPERUSER";
+
+    return (
+      matchesTenant ||
+      matchesClerkLookup ||
+      matchesEmailLookup ||
+      matchesSuperuserCheck
+    );
   }
 
   if (def.kind === "direct_tenant_column") {
@@ -490,6 +523,79 @@ export async function withAuthClerkLookup<T>(
     const typedTx = tx as TenantTransactionClient;
     if (typeof typedTx.$queryRaw === "function") {
       await typedTx.$queryRaw`SELECT set_config(${AUTH_CLERK_LOOKUP_GUC}, ${validClerkId}, true)`;
+    }
+    return await fn(typedTx);
+  });
+}
+
+export function normalizeValidAuthEmail(email: unknown): string {
+  if (typeof email !== "string") {
+    throw new Error("Invalid auth email: expected non-empty string");
+  }
+  const normalized = email.trim().toLowerCase();
+  if (!normalized || !normalized.includes("@") || !SAFE_AUTH_EMAIL_REGEX.test(normalized)) {
+    throw new Error("Invalid auth email format");
+  }
+  return normalized;
+}
+
+/**
+ * Camino controlado y acotado para login con email + contraseña:
+ * establece `SET LOCAL app.auth_email = <email>` dentro de una transacción para permitir
+ * leer la fila `User` por email sin desactivar `FORCE ROW LEVEL SECURITY`.
+ */
+export async function withAuthEmailLookup<T>(
+  client: PrismaClient | TenantTransactionClient,
+  email: string,
+  fn: (tx: TenantTransactionClient) => Promise<T>,
+): Promise<T> {
+  const validEmail = normalizeValidAuthEmail(email);
+
+  if (isTransactionClient(client)) {
+    if (typeof client.$queryRaw === "function") {
+      await client.$queryRaw`SELECT set_config(${AUTH_EMAIL_LOOKUP_GUC}, ${validEmail}, true)`;
+    }
+    return await fn(client);
+  }
+
+  const rootClient = client as PrismaClient;
+  if (typeof rootClient.$transaction !== "function") {
+    return await fn(rootClient as unknown as TenantTransactionClient);
+  }
+
+  return await rootClient.$transaction(async (tx) => {
+    const typedTx = tx as TenantTransactionClient;
+    if (typeof typedTx.$queryRaw === "function") {
+      await typedTx.$queryRaw`SELECT set_config(${AUTH_EMAIL_LOOKUP_GUC}, ${validEmail}, true)`;
+    }
+    return await fn(typedTx);
+  });
+}
+
+/**
+ * Camino controlado para verificar si existe al menos un usuario SUPERUSER en el sistema
+ * sin exponer usuarios regulares de los tenants.
+ */
+export async function withAuthSuperuserCheck<T>(
+  client: PrismaClient | TenantTransactionClient,
+  fn: (tx: TenantTransactionClient) => Promise<T>,
+): Promise<T> {
+  if (isTransactionClient(client)) {
+    if (typeof client.$queryRaw === "function") {
+      await client.$queryRaw`SELECT set_config(${AUTH_SUPERUSER_CHECK_GUC}, 'true', true)`;
+    }
+    return await fn(client);
+  }
+
+  const rootClient = client as PrismaClient;
+  if (typeof rootClient.$transaction !== "function") {
+    return await fn(rootClient as unknown as TenantTransactionClient);
+  }
+
+  return await rootClient.$transaction(async (tx) => {
+    const typedTx = tx as TenantTransactionClient;
+    if (typeof typedTx.$queryRaw === "function") {
+      await typedTx.$queryRaw`SELECT set_config(${AUTH_SUPERUSER_CHECK_GUC}, 'true', true)`;
     }
     return await fn(typedTx);
   });

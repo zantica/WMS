@@ -4,6 +4,7 @@
 // Ejecutar: pnpm db:seed (desde la raíz del monorepo)
 
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -110,7 +111,39 @@ async function main() {
   }
   console.log(`✅ ${locationDefs.length} locations created`);
 
-  // ── Usuarios de demo ──────────────────────────────────────────────────────
+  // ── Usuarios de demo + Superuser inicial (admin@navelo.dev) ───────────────
+  const rawRounds = Number(process.env["BCRYPT_SALT_ROUNDS"] ?? 12);
+  const saltRounds =
+    Number.isInteger(rawRounds) && rawRounds >= 10 && rawRounds <= 14
+      ? rawRounds
+      : 12;
+  const seedSuperuserPassword =
+    process.env["SEED_SUPERUSER_PASSWORD"]?.trim() || "NaveloDev!2026";
+  const superuserPasswordHash = await bcrypt.hash(
+    seedSuperuserPassword,
+    saltRounds,
+  );
+
+  await prisma.user.upsert({
+    where: { clerkId: "user_navelo_superuser" },
+    update: {
+      name: "Navelo Superuser",
+      email: "admin@navelo.dev",
+      role: "SUPERUSER",
+      passwordHash: superuserPasswordHash,
+      isActive: true,
+    },
+    create: {
+      tenantId: tenant.id,
+      clerkId: "user_navelo_superuser",
+      name: "Navelo Superuser",
+      email: "admin@navelo.dev",
+      role: "SUPERUSER",
+      passwordHash: superuserPasswordHash,
+      isActive: true,
+    },
+  });
+
   const demoUsers = [
     {
       clerkId: "user_demo_admin_clerk",
@@ -139,7 +172,9 @@ async function main() {
       create: { ...user, tenantId: tenant.id },
     });
   }
-  console.log(`✅ ${demoUsers.length} demo users created (ADMIN, SUPERVISOR, OPERATOR)`);
+  console.log(
+    `✅ Superuser (admin@navelo.dev) & ${demoUsers.length} demo users created (SUPERUSER, ADMIN, SUPERVISOR, OPERATOR)`,
+  );
 
   // ── Categorías de demo ────────────────────────────────────────────────────
   const categoryDefs = [
