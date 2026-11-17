@@ -214,15 +214,15 @@
     {
       "id": "F9.3",
       "milestone": "Hito 9 — Maestro Operativo, Topología Física y Vista Gráfica",
-      "title": "Internacionalización Multi-Idioma (ES / EN / PT) Tipada con Persistencia en Cookie y Autodetección de Navegador",
+      "title": "Internacionalización Multi-Idioma (ES-ES / ES-419 / EN-US / PT-BR / PT-PT) Tipada con Persistencia en Cookie y Autodetección de Navegador",
       "boundedContext": "Web Supervisor Dashboard & Shared Types",
-      "status": "pending",
+      "status": "done",
       "acceptanceCriteria": [
-        "Motor i18n puro y 100% type-safe en @wms/shared-types (SupportedLocale = 'es' | 'en' | 'pt', diccionarios con paridad de claves verificada por TypeScript, interpolación tipada y formateo numérico/fechas con Intl nativo) sin dependencias externas pesadas",
-        "Extensión retrocompatible de los resolutores visuales en @wms/shared-types (resolveTaskStatusVisual, resolveTaskTypeVisual, resolveStepStatusVisual, resolveOrderStatusVisual) aceptando locale opcional (default 'es')",
-        "Resolución jerárquica de idioma con puerto/adaptador desacoplado: 1) Cookie 'wms_locale' (es|en|pt, SameSite=Lax, Path=/, 1 año), 2) Autodetección del navegador (Accept-Language / navigator.languages normalizando variantes regionales como es-MX, en-US, pt-BR), 3) Fallback 'es'",
-        "Contexto i18n (LocaleProvider + hook useTranslation) y selector de idioma (ES | EN | PT) en DashboardShell de @wms/web, actualizando cookie y atributo lang, y traduciendo todas las vistas del panel (/ , /catalog, /locations, /users, /inventory, /operations y LabelPrintModal) sin romper rutas",
-        "Suite de tests unitarios verificando paridad completa de diccionarios (es/en/pt), resolución Cookie -> Browser -> Fallback, interpolación y cambio de idioma en sesión"
+        "Motor i18n puro y 100% type-safe en @wms/shared-types (SupportedLocale = 'es-ES' | 'es-419' | 'en-US' | 'pt-BR' | 'pt-PT', diccionarios importados desde los 5 JSON canónicos con paridad de claves verificada por TypeScript y tests, interpolación tipada {param} y formateo numérico/fechas con Intl nativo) sin dependencias externas pesadas",
+        "Extensión retrocompatible de los resolutores visuales en @wms/shared-types (resolveTaskStatusVisual, resolveTaskTypeVisual, resolveStepStatusVisual, resolveOrderStatusVisual) aceptando locale opcional (default 'es-ES')",
+        "Resolución jerárquica de idioma con puerto/adaptador desacoplado: 1) Cookie 'wms_locale' (es-ES|es-419|en-US|pt-BR|pt-PT, SameSite=Lax, Path=/, 1 año; normalizando alias cortos 'es'->'es-ES', 'en'->'en-US', 'pt'->'pt-PT'), 2) Autodetección del navegador (Accept-Language / navigator.languages normalizando variantes regionales: es-ES->es-ES, es-419/es-MX/es-AR/es-CO/es-CL/es-*->es-419, en-*->en-US, pt-BR->pt-BR, pt-PT/pt-*->pt-PT), 3) Fallback 'es-ES'",
+        "Contexto i18n (LocaleProvider + hook useTranslation) y selector de idioma regional (ES-ES | ES-419 | EN-US | PT-BR | PT-PT) en DashboardShell de @wms/web, actualizando cookie y atributo lang, y traduciendo todas las vistas del panel (/, /catalog, /locations, /users, /inventory, /operations y LabelPrintModal) sin romper rutas",
+        "Suite de tests unitarios verificando paridad completa de diccionarios (5 variantes), resolución Cookie -> Browser -> Fallback, interpolación, formateo Intl y cambio de idioma en sesión"
       ]
     },
     {

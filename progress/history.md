@@ -279,3 +279,18 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
   - Autogeneración de código de barras EAN-13 interno de distribución restringida (prefijo `20`, 10 dígitos generados con `crypto.randomInt` de `node:crypto` sin `Math.random()` conforme a SonarCloud CP-7, y checksum ponderado GS1 módulo 10).
   - Adaptación en `@wms/web` (`/catalog`): labels y placeholders indicando la autogeneración automática si se dejan vacíos, y exclusión de cadenas vacías al invocar el cliente API.
   - Verificación independiente ejecutada: 100% verde en `pnpm build` (6/6 paquetes), `pnpm test` en web (29/29 tests) y `pnpm --filter @wms/api test:coverage` (365 tests pasados, cobertura `manage-products.ts` al 99.2% de líneas y 90.47% de ramas).
+
+
+---
+
+## [2026-11-17] Feature `F9.3` — Internacionalización Multi-Idioma (`es-ES` / `es-419` / `en-US` / `pt-BR` / `pt-PT`) Tipada con Persistencia en Cookie y Autodetección de Navegador
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_F9.3.md`](./impl_F9.3.md)
+  - Revisión: [`progress/review_F9.3.md`](./review_F9.3.md)
+- **Cambios clave**:
+  - Motor i18n puro y 100% type-safe en `@wms/shared-types/src/i18n/` con las 5 variantes regionales (`es-ES`, `es-419`, `en-US`, `pt-BR`, `pt-PT`) derivadas de los JSON canónicos del usuario, paridad de claves verificada en compile-time (`as const satisfies TranslationDictionary`), interpolación `{param}` y formateadores `Intl` nativos (`formatNumber`, `formatDate`, `formatDateTime`).
+  - Resolución jerárquica desacoplada detrás de puertos hexagonales (`LocaleStoragePort`, `LocaleDetectorPort`): 1) Cookie `wms_locale`, 2) Autodetección (`Accept-Language` / `navigator.languages` con pesos `q` y normalización regional), 3) Fallback `es-ES`.
+  - Extensión retrocompatible de los resolutores visuales en `design-tokens.ts` (`resolveTaskStatusVisual`, `resolveTaskTypeVisual`, `resolveStepStatusVisual`, `resolveOrderStatusVisual`) aceptando `locale?: SupportedLocale`.
+  - Integración en `@wms/web`: `LocaleProvider`, `useTranslation()`, adaptadores de cookie (`SameSite=Lax; Path=/; Max-Age=31536000`) y `<html lang>`, selector regional en `DashboardShell` y traducción completa de `/`, `/catalog`, `/locations`, `/users`, `/inventory`, `/operations` y `LabelPrintModal`.
+  - Verificación independiente ejecutada: `pnpm build` (6/6 paquetes), `@wms/shared-types test` (14/14), `@wms/web test` (35/35) y `@wms/api test` (365 passed, 8 skipped de integración PG) con exit code `0`.

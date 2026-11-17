@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
 - **Última actualización**: 2026-11-17
-- **Estado General**: ✅ **`F9.4` completada y aprobada (`APPROVED` en `progress/review_F9.4.md`) — Siguiente: `F9.3` (i18n ES/EN/PT) y luego `F5.1` (Bulk Import)**
+- **Estado General**: ✅ **`F9.3` completada y aprobada (`APPROVED` en `progress/review_F9.3.md`) — Siguiente: `F5.1` (Bulk Import)**
 - **Hitos Completados**:
   - ✅ **Hito 1 — Esqueleto + Ledger** (`F1.1`, `F1.2`, `F1.3` en `done`)
   - ✅ **Hito 2 — App Expo + Inbound + Putaway** (`F2.1`, `F2.2`, `F2.3`, `F2.4` en `done`)
@@ -18,7 +18,7 @@
   6. ✅ **`F9.1`** — Maestro de Producto WMS, Categorías configurables, Búsqueda por SKU y Gestión de Usuarios/Roles (`done`, `APPROVED` en [`progress/review_F9.1.md`](./review_F9.1.md))
   7. ✅ **`F9.2`** — Topología Física (`RACK` / `SHELVING` / `FLOOR`), Alta Estructurada y Vista Gráfica del Layout (`done`, `APPROVED` en [`progress/review_F9.2.md`](./review_F9.2.md))
   8. ✅ **`F9.4`** — Generación Automática de SKU por Categoría (`ROPA-001`) y Código de Barras en Alta de Producto (`done`, `APPROVED` en [`progress/review_F9.4.md`](./review_F9.4.md))
-  9. ⏳ **`F9.3`** — Internacionalización Multi-Idioma (`es` / `en` / `pt`) Tipada en `@wms/shared-types` + `@wms/web` con Persistencia en Cookie y Autodetección de Navegador (`pending`)
+  9. ✅ **`F9.3`** — Internacionalización Multi-Idioma (`es-ES` / `es-419` / `en-US` / `pt-BR` / `pt-PT`) Tipada en `@wms/shared-types` + `@wms/web` con Persistencia en Cookie y Autodetección de Navegador (`done`, `APPROVED` en [`progress/review_F9.3.md`](./review_F9.3.md))
   10. ⏳ **`F5.1`** — Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper` (`pending`)
   11. ✅ **`F5.2`** — Puerto `LabelRenderer` (QR + Code128) con Prefijos Tipados y Vista Web de Impresión (`done`, `APPROVED` en [`progress/review_F5.2.md`](./review_F5.2.md))
 - **Sesión Actual (2026-11-17 — Hito 9 `F9.4` Completada)**:
@@ -30,7 +30,7 @@
 - **Sesión (2026-11-10 / 2026-11-11 — Hito 8 `@wms/domain`)**:
   - ✅ **`DOM-1`** (`done`, publicada) — Paquete `@wms/domain` (TS puro, compartido API/Web/Mobile): primitivas DDD, `InventoryBalance`, máquinas de estado `WarehouseTask`/`TaskStep`/`SalesOrder`, 81 tests (happy path + "romper a propósito"), ADR 006.
   - ✅ **`DOM-2`** (`done`, review `APPROVED` en [`progress/review_DOM-2.md`](./review_DOM-2.md)) — Adopción de `@wms/domain` en `@wms/api`: puertos (`InventoryRepository`, `OrderRepository`, `TaskRepository`, `UnitOfWork`) + adaptadores Prisma (`FOR UPDATE`, `Serializable`, RLS) e `InMemory`, refactor de `move-stock`, `allocate-order`, `cancel-order`, `confirm-task-step` y `handle-picking-exception`, mapeo `DomainError -> WmsError`, paridad de enums, suite PG `ledger-locking.integration.test.ts` y ADR 007. Opcionales pendientes: `create-putaway-task`, `confirm-receipt-line`, `sync-task-batch`.
-- **Siguiente Feature en Cola**: `F9.3` — *Internacionalización Multi-Idioma ES/EN/PT con Cookie y Navegador* (luego `F5.1`, opcionalmente `DOM-3` y mejora técnica `TECH-VITE` — *Migración @wms/web a Vite SPA*).
+- **Siguiente Feature en Cola**: `F5.1` — *Carga masiva (Bulk Import) con modo `dryRun`, normalización y estrategia `ColumnMapper`* (opcionalmente `DOM-3` y mejora técnica `TECH-VITE` — *Migración @wms/web a Vite SPA*).
 
 ---
 
