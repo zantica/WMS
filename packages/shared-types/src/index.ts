@@ -636,4 +636,5 @@ export * from "./design-tokens.js";
 export * from "./api-helpers.js";
 export * from "./barcode-payload.js";
 export * from "./topology.js";
+export * from "./i18n/index.js";
 

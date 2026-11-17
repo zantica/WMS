@@ -11,6 +11,8 @@ import type {
   TaskStatus,
   TaskType,
 } from "./index.js";
+import { translate } from "./i18n/translator.js";
+import { DEFAULT_LOCALE, type SupportedLocale } from "./i18n/types.js";
 
 export const WMS_COLORS = {
   bg: "#061815",
@@ -213,44 +215,45 @@ export function resolveToneColors(tone: WmsTone): WmsToneColors {
  */
 export function resolveTaskStatusVisual(
   status: TaskStatus,
+  locale: SupportedLocale = DEFAULT_LOCALE,
 ): WmsTaskStatusVisual {
   switch (status) {
     case "PENDING":
       return {
-        label: "Pendiente de inicio",
-        shortLabel: "PENDIENTE",
+        label: translate(locale, "visuals.taskStatus.pendingLabel"),
+        shortLabel: translate(locale, "visuals.taskStatus.pendingShort"),
         symbol: "●",
         tone: "slate",
         colors: resolveToneColors("slate"),
       };
     case "IN_PROGRESS":
       return {
-        label: "En ejecución en piso",
-        shortLabel: "EN CURSO",
+        label: translate(locale, "visuals.taskStatus.inProgressLabel"),
+        shortLabel: translate(locale, "visuals.taskStatus.inProgressShort"),
         symbol: "▲",
         tone: "amber",
         colors: resolveToneColors("amber"),
       };
     case "COMPLETED":
       return {
-        label: "Completada y contabilizada",
-        shortLabel: "COMPLETADA",
+        label: translate(locale, "visuals.taskStatus.completedLabel"),
+        shortLabel: translate(locale, "visuals.taskStatus.completedShort"),
         symbol: "✓",
         tone: "emerald",
         colors: resolveToneColors("emerald"),
       };
     case "EXCEPTION":
       return {
-        label: "Detenida por incidencia",
-        shortLabel: "EXCEPCIÓN",
+        label: translate(locale, "visuals.taskStatus.exceptionLabel"),
+        shortLabel: translate(locale, "visuals.taskStatus.exceptionShort"),
         symbol: "⚠",
         tone: "rose",
         colors: resolveToneColors("rose"),
       };
     case "CANCELLED":
       return {
-        label: "Cancelada",
-        shortLabel: "CANCELADA",
+        label: translate(locale, "visuals.taskStatus.cancelledLabel"),
+        shortLabel: translate(locale, "visuals.taskStatus.cancelledShort"),
         symbol: "✕",
         tone: "rose",
         colors: resolveToneColors("rose"),
@@ -261,11 +264,14 @@ export function resolveTaskStatusVisual(
 /**
  * Resuelve la semántica visual para un tipo de tarea operativa (`TaskType`).
  */
-export function resolveTaskTypeVisual(type: TaskType): WmsTaskTypeVisual {
+export function resolveTaskTypeVisual(
+  type: TaskType,
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): WmsTaskTypeVisual {
   switch (type) {
     case "RECEIVING":
       return {
-        label: "Recepción en muelle",
+        label: translate(locale, "visuals.taskType.receivingLabel"),
         code: "INBOUND · RECEIVING",
         symbol: "↓",
         tone: "blue",
@@ -273,7 +279,7 @@ export function resolveTaskTypeVisual(type: TaskType): WmsTaskTypeVisual {
       };
     case "PUTAWAY":
       return {
-        label: "Putaway a estantería",
+        label: translate(locale, "visuals.taskType.putawayLabel"),
         code: "STORAGE · PUTAWAY",
         symbol: "→",
         tone: "blue",
@@ -281,7 +287,7 @@ export function resolveTaskTypeVisual(type: TaskType): WmsTaskTypeVisual {
       };
     case "PICKING":
       return {
-        label: "Picking guiado",
+        label: translate(locale, "visuals.taskType.pickingLabel"),
         code: "OUTBOUND · PICKING",
         symbol: "◆",
         tone: "amber",
@@ -289,7 +295,7 @@ export function resolveTaskTypeVisual(type: TaskType): WmsTaskTypeVisual {
       };
     case "PACKING":
       return {
-        label: "Mesa de empaquetado",
+        label: translate(locale, "visuals.taskType.packingLabel"),
         code: "DISPATCH · PACKING",
         symbol: "■",
         tone: "emerald",
@@ -303,32 +309,33 @@ export function resolveTaskTypeVisual(type: TaskType): WmsTaskTypeVisual {
  */
 export function resolveStepStatusVisual(
   status: StepStatus,
+  locale: SupportedLocale = DEFAULT_LOCALE,
 ): WmsStepStatusVisual {
   switch (status) {
     case "PENDING":
       return {
-        label: "PENDIENTE",
+        label: translate(locale, "visuals.stepStatus.pendingLabel"),
         symbol: "○",
         tone: "blue",
         colors: resolveToneColors("blue"),
       };
     case "COMPLETED":
       return {
-        label: "COMPLETADO",
+        label: translate(locale, "visuals.stepStatus.completedLabel"),
         symbol: "✓",
         tone: "emerald",
         colors: resolveToneColors("emerald"),
       };
     case "EXCEPTION":
       return {
-        label: "EXCEPCIÓN",
+        label: translate(locale, "visuals.stepStatus.exceptionLabel"),
         symbol: "⚠",
         tone: "rose",
         colors: resolveToneColors("rose"),
       };
     case "SKIPPED":
       return {
-        label: "OMITIDO",
+        label: translate(locale, "visuals.stepStatus.skippedLabel"),
         symbol: "—",
         tone: "slate",
         colors: resolveToneColors("slate"),
@@ -341,12 +348,13 @@ export function resolveStepStatusVisual(
  */
 export function resolveOrderStatusVisual(
   status: OrderStatus,
+  locale: SupportedLocale = DEFAULT_LOCALE,
 ): WmsOrderStatusVisual {
   switch (status) {
     case "PENDING":
       return {
         label: "PENDING",
-        recommendedAction: "Lanzar reserva ATP (Allocate)",
+        recommendedAction: translate(locale, "visuals.orderStatus.pendingAction"),
         symbol: "●",
         tone: "slate",
         colors: resolveToneColors("slate"),
@@ -354,7 +362,7 @@ export function resolveOrderStatusVisual(
     case "ALLOCATED":
       return {
         label: "ALLOCATED",
-        recommendedAction: "En cola de picking móvil",
+        recommendedAction: translate(locale, "visuals.orderStatus.allocatedAction"),
         symbol: "◆",
         tone: "blue",
         colors: resolveToneColors("blue"),
@@ -362,7 +370,7 @@ export function resolveOrderStatusVisual(
     case "PICKING":
       return {
         label: "PICKING",
-        recommendedAction: "Operario recolectando en pasillo",
+        recommendedAction: translate(locale, "visuals.orderStatus.pickingAction"),
         symbol: "▲",
         tone: "amber",
         colors: resolveToneColors("amber"),
@@ -370,7 +378,7 @@ export function resolveOrderStatusVisual(
     case "PACKED":
       return {
         label: "PACKED",
-        recommendedAction: "Listos para confirmar despacho",
+        recommendedAction: translate(locale, "visuals.orderStatus.packedAction"),
         symbol: "✓",
         tone: "emerald",
         colors: resolveToneColors("emerald"),
@@ -378,7 +386,7 @@ export function resolveOrderStatusVisual(
     case "SHIPPED":
       return {
         label: "SHIPPED",
-        recommendedAction: "Despachado fuera del almacén",
+        recommendedAction: translate(locale, "visuals.orderStatus.shippedAction"),
         symbol: "✓",
         tone: "emerald",
         colors: resolveToneColors("emerald"),
@@ -386,7 +394,7 @@ export function resolveOrderStatusVisual(
     case "ON_HOLD":
       return {
         label: "ON_HOLD",
-        recommendedAction: "Ejecutar reabastecimiento o ajuste",
+        recommendedAction: translate(locale, "visuals.orderStatus.onHoldAction"),
         symbol: "⚠",
         tone: "rose",
         colors: resolveToneColors("rose"),
@@ -394,7 +402,7 @@ export function resolveOrderStatusVisual(
     case "CANCELLED":
       return {
         label: "CANCELLED",
-        recommendedAction: "Pedido cancelado y reservas liberadas",
+        recommendedAction: translate(locale, "visuals.orderStatus.cancelledAction"),
         symbol: "✕",
         tone: "rose",
         colors: resolveToneColors("rose"),
