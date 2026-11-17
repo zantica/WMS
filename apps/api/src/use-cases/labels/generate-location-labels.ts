@@ -2,12 +2,11 @@
 // Caso de uso: Generación por lote de etiquetas de ubicaciones físicas (QR o Code128) con dimensiones en mm.
 
 import { randomUUID } from "node:crypto";
-import {
-  buildLocationBarcode,
-  type BarcodeSymbology,
-  type GenerateLocationLabelsRequest,
-  type LabelBatchResponseDTO,
-  type RenderedLabelDTO,
+import type {
+  BarcodeSymbology,
+  GenerateLocationLabelsRequest,
+  LabelBatchResponseDTO,
+  RenderedLabelDTO,
 } from "@wms/shared-types";
 import { WmsError } from "../../plugins/error-handler.js";
 import type { LabelRendererPort } from "../../ports/label-renderer.js";
@@ -61,7 +60,7 @@ export async function generateLocationLabels(
   const labels: RenderedLabelDTO[] = [];
 
   for (const loc of locations) {
-    const payload = buildLocationBarcode(loc.code);
+    const payload = loc.code.trim().toUpperCase();
     const title = `Ubicación ${loc.code}`;
     const subtitle = `Zona: ${loc.type}${loc.description ? ` • ${loc.description}` : ""}`;
     const humanReadableText = includeHumanReadable ? payload : undefined;

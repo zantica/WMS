@@ -136,9 +136,11 @@ describe("Rutas HTTP de Etiquetas (POST /api/v1/labels/locations y /products)", 
       expect(body.data.symbology).toBe("QR");
       expect(body.data.dimensions).toEqual({ widthMm: 70, heightMm: 35 });
       expect(body.data.labels[0]?.code).toBe("A-01-01");
-      expect(body.data.labels[0]?.barcodePayload).toBe("LOC:A-01-01");
+      expect(body.data.labels[0]?.barcodePayload).toBe("A-01-01");
+      expect(body.data.labels[0]?.humanReadableText).toBe("A-01-01");
       expect(body.data.labels[0]?.svg).toContain("<svg");
       expect(body.data.labels[0]?.svg).toContain('width="70mm"');
+      expect(body.data.labels[0]?.svg).not.toContain("LOC:");
     });
 
     it("devuelve 422 VALIDATION_ERROR si el body no contiene locationIds ni locationCodes", async () => {
@@ -200,12 +202,14 @@ describe("Rutas HTTP de Etiquetas (POST /api/v1/labels/locations y /products)", 
       expect(body.data.count).toBe(1);
       expect(body.data.symbology).toBe("CODE128");
       expect(body.data.labels[0]?.code).toBe("PROD-ABC");
-      expect(body.data.labels[0]?.barcodePayload).toBe("SKU:PROD-ABC");
+      expect(body.data.labels[0]?.barcodePayload).toBe("PROD-ABC");
+      expect(body.data.labels[0]?.humanReadableText).toBe("PROD-ABC");
       expect(body.data.labels[0]?.svg).toContain("<svg");
       expect(body.data.labels[0]?.svg).toContain('width="80mm"');
+      expect(body.data.labels[0]?.svg).not.toContain("SKU:");
     });
 
-    it("utiliza EAN como payload cuando useBarcodeAsPayload es true", async () => {
+    it("utiliza el barcode limpio sin prefijo EAN: como payload cuando useBarcodeAsPayload es true", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/v1/labels/products",
@@ -220,7 +224,8 @@ describe("Rutas HTTP de Etiquetas (POST /api/v1/labels/locations y /products)", 
 
       expect(response.statusCode).toBe(200);
       const body = response.json<ApiResponse<LabelBatchResponseDTO>>();
-      expect(body.data.labels[0]?.barcodePayload).toBe("EAN:8412345678901");
+      expect(body.data.labels[0]?.barcodePayload).toBe("8412345678901");
+      expect(body.data.labels[0]?.humanReadableText).toBe("8412345678901");
     });
 
     it("devuelve 422 VALIDATION_ERROR si el body no contiene ni productIds ni skus", async () => {

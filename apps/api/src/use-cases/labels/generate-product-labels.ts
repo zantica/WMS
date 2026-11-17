@@ -1,14 +1,12 @@
 // apps/api/src/use-cases/labels/generate-product-labels.ts
-// Caso de uso: Generación por lote de etiquetas de productos (Code128 o QR) con prefijo tipado y dimensiones en mm.
+// Caso de uso: Generación por lote de etiquetas de productos (Code128 o QR) con código limpio y dimensiones en mm.
 
 import { randomUUID } from "node:crypto";
-import {
-  buildBarcodePayload,
-  buildProductSkuBarcode,
-  type BarcodeSymbology,
-  type GenerateProductLabelsRequest,
-  type LabelBatchResponseDTO,
-  type RenderedLabelDTO,
+import type {
+  BarcodeSymbology,
+  GenerateProductLabelsRequest,
+  LabelBatchResponseDTO,
+  RenderedLabelDTO,
 } from "@wms/shared-types";
 import { WmsError } from "../../plugins/error-handler.js";
 import type { CatalogRepositoryPort } from "../../ports/catalog-repository.js";
@@ -62,12 +60,9 @@ export async function generateProductLabels(
   const labels: RenderedLabelDTO[] = [];
 
   for (const prod of products) {
-    let payload: string;
-    if (useBarcodeAsPayload && prod.barcode && prod.barcode.trim().length > 0) {
-      payload = buildBarcodePayload("EAN", prod.barcode.trim());
-    } else {
-      payload = buildProductSkuBarcode(prod.sku);
-    }
+    const cleanBarcode = prod.barcode?.trim();
+    const payload =
+      useBarcodeAsPayload && cleanBarcode ? cleanBarcode : prod.sku.trim();
 
     const title = prod.name;
     const categoryInfo = prod.categoryName ? `Cat: ${prod.categoryName}` : null;

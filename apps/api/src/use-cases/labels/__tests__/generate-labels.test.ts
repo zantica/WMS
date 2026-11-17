@@ -81,7 +81,7 @@ describe("Generate Labels Use Cases (F5.2)", () => {
   });
 
   describe("generateLocationLabels", () => {
-    it("genera etiquetas QR para ubicaciones con prefijo LOC: y SVG real", async () => {
+    it("genera etiquetas QR para ubicaciones sin prefijo LOC: (código limpio en mayúsculas) y SVG real", async () => {
       const result = await generateLocationLabels(
         locationRepo,
         realSvgRenderer,
@@ -100,12 +100,14 @@ describe("Generate Labels Use Cases (F5.2)", () => {
 
       const first = result.labels[0]!;
       expect(first.code).toBe("A-01-01");
-      expect(first.barcodePayload).toBe("LOC:A-01-01");
+      expect(first.barcodePayload).toBe("A-01-01");
+      expect(first.humanReadableText).toBe("A-01-01");
       expect(first.title).toBe("Ubicación A-01-01");
       expect(first.subtitle).toContain("STORAGE");
       expect(first.svg).toContain('width="70mm"');
       expect(first.svg).toContain('height="35mm"');
-      expect(first.svg).toContain("LOC:A-01-01");
+      expect(first.svg).toContain("A-01-01");
+      expect(first.svg).not.toContain("LOC:");
       expect(first.dataUri).toContain("data:image/svg+xml;utf8,");
     });
 
@@ -122,7 +124,8 @@ describe("Generate Labels Use Cases (F5.2)", () => {
 
       expect(result.count).toBe(1);
       expect(result.symbology).toBe("CODE128");
-      expect(inMemoryRenderer.renderedLabels[0]?.payload).toBe("LOC:A-01-01");
+      expect(inMemoryRenderer.renderedLabels[0]?.payload).toBe("A-01-01");
+      expect(inMemoryRenderer.renderedLabels[0]?.humanReadableText).toBe("A-01-01");
       expect(inMemoryRenderer.renderedLabels[0]?.symbology).toBe("CODE128");
     });
 
@@ -153,7 +156,7 @@ describe("Generate Labels Use Cases (F5.2)", () => {
   });
 
   describe("generateProductLabels", () => {
-    it("genera etiquetas CODE128 para productos con prefijo SKU: y SVG real", async () => {
+    it("genera etiquetas CODE128 para productos sin prefijo SKU: (código limpio) y SVG real", async () => {
       const result = await generateProductLabels(
         catalogRepo,
         realSvgRenderer,
@@ -172,14 +175,16 @@ describe("Generate Labels Use Cases (F5.2)", () => {
 
       const label = result.labels[0]!;
       expect(label.code).toBe("TSHIRT-BLK-M");
-      expect(label.barcodePayload).toBe("SKU:TSHIRT-BLK-M");
+      expect(label.barcodePayload).toBe("TSHIRT-BLK-M");
+      expect(label.humanReadableText).toBe("TSHIRT-BLK-M");
       expect(label.title).toBe("Camiseta Algodón Negra M");
       expect(label.subtitle).toContain("Ropa y Textil");
       expect(label.svg).toContain('width="80mm"');
-      expect(label.svg).toContain("SKU:TSHIRT-BLK-M");
+      expect(label.svg).toContain("TSHIRT-BLK-M");
+      expect(label.svg).not.toContain("SKU:TSHIRT-BLK-M");
     });
 
-    it("usa EAN comercial como payload cuando useBarcodeAsPayload es true y tiene barcode", async () => {
+    it("usa el barcode comercial limpio sin prefijo EAN: cuando useBarcodeAsPayload es true y tiene barcode", async () => {
       const result = await generateProductLabels(
         catalogRepo,
         inMemoryRenderer,
@@ -192,10 +197,11 @@ describe("Generate Labels Use Cases (F5.2)", () => {
 
       expect(result.count).toBe(1);
       const label = result.labels[0]!;
-      expect(label.barcodePayload).toBe("EAN:7501234567890");
+      expect(label.barcodePayload).toBe("7501234567890");
+      expect(label.humanReadableText).toBe("7501234567890");
     });
 
-    it("hace fallback a SKU si useBarcodeAsPayload es true pero el producto no tiene barcode", async () => {
+    it("hace fallback a SKU limpio si useBarcodeAsPayload es true pero el producto no tiene barcode", async () => {
       const result = await generateProductLabels(
         catalogRepo,
         inMemoryRenderer,
@@ -208,7 +214,8 @@ describe("Generate Labels Use Cases (F5.2)", () => {
 
       expect(result.count).toBe(1);
       const label = result.labels[0]!;
-      expect(label.barcodePayload).toBe("SKU:JEANS-BLU-32");
+      expect(label.barcodePayload).toBe("JEANS-BLU-32");
+      expect(label.humanReadableText).toBe("JEANS-BLU-32");
     });
 
     it("falla con VALIDATION_ERROR si no se envían productIds ni skus", async () => {
