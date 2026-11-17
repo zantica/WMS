@@ -104,12 +104,15 @@ describe("picking workflows (@wms/mobile)", () => {
 
     expect(validateLocationScan(step, "A-01-01")).toBe(true);
     expect(validateLocationScan(step, "  a-01-01 \n")).toBe(true);
+    expect(validateLocationScan(step, "LOC:A-01-01")).toBe(true);
+    expect(validateLocationScan(step, "  loc: a-01-01 ")).toBe(true);
+    expect(validateLocationScan(step, "LOC:   ")).toBe(false);
     expect(validateLocationScan(step, "B-02-01")).toBe(false);
     expect(validateLocationScan(step, "   ")).toBe(false);
     expect(validateLocationScan({ locationCode: "  " }, "A-01-01")).toBe(false);
   });
 
-  it("validates product scan against either productBarcode or productSku", () => {
+  it("validates product scan against either productBarcode or productSku (with and without SKU:/EAN: prefixes)", () => {
     const stepWithBarcode = {
       productSku: "SKU-KB-01",
       productBarcode: "7501112223334",
@@ -117,6 +120,12 @@ describe("picking workflows (@wms/mobile)", () => {
 
     expect(validateProductScan(stepWithBarcode, "7501112223334")).toBe(true);
     expect(validateProductScan(stepWithBarcode, " sku-kb-01 ")).toBe(true);
+    expect(validateProductScan(stepWithBarcode, "SKU:SKU-KB-01")).toBe(true);
+    expect(validateProductScan(stepWithBarcode, "sku: sku-kb-01")).toBe(true);
+    expect(validateProductScan(stepWithBarcode, "EAN:7501112223334")).toBe(
+      true,
+    );
+    expect(validateProductScan(stepWithBarcode, "SKU:   ")).toBe(false);
     expect(validateProductScan(stepWithBarcode, "A-01-01")).toBe(false);
     expect(validateProductScan(stepWithBarcode, "")).toBe(false);
 
@@ -169,6 +178,24 @@ describe("picking workflows (@wms/mobile)", () => {
       verifiedLocationCode: "B-02-01",
       matchedProductCode: "7509998887776",
     });
+
+    // También acepta etiquetas heredadas con prefijos LOC: y SKU:/EAN:
+    const prefixedLoc = advanceDualScanState(initial, step, "LOC:B-02-01");
+    expect(prefixedLoc.valid).toBe(true);
+    expect(prefixedLoc.nextStage).toBe("AWAITING_PRODUCT");
+
+    const prefixedProd = advanceDualScanState(
+      {
+        stepId: step.id,
+        stage: prefixedLoc.nextStage,
+        verifiedLocationCode: prefixedLoc.verifiedLocationCode,
+        matchedProductCode: null,
+      },
+      step,
+      "SKU:SKU-MOUSE-02",
+    );
+    expect(prefixedProd.valid).toBe(true);
+    expect(prefixedProd.nextStage).toBe("READY_TO_CONFIRM");
   });
 
   it("rejects out-of-order or invalid scans in advanceDualScanState with INVALID_SCAN and resets when stepId changes", () => {

@@ -4,7 +4,12 @@
 // para el flujo móvil de Picking y Packing en @wms/mobile.
 // Respeta las fronteras del monorepo: importa únicamente desde @wms/shared-types y módulos locales.
 
-import type { OrderStatus, TaskStepDTO } from "@wms/shared-types";
+import {
+  extractLocationCode,
+  extractProductCode,
+  type OrderStatus,
+  type TaskStepDTO,
+} from "@wms/shared-types";
 import type {
   ConfirmTaskStepResponse,
   ReplacementStepSummary,
@@ -90,7 +95,7 @@ export function validateLocationScan(
   step: Pick<TaskStepDTO, "locationCode">,
   scannedCode: string,
 ): boolean {
-  const normalizedScanned = normalizeScanCode(scannedCode);
+  const normalizedScanned = normalizeScanCode(extractLocationCode(scannedCode));
   const normalizedExpected = normalizeScanCode(step.locationCode);
   if (normalizedScanned.length === 0 || normalizedExpected.length === 0) {
     return false;
@@ -106,7 +111,7 @@ export function validateProductScan(
   step: Pick<TaskStepDTO, "productSku" | "productBarcode">,
   scannedCode: string,
 ): boolean {
-  const normalizedScanned = normalizeScanCode(scannedCode);
+  const normalizedScanned = normalizeScanCode(extractProductCode(scannedCode));
   if (normalizedScanned.length === 0) {
     return false;
   }

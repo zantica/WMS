@@ -80,6 +80,15 @@ describe("inbound-putaway workflows (@wms/mobile)", () => {
     const byProductId = matchReceivingStepByScan(SAMPLE_STEPS, "PROD-2");
     expect(byProductId?.id).toBe("step-2");
 
+    // Resilient matching for legacy prefixed labels (EAN:, SKU:)
+    expect(
+      matchReceivingStepByScan(SAMPLE_STEPS, "EAN:7501112223334")?.id,
+    ).toBe("step-3");
+    expect(
+      matchReceivingStepByScan(SAMPLE_STEPS, "sku: sku-mouse-02 ")?.id,
+    ).toBe("step-2");
+    expect(matchReceivingStepByScan(SAMPLE_STEPS, "SKU:   ")).toBeNull();
+
     // Falls back to COMPLETED step if no PENDING step matches that product
     const completedOnlySteps: TaskStepDTO[] = [SAMPLE_STEPS[1]!];
     const completedMatch = matchReceivingStepByScan(

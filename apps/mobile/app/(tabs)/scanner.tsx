@@ -15,10 +15,11 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import type {
-  InventoryBalanceDTO,
-  ProductDTO,
-  WarehouseTaskDTO,
+import {
+  parseBarcodePayload,
+  type InventoryBalanceDTO,
+  type ProductDTO,
+  type WarehouseTaskDTO,
 } from "@wms/shared-types";
 import { BarcodeScannerBox } from "../../src/components/BarcodeScannerBox";
 import {
@@ -124,12 +125,14 @@ export default function ScannerScreen(): JSX.Element {
         }
 
         // Modo consulta rápida de stock por código de ubicación o SKU + Ficha de producto
+        const cleanQuery =
+          parseBarcodePayload(scannedCode).value || scannedCode;
         const [allBalances, foundProducts] = await Promise.all([
           client.getInventoryBalances(),
-          client.searchProducts({ q: scannedCode, includeInactive: true }),
+          client.searchProducts({ q: cleanQuery, includeInactive: true }),
         ]);
 
-        const normalized = scannedCode.toUpperCase();
+        const normalized = cleanQuery.trim().toUpperCase();
         const filteredBalances = allBalances.filter(
           (b) =>
             b.locationCode.toUpperCase() === normalized ||

@@ -3,11 +3,12 @@
 // para los flujos móviles de Recepción (Inbound RECEIVING) y Putaway (PUTAWAY).
 // Respeta las fronteras del monorepo: importa únicamente desde @wms/shared-types y módulos locales.
 
-import type {
-  TaskStepDTO,
-  TaskType,
-  WarehouseTaskDTO,
-  WmsErrorCode,
+import {
+  extractProductCode,
+  type TaskStepDTO,
+  type TaskType,
+  type WarehouseTaskDTO,
+  type WmsErrorCode,
 } from "@wms/shared-types";
 import { WmsApiClientError } from "../api/client";
 
@@ -58,7 +59,7 @@ export function matchReceivingStepByScan(
   steps: readonly TaskStepDTO[],
   scannedCode: string,
 ): TaskStepDTO | null {
-  const normalized = normalizeScanCode(scannedCode);
+  const normalized = normalizeScanCode(extractProductCode(scannedCode));
   if (normalized.length === 0) {
     return null;
   }
