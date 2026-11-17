@@ -322,6 +322,41 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING (InMemory
       expect(secondResult.scannedQty).toBe(5);
       expect(uow.state.transactions).toHaveLength(1);
     });
+
+    it("resiliencia de escaneo: acepta códigos con prefijos heredados (SKU:, EAN:, LOC:) y sin prefijo", async () => {
+      // 1. PUTAWAY con prefijo SKU: (case-insensitive)
+      const resSkuPrefix = await confirmTaskStep({
+        taskId: "task-put-1",
+        stepId: "step-put-1",
+        tenantId: "tenant-1",
+        scannedCode: "sku:sku-001",
+        quantity: 2,
+        unitOfWork: uow,
+      });
+      expect(resSkuPrefix.scannedQty).toBe(2);
+
+      // 2. PUTAWAY con prefijo EAN:
+      const resEanPrefix = await confirmTaskStep({
+        taskId: "task-put-1",
+        stepId: "step-put-1",
+        tenantId: "tenant-1",
+        scannedCode: "EAN:7509998887776",
+        quantity: 3,
+        unitOfWork: uow,
+      });
+      expect(resEanPrefix.stepStatus).toBe("COMPLETED");
+
+      // 3. PICKING con prefijo LOC: (minúsculas + espacios)
+      const resLocPrefix = await confirmTaskStep({
+        taskId: "task-pick-1",
+        stepId: "step-pick-1",
+        tenantId: "tenant-1",
+        scannedCode: "  loc:a-01-01  ",
+        quantity: 1,
+        unitOfWork: uow,
+      });
+      expect(resLocPrefix.scannedQty).toBe(1);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -466,6 +501,41 @@ describe("confirmTaskStep — Confirmación de pasos PUTAWAY y PICKING (InMemory
           scanned: "CODIGO-ERRONEO-999",
         },
       });
+    });
+
+    it("lanza INVALID_SCAN (422) si el prefijo no corresponde a la entidad o el valor tras el prefijo está vacío", async () => {
+      await expect(
+        confirmTaskStep({
+          taskId: "task-put-1",
+          stepId: "step-put-1",
+          tenantId: "tenant-1",
+          scannedCode: "LOC:SKU-001",
+          quantity: 1,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_SCAN", statusCode: 422 });
+
+      await expect(
+        confirmTaskStep({
+          taskId: "task-pick-1",
+          stepId: "step-pick-1",
+          tenantId: "tenant-1",
+          scannedCode: "SKU:A-01-01",
+          quantity: 1,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_SCAN", statusCode: 422 });
+
+      await expect(
+        confirmTaskStep({
+          taskId: "task-put-1",
+          stepId: "step-put-1",
+          tenantId: "tenant-1",
+          scannedCode: "LOC:   ",
+          quantity: 1,
+          unitOfWork: uow,
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_SCAN", statusCode: 422 });
     });
 
     it("lanza LOCATION_NOT_FOUND (409) si falta RECEIVING en PUTAWAY o PACKING en PICKING y revierte tarea", async () => {

@@ -205,7 +205,46 @@ describe("confirmReceiptLine — Confirmación de línea de recepción (RECEIVIN
         statusCode: 422,
       });
 
+      await expect(
+        confirmReceiptLine({
+          taskId: "task-rec-1",
+          tenantId: "tenant-1",
+          productId: "product-1",
+          scannedQty: 5,
+          barcode: "LOC:SKU-001",
+        }),
+      ).rejects.toMatchObject({
+        code: "INVALID_SCAN",
+        statusCode: 422,
+      });
+
       expect(moveStock).not.toHaveBeenCalled();
+    });
+
+    it("acepta códigos de producto con prefijo heredado (SKU: / EAN:) y sin prefijo en recepción", async () => {
+      mockPrisma.warehouseTask.findFirst.mockResolvedValue(BASE_RECEIVING_TASK);
+      mockPrisma.product.findFirst.mockResolvedValue(
+        BASE_RECEIVING_TASK.steps[0]!.product,
+      );
+
+      const resWithEanPrefix = await confirmReceiptLine({
+        taskId: "task-rec-1",
+        tenantId: "tenant-1",
+        productId: "product-1",
+        scannedQty: 2,
+        barcode: "EAN:7501234567890",
+      });
+      expect(resWithEanPrefix.scannedQty).toBe(2);
+
+      const resWithSkuPrefix = await confirmReceiptLine({
+        taskId: "task-rec-1",
+        tenantId: "tenant-1",
+        productId: "product-1",
+        scannedQty: 2,
+        barcode: "  sku:sku-001  ",
+      });
+      expect(resWithSkuPrefix.scannedQty).toBe(2);
+      expect(moveStock).toHaveBeenCalledTimes(2);
     });
 
     it("lanza VALIDATION_ERROR (409) si el paso para el producto ya está COMPLETED", async () => {

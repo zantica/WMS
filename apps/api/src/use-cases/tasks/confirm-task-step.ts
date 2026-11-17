@@ -7,6 +7,7 @@
 // sin duplicar InventoryTransaction ni alterar InventoryBalance.
 
 import { InventoryBalance, Quantity } from "@wms/domain";
+import { parseBarcodePayload } from "@wms/shared-types";
 import { WmsError } from "../../plugins/error-handler.js";
 import {
   handlePickingException,
@@ -237,10 +238,33 @@ export async function confirmTaskStep(
         const qtyToScan = quantity ?? 1;
         Quantity.positive(qtyToScan);
 
+        const parsedScan = parseBarcodePayload(scannedCode);
+        const extractedScan = parsedScan.value;
+        const normalizedScan = extractedScan.toUpperCase();
+        const allowsProductMatch =
+          !parsedScan.hasPrefix ||
+          parsedScan.prefix === "SKU" ||
+          parsedScan.prefix === "EAN";
+        const allowsLocationMatch =
+          !parsedScan.hasPrefix || parsedScan.prefix === "LOC";
+
+        const matchesTarget = (target: string | null | undefined): boolean => {
+          if (!target) return false;
+          const cleanTarget = target.trim();
+          return (
+            cleanTarget.length > 0 &&
+            (scannedCode === target ||
+              extractedScan === cleanTarget ||
+              normalizedScan === cleanTarget.toUpperCase())
+          );
+        };
+
         const codeMatch =
-          scannedCode === stepData.productBarcode ||
-          scannedCode === stepData.productSku ||
-          scannedCode === stepData.locationCode;
+          extractedScan.length > 0 &&
+          ((allowsProductMatch &&
+            (matchesTarget(stepData.productBarcode) ||
+              matchesTarget(stepData.productSku))) ||
+            (allowsLocationMatch && matchesTarget(stepData.locationCode)));
 
         if (!codeMatch) {
           throw new WmsError(

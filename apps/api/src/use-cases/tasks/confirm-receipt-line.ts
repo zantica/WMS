@@ -9,6 +9,7 @@
 // sin duplicar InventoryTransaction ni alterar InventoryBalance.
 
 import { prisma, type Prisma } from "@wms/db";
+import { parseBarcodePayload } from "@wms/shared-types";
 import { WmsError } from "../../plugins/error-handler.js";
 import { moveStock } from "../inventory/move-stock.js";
 import { createPutawayTask } from "../inventory/create-putaway-task.js";
@@ -125,8 +126,30 @@ export async function confirmReceiptLine(
       if (!product) {
         throw new WmsError("PRODUCT_NOT_FOUND", "Product not found", 404);
       }
+      const parsedBarcode = parseBarcodePayload(barcode);
+      const extractedBarcode = parsedBarcode.value;
+      const normalizedBarcode = extractedBarcode.toUpperCase();
+      const allowsProductMatch =
+        !parsedBarcode.hasPrefix ||
+        parsedBarcode.prefix === "SKU" ||
+        parsedBarcode.prefix === "EAN";
+
+      const matchesProductTarget = (target: string | null | undefined): boolean => {
+        if (!target) return false;
+        const cleanTarget = target.trim();
+        return (
+          cleanTarget.length > 0 &&
+          (barcode === target ||
+            extractedBarcode === cleanTarget ||
+            normalizedBarcode === cleanTarget.toUpperCase())
+        );
+      };
+
       const matchesCode =
-        product.barcode === barcode || product.sku === barcode;
+        extractedBarcode.length > 0 &&
+        allowsProductMatch &&
+        (matchesProductTarget(product.barcode) ||
+          matchesProductTarget(product.sku));
       if (!matchesCode) {
         throw new WmsError(
           "INVALID_SCAN",
