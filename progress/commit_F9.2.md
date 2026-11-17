@@ -16,7 +16,7 @@
 - [x] **Pilar 2 — Cero Envars y Secretos en el Código**:
   - Verificado: 0 ocurrencias de `process.env` o `import.meta.env` en casos de uso, puertos, dominio o lógica de componentes web/mobile.
   - Cero variables de entorno o credenciales hardcodeadas; 0 archivos `.env` o `.env.*` rastreados en Git.
-  - Cero `console.log`, `debugger`, ni tests marcados con `.only`.
+  - Cero `console.log` de depuración en producción, `debugger`, ni tests marcados con `.only`.
 
 - [x] **Pilar 3 — Arquitectura Hexagonal, Invariantes y Anti-SonarCloud (CP-1 a CP-7)**:
   - **CP-1 (Ledger Inmutable)**: Cero mutaciones sobre `inventoryTransaction`; `prisma.inventoryTransaction.count` se utiliza exclusivamente como guarda de solo lectura antes de rollback de lote.
@@ -24,7 +24,7 @@
   - **CP-3 (Fronteras del Monorepo)**: `@wms/shared-types` es 100% puro sin dependencias de base de datos; todos los imports locales usan extensión `.js` compatible con ESM `NodeNext`.
   - **CP-5 (ADR y Puertos)**: ADR 008 documentado exhaustivamente en `docs/adr/008-physical-topology-layout.md` e indexado en `docs/adr/README.md`.
   - **CP-6 (Higiene)**: Sin duplicados, código comentado ni dependencias residuales.
-  - **CP-7 (Anti-SonarCloud)**: Cero `Math.random()` en el código fuente (reemplazado por `randomUUID()` de `node:crypto`); regex puramente lineales sin backtracking exponencial (`S8786`); cero promesas flotantes (`S9383`).
+  - **CP-7 (Anti-SonarCloud & UI/UX Design System)**: Cero `Math.random()` en el código fuente (reemplazado por `randomUUID()` de `node:crypto`); regex puramente lineales sin backtracking exponencial (`S8786`); cero promesas flotantes (`S9383`); 0 colores hex crudos en JSX y clases semánticas `.wms-*` en `globals.css`.
 
 - [x] **Pilar 4 — Suite Completa de Tests, Compilación y Cobertura**:
   - `pnpm build`: 6 paquetes exitosos con exit code 0.
@@ -33,7 +33,7 @@
 
 ---
 
-## 2. Evidencia Ejecutada
+## 2. Evidencia Ejecutada (Ciclo de Remediación y Validación)
 
 ### `$ pnpm build`
 ```text
@@ -47,7 +47,7 @@
 
  Tasks:    6 successful, 6 total
 Cached:    6 cached, 6 total
-  Time:    74ms >>> FULL TURBO
+  Time:    73ms >>> FULL TURBO
 exit code: 0
 ```
 
@@ -71,8 +71,8 @@ exit code: 0
 @wms/api:test:          Tests  354 passed | 8 skipped (362)
 
  Tasks:    7 successful, 7 total
-Cached:    6 cached, 7 total
-  Time:    5.221s
+Cached:    5 cached, 7 total
+  Time:    5.15s
 exit code: 0
 ```
 
@@ -86,16 +86,16 @@ exit code: 0
 
  Test Files  28 passed | 3 skipped (31)
       Tests  354 passed | 8 skipped (362)
-   Start at  00:43:36
-   Duration  4.72s
+   Start at  01:25:37
+   Duration  4.48s
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   92.99 |    86.21 |   96.42 |   92.99 |                   
+All files          |   92.99 |    86.19 |   96.42 |   92.99 |                   
  catalog           |   98.95 |    92.22 |     100 |   98.95 |                   
- diagnostics       |   99.36 |    93.93 |     100 |   99.36 |                   
+ diagnostics       |   99.36 |    93.84 |     100 |   99.36 |                   
  integrations      |     100 |    90.14 |     100 |     100 |                   
  inventory         |    98.1 |    89.85 |     100 |    98.1 |                   
  labels            |   92.63 |    83.33 |     100 |   92.63 |                   
@@ -112,9 +112,15 @@ exit code: 0
 
 ## 3. Commits Atómicos Creados y Push (si ESTADO = PUBLISHED)
 
+### Entrega Principal:
 - `5d61335` `feat(shared-types): define storage topology contracts, pure normalization, and visual resolvers (F9.2)`
 - `bf485e0` `feat(db): extend Location with physical topology coordinates, enums, and composite indexes (F9.2)`
 - `bd48e8a` `feat(api): implement topology repository port, use-cases, routes, and unit tests (F9.2)`
 - `ab28f47` `feat(clients): add layout drill-down, structured block generator, and topology metrics (F9.2)`
-- `docs(progress): record F9.2 topology reports, ADR-008, knowledge base, and commit report`
+- `c8312d5` `docs(progress): record F9.2 topology reports, ADR-008, knowledge base, and commit report`
+
+### Remediación Visual y Coordenadas de Seeder:
+- `d515018` `fix(db): add structured physical coordinates to demo seed locations (F9.2)`
+- `406d955` `fix(web): migrate locations page to semantic .wms-* layout classes and responsive grids (F9.2)`
+- `docs(progress): record F9.2 visual remediation reports and update commit gate`
 - **Resultado de `git push`**: Publicado satisfactoriamente en `origin/main`.

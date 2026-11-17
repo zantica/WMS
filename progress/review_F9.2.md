@@ -1,7 +1,7 @@
 # Reporte de Revisión: F9.2 — Topología Física (`RACK` / `SHELVING` / `FLOOR`), Alta Estructurada de Ubicaciones y Vista Gráfica del Layout
 
 - **VEREDICTO**: APPROVED
-- **Fecha**: 2026-11-16
+- **Fecha**: 2026-11-17
 - **Auditor**: reviewer (subagente independiente) — nunca el leader ni el implementer
 
 ---
@@ -27,11 +27,13 @@
   - ADR 008 documentado exhaustivamente en `docs/adr/008-physical-topology-layout.md` e indexado en `docs/adr/README.md`.
 - [x] **CP-6: Higiene del Código (sin duplicados ni código muerto)**:
   - Sin archivos huérfanos, sin código comentado. Se preservó compatibilidad legacy en `POST /bulk` mapeando las coordenadas por defecto.
+  - `packages/db/src/seed.ts` actualizado con coordenadas físicas completas para datos de demostración.
 - [x] **CP-7: Principios SOLID y Cero Envars/Secretos en Código**:
   - Principios SOLID (SRP, OCP, LSP, ISP, DIP) respetados en puertos, adaptadores y casos de uso.
   - Cero variables de entorno (`process.env`) y cero secretos en casos de uso y puertos.
   - **SonarCloud S2245 (Cero Math.random)**: Hallazgos previos subsanados al 100% mediante `randomUUID` de `node:crypto` tanto en `apps/api/src/use-cases/topology/manage-locations.ts` como en `apps/api/src/adapters/in-memory-topology-repository.ts`. Verificado con búsqueda recursiva: 0 ocurrencias de `Math.random` en el monorepo.
   - Cero regex super-lineal ReDoS (`S8786`), cero promesas flotantes (`S9383`).
+  - Clases semánticas `.wms-*` unificadas en `apps/web/src/app/globals.css` (0 clases huérfanas de Tailwind inexistentes) y **0 colores hex crudos** en `apps/web/src/app/locations/page.tsx`. Retorno limpio como fragmento `<>...</>`.
 
 ---
 
@@ -55,8 +57,10 @@
    - `POST /api/v1/locations/generate-block` con `dryRun: true` simula sin persistir e informa colisiones.
    - `DELETE /api/v1/locations/batches/:batchId` protegido: rechaza con `409 LOCATION_BATCH_IN_USE` si existen saldos (`onHand > 0` o `allocated > 0`), movimientos en `InventoryTransaction` o pasos en `TaskStep`.
    - Botón directo para imprimir etiquetas del lote generado mediante `LabelPrintModal`.
-6. **Invariante 6 (Vista Web S5 sin Librerías Pesadas)**: `[PASS]`
+6. **Invariante 6 (Vista Web S5 con Clases Semánticas .wms-*)**: `[PASS]`
    - 0 colores hex crudos en `apps/web/src/app/locations/page.tsx` (verificado con regex `#[0-9a-fA-F]{3,8}`).
+   - Retorno como fragmento `<>...</>`.
+   - Implementadas clases semánticas `.wms-aisle-*`, `.wms-rack-*`, `.wms-floor-*`, `.wms-cell-*`, `.wms-legend-*` en `apps/web/src/app/globals.css`.
    - Alzado frontal invertido (niveles ordenados de mayor a menor en RACK/SHELVING) y planta para FLOOR.
    - Umbral de colapso automático a resumen por rack si el pasillo excede 200 celdas (`AISLE_CELL_COLLAPSE_THRESHOLD = 200`).
 
@@ -76,7 +80,26 @@
 
  Tasks:    6 successful, 6 total
 Cached:    6 cached, 6 total
-  Time:    71ms >>> FULL TURBO
+  Time:    70ms >>> FULL TURBO
+exit code: 0
+```
+
+### `$ pnpm --filter @wms/web test`
+```text
+> @wms/web@0.0.1 test C:\Users\santi\Documents\projects\WMS\apps\web
+> vitest run
+
+ RUN  v2.1.9 C:/Users/santi/Documents/projects/WMS/apps/web
+
+ ✓ src/lib/__tests__/api-client.test.ts (9 tests) 16ms
+ ✓ src/lib/__tests__/dashboard-metrics.test.ts (8 tests) 20ms
+ ✓ src/components/labels/__tests__/label-print-modal.test.tsx (9 tests) 26ms
+ ✓ src/app/locations/__tests__/locations-page.test.tsx (2 tests) 18ms
+
+ Test Files  4 passed (4)
+      Tests  28 passed (28)
+   Start at  01:23:32
+   Duration  794ms
 exit code: 0
 ```
 
@@ -88,42 +111,42 @@ exit code: 0
  RUN  v2.1.9 C:/Users/santi/Documents/projects/WMS/apps/api
       Coverage enabled with v8
 
- ✓ src/use-cases/users/__tests__/manage-users.test.ts (19 tests) 18ms
  ✓ src/use-cases/diagnostics/__tests__/diagnostics.test.ts (10 tests) 20ms
+ ✓ src/use-cases/users/__tests__/manage-users.test.ts (19 tests) 17ms
+ ✓ src/use-cases/catalog/__tests__/manage-products.test.ts (22 tests) 36ms
  ✓ src/use-cases/tasks/__tests__/confirm-receipt-line.test.ts (11 tests) 23ms
- ✓ src/use-cases/topology/__tests__/manage-locations.test.ts (17 tests) 40ms
- ✓ src/use-cases/tasks/__tests__/sync-task-batch.test.ts (10 tests) 22ms
- ✓ src/use-cases/catalog/__tests__/manage-products.test.ts (22 tests) 40ms
+ ✓ src/use-cases/topology/__tests__/manage-locations.test.ts (17 tests) 42ms
+ ✓ src/use-cases/tasks/__tests__/sync-task-batch.test.ts (10 tests) 23ms
  ↓ src/use-cases/tasks/__tests__/idempotency.integration.test.ts (3 tests | 3 skipped)
- ✓ src/use-cases/tasks/__tests__/confirm-task-step.test.ts (19 tests) 38ms
- ✓ src/use-cases/inventory/__tests__/handle-picking-exception.test.ts (13 tests) 54ms
- ✓ src/use-cases/security/__tests__/tenant-context.test.ts (16 tests) 48ms
- ✓ src/shared/__tests__/topology.test.ts (15 tests) 34ms
- ✓ src/use-cases/integrations/__tests__/webhooks.test.ts (25 tests) 279ms
- ✓ src/use-cases/catalog/__tests__/manage-categories.test.ts (16 tests) 36ms
- ✓ src/routes/__tests__/tasks-sync-batch.test.ts (5 tests) 203ms
- ✓ src/use-cases/inventory/__tests__/create-putaway-task.test.ts (7 tests) 34ms
- ✓ src/plugins/__tests__/auth.test.ts (25 tests) 468ms
- ✓ src/use-cases/inventory/__tests__/move-stock.test.ts (13 tests) 26ms
- ✓ src/use-cases/inventory/__tests__/cancel-order.test.ts (10 tests) 24ms
+ ✓ src/use-cases/inventory/__tests__/handle-picking-exception.test.ts (13 tests) 47ms
+ ✓ src/use-cases/tasks/__tests__/confirm-task-step.test.ts (19 tests) 48ms
+ ✓ src/use-cases/security/__tests__/tenant-context.test.ts (16 tests) 57ms
+ ✓ src/use-cases/inventory/__tests__/create-putaway-task.test.ts (7 tests) 35ms
+ ✓ src/shared/__tests__/topology.test.ts (15 tests) 29ms
+ ✓ src/use-cases/catalog/__tests__/manage-categories.test.ts (16 tests) 34ms
+ ✓ src/use-cases/integrations/__tests__/webhooks.test.ts (25 tests) 135ms
+ ✓ src/use-cases/inventory/__tests__/cancel-order.test.ts (10 tests) 25ms
+ ✓ src/use-cases/inventory/__tests__/move-stock.test.ts (13 tests) 28ms
+ ✓ src/routes/__tests__/tasks-sync-batch.test.ts (5 tests) 154ms
+ ✓ src/plugins/__tests__/auth.test.ts (25 tests) 347ms
+ ✓ src/use-cases/inventory/__tests__/allocate-order.test.ts (13 tests) 50ms
  ↓ src/use-cases/inventory/__tests__/ledger-locking.integration.test.ts (2 tests | 2 skipped)
- ✓ src/use-cases/inventory/__tests__/allocate-order.test.ts (13 tests) 44ms
  ✓ src/use-cases/labels/__tests__/generate-labels.test.ts (11 tests) 23ms
  ↓ src/use-cases/security/__tests__/tenant-rls.integration.test.ts (3 tests | 3 skipped)
- ✓ src/shared/__tests__/barcode-payload.test.ts (14 tests) 12ms
- ✓ src/adapters/__tests__/label-renderer.test.ts (12 tests) 17ms
- ✓ src/ports/__tests__/idempotency-store.test.ts (5 tests) 13ms
+ ✓ src/shared/__tests__/barcode-payload.test.ts (14 tests) 15ms
+ ✓ src/adapters/__tests__/label-renderer.test.ts (12 tests) 23ms
+ ✓ src/ports/__tests__/idempotency-store.test.ts (5 tests) 14ms
  ✓ src/__tests__/domain-prisma-parity.test.ts (5 tests) 9ms
- ✓ src/routes/v1/__tests__/diagnostics.test.ts (6 tests) 135ms
- ✓ src/routes/__tests__/locations-topology-routes.test.ts (10 tests) 706ms
- ✓ src/routes/__tests__/orders-dispatch.test.ts (4 tests) 72ms
- ✓ src/routes/__tests__/catalog-users-routes.test.ts (14 tests) 792ms
- ✓ src/routes/v1/__tests__/labels.test.ts (7 tests) 461ms
+ ✓ src/routes/v1/__tests__/diagnostics.test.ts (6 tests) 147ms
+ ✓ src/routes/__tests__/orders-dispatch.test.ts (4 tests) 85ms
+ ✓ src/routes/__tests__/locations-topology-routes.test.ts (10 tests) 794ms
+ ✓ src/routes/__tests__/catalog-users-routes.test.ts (14 tests) 911ms
+ ✓ src/routes/v1/__tests__/labels.test.ts (7 tests) 624ms
 
  Test Files  28 passed | 3 skipped (31)
       Tests  354 passed | 8 skipped (362)
-   Start at  00:36:41
-   Duration  4.45s (transform 3.45s, setup 0ms, collect 17.74s, tests 3.69s, environment 12ms, prepare 13.30s)
+   Start at  01:23:38
+   Duration  5.53s (transform 5.14s, setup 0ms, collect 23.82s, tests 3.80s, environment 12ms, prepare 14.80s)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -163,27 +186,8 @@ All files          |   92.99 |    86.21 |   96.42 |   92.99 |
 exit code: 0
 ```
 
-### `$ pnpm --filter @wms/web test`
-```text
-> @wms/web@0.0.1 test C:\Users\santi\Documents\projects\WMS\apps\web
-> vitest run
-
- RUN  v2.1.9 C:/Users/santi/Documents/projects/WMS/apps/web
-
- ✓ src/lib/__tests__/api-client.test.ts (9 tests) 17ms
- ✓ src/lib/__tests__/dashboard-metrics.test.ts (8 tests) 17ms
- ✓ src/components/labels/__tests__/label-print-modal.test.tsx (9 tests) 21ms
- ✓ src/app/locations/__tests__/locations-page.test.tsx (2 tests) 16ms
-
- Test Files  4 passed (4)
-      Tests  28 passed (28)
-   Start at  00:36:52
-   Duration  679ms
-exit code: 0
-```
-
 ---
 
 ## Hallazgos / Correcciones Requeridas
 
-*Ninguno pendiente. Los hallazgos de SonarCloud S2245 previos (`Math.random()` en `manage-locations.ts` y en `in-memory-topology-repository.ts`) fueron corregidos satisfactoriamente utilizando `randomUUID()` de `node:crypto`.*
+*Ninguno. Todas las observaciones previas y los requisitos del design system semántico (`.wms-*`), fragmento `<>...</>`, 0 hex crudos y seed estructurado han sido verificados satisfactoriamente.*

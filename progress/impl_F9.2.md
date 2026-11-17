@@ -15,6 +15,9 @@
   - Añadidos índices compuestos: `@@index([tenantId, warehouseId, zone, aisle])` y `@@index([tenantId, generationBatchId])`.
 - `packages/db/prisma/migrations/20261116000000_location_topology/migration.sql`:
   - Migración SQL declarativa con enums, columnas de coordenadas e índices compuestos.
+- `packages/db/src/seed.ts`:
+  - Actualizadas ubicaciones demo (`RECEPCION-01`, `A-01-01`..`A-10-01`, `PACKING-01`, `DISPATCH-01`) con coordenadas estructuradas reales (`RACK`, `FLOOR`, `zone`, `aisle`, `rack`, `level`, `position`) en `create` y `update`.
+  - Ejecutado `pnpm --filter @wms/db seed` para sincronizar `wms_dev`.
 - `packages/shared-types/src/index.ts`:
   - Exportados enums `StorageType` y `LocationStatus`.
   - Extendida interfaz `LocationDTO` manteniendo compatibilidad hacia atrás mediante propiedades opcionales.
@@ -49,15 +52,19 @@
   - 10 tests de integración HTTP de rutas Fastify mediante `app.inject()`.
 
 ### Frontend (`apps/web`)
+- `apps/web/src/app/globals.css`:
+  - Añadidas clases semánticas `.wms-*` para el layout físico: `.wms-aisle-grid`, `.wms-aisle-card`, `.wms-racks-grid`, `.wms-rack-card`, `.wms-rack-header`, `.wms-rack-elevation`, `.wms-rack-level-row`, `.wms-rack-level-label`, `.wms-rack-positions-row`, `.wms-rack-cell`, `.wms-rack-cell-compact`, `.wms-floor-grid`, `.wms-floor-bay-cell`, `.wms-legend-bar`, `.wms-legend-item`, `.wms-legend-swatch`, `.wms-cell-empty`, `.wms-cell-occupied`, `.wms-cell-reserved`, `.wms-cell-blocked`, `.wms-rack-summary-collapsed`, `.wms-grid-3`.
 - `apps/web/src/lib/api-client.ts`:
   - Añadidos métodos tipados en `WmsApiClient`: `getWarehouseLayoutSummary`, `getAisleLayoutDetail`, `generateLocationBlock`, `deleteLocationBatch`, `updateLocation`.
 - `apps/web/src/lib/dashboard-metrics.ts`:
   - Integrada fórmula canónica de ocupación `occupancyRate (%) = Math.round((occupiedLocations / activeLocations) * 100)` excluyendo ubicaciones `BLOCKED`.
 - `apps/web/src/app/locations/page.tsx`:
-  - Vista gráfica completa del Layout con S5 (`dark-data-dense`), P2 y T3, con **0 colores hex crudos**.
+  - Vista gráfica completa del Layout con S5 (`dark-data-dense`), P2 y T3, con **0 clases de Tailwind inexistentes** y **0 colores hex crudos**.
+  - Devuelve fragmento `<>...</>` directamente para integrarse limpiamente con `DashboardShell` (`<main className="wms-main">`).
+  - Paneles de Generador en Bloque y Alta Individual implementados como cajas de divulgación progresiva (`.wms-disclosure-box`) colapsables bajo demanda.
   - Modo Macro (Zonas -> Pasillos con barras térmicas) y Modo Drill-Down a Pasillo (alzado frontal invertido para RACK/SHELVING y planta para FLOOR).
   - Umbral de colapso de racks si el pasillo excede 200 celdas (`AISLE_CELL_COLLAPSE_THRESHOLD`).
-  - Modal del generador estructurado con simulación `dryRun`, detección de colisiones, confirmación de lote y botón directo **🏷️ Imprimir etiquetas del lote generado** (`LabelPrintModal`).
+  - Botón directo **🏷️ Imprimir etiquetas del lote generado** (`LabelPrintModal`).
 - `apps/web/src/lib/__tests__/api-client.test.ts`:
   - Suite de tests unitarios verificando llamadas HTTP de topología y layout.
 - `apps/web/src/lib/__tests__/dashboard-metrics.test.ts`:
@@ -206,12 +213,32 @@ All files          |   92.99 |    86.21 |   96.42 |   92.99 |
 
  RUN  v2.1.9 C:/Users/santi/Documents/projects/WMS/apps/web
 
- ✓ src/lib/__tests__/api-client.test.ts (9 tests) 15ms
- ✓ src/lib/__tests__/dashboard-metrics.test.ts (8 tests) 16ms
- ✓ src/components/labels/__tests__/label-print-modal.test.tsx (9 tests) 22ms
- ✓ src/app/locations/__tests__/locations-page.test.tsx (2 tests) 16ms
+ ✓ src/lib/__tests__/dashboard-metrics.test.ts (8 tests) 18ms
+ ✓ src/lib/__tests__/api-client.test.ts (9 tests) 21ms
+ ✓ src/components/labels/__tests__/label-print-modal.test.tsx (9 tests) 27ms
+ ✓ src/app/locations/__tests__/locations-page.test.tsx (2 tests) 19ms
 
  Test Files  4 passed (4)
       Tests  28 passed (28)
-   Duration  642ms
+   Duration  874ms
+```
+
+### `pnpm --filter @wms/db seed`
+```text
+> @wms/db@0.0.1 seed C:\Users\santi\Documents\projects\WMS\packages\db
+> tsx src/seed.ts
+
+🌱 Seeding database...
+✅ Tenant: Demo Almacén SL (apiKey: demo-api-key-12345)
+✅ Warehouse: Almacén Principal
+✅ 13 locations created
+✅ 3 demo users created (ADMIN, SUPERVISOR, OPERATOR)
+✅ 3 categories created (ROPA, CALZADO, ACCESORIOS)
+✅ 5 products created
+✅ Demo tasks created: task-demo-receiving (RECEIVING) & task-demo-picking (PICKING)
+
+🚀 Seed complete! Use these credentials to test:
+   API Key: demo-api-key-12345
+   Warehouse ID: warehouse-demo
+   Header: x-api-key: demo-api-key-12345
 ```
