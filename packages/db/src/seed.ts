@@ -35,25 +35,76 @@ async function main() {
   });
   console.log(`✅ Warehouse: ${warehouse.name}`);
 
-  // ── Ubicaciones ───────────────────────────────────────────────────────────
+  // ── Ubicaciones del almacén demo con topología estructurada (F9.2) ────────
   const locationDefs = [
     // Zona de recepción
-    { code: "RECEPCION-01", type: "RECEIVING" as const, description: "Zona de descarga principal" },
+    {
+      code: "RECEPCION-01",
+      type: "RECEIVING" as const,
+      storageType: "FLOOR" as const,
+      status: "ACTIVE" as const,
+      zone: "RECEIVING",
+      aisle: null as string | null,
+      rack: "01",
+      level: "01",
+      position: "01",
+      description: "Zona de descarga principal",
+    },
     // Estanterías de almacenaje
     ...Array.from({ length: 10 }, (_, i) => ({
       code: `A-${String(i + 1).padStart(2, "0")}-01`,
       type: "STORAGE" as const,
+      storageType: "RACK" as const,
+      status: "ACTIVE" as const,
+      zone: "STORAGE",
+      aisle: "A",
+      rack: String(i + 1).padStart(2, "0"),
+      level: "01",
+      position: "01",
       description: `Estantería A pasillo ${i + 1}`,
     })),
     // Mesa de packing
-    { code: "PACKING-01", type: "PACKING" as const, description: "Mesa de armado de pedidos" },
-    { code: "DISPATCH-01", type: "DISPATCH" as const, description: "Zona de salida y courier" },
+    {
+      code: "PACKING-01",
+      type: "PACKING" as const,
+      storageType: "FLOOR" as const,
+      status: "ACTIVE" as const,
+      zone: "PACKING",
+      aisle: null as string | null,
+      rack: "01",
+      level: "01",
+      position: "01",
+      description: "Mesa de armado de pedidos",
+    },
+    {
+      code: "DISPATCH-01",
+      type: "DISPATCH" as const,
+      storageType: "FLOOR" as const,
+      status: "ACTIVE" as const,
+      zone: "DISPATCH",
+      aisle: null as string | null,
+      rack: "01",
+      level: "01",
+      position: "01",
+      description: "Zona de salida y courier",
+    },
   ];
 
   for (const loc of locationDefs) {
     await prisma.location.upsert({
       where: { warehouseId_code: { warehouseId: warehouse.id, code: loc.code } },
-      update: {},
+      update: {
+        type: loc.type,
+        storageType: loc.storageType,
+        status: loc.status,
+        zone: loc.zone,
+        aisle: loc.aisle,
+        rack: loc.rack,
+        level: loc.level,
+        position: loc.position,
+        description: loc.description,
+        isActive: true,
+      },
       create: { ...loc, warehouseId: warehouse.id, tenantId: tenant.id },
     });
   }
