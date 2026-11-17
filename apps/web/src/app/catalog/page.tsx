@@ -148,7 +148,7 @@ export default function CatalogMasterPage(): JSX.Element {
       const parsedDepth = Number(depthCm);
 
       const created = await client.createProduct({
-        sku: sku.trim(),
+        ...(sku.trim().length > 0 ? { sku: sku.trim() } : {}),
         name: productName.trim(),
         ...(barcode.trim().length > 0 ? { barcode: barcode.trim() } : {}),
         ...(productCategoryId.trim().length > 0
@@ -426,13 +426,12 @@ export default function CatalogMasterPage(): JSX.Element {
           <form onSubmit={(e) => void handleCreateProduct(e)}>
             <div className="wms-grid-2">
               <label className="wms-field">
-                <span>Código SKU *</span>
+                <span>Código SKU (opcional, autogenerado si se omite)</span>
                 <input
                   type="text"
-                  required
                   value={sku}
                   onChange={(e) => setSku(e.target.value)}
-                  placeholder="PROD-010"
+                  placeholder="Autogenerado ej: ROPA-001 (o manual)"
                 />
               </label>
               <label className="wms-field">
@@ -460,12 +459,12 @@ export default function CatalogMasterPage(): JSX.Element {
                 </select>
               </label>
               <label className="wms-field">
-                <span>Código de barras (EAN / QR)</span>
+                <span>Código de barras (opcional, EAN-13 autogenerado si se omite)</span>
                 <input
                   type="text"
                   value={barcode}
                   onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="8410376000999"
+                  placeholder="Autogenerado ej: 20... (o manual)"
                 />
               </label>
               <label className="wms-field">
