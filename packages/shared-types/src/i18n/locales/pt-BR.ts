@@ -359,7 +359,10 @@ export const ptBR = {
       "inventoryTitle": "Estoque e kardex",
       "inventorySub": "Saldos ATP e ledger imutável",
       "operationsTitle": "Pedidos e tarefas",
-      "operationsSub": "Alocação, separação e expedição"
+      "operationsSub": "Alocação, separação e expedição",
+      "loginBtn": "Entrar",
+      "logoutBtn": "Sair",
+      "sessionRoleLabel": "Sessão ativa"
     },
     "overview": {
       "pageTitle": "Torre de controle operacional",
@@ -467,6 +470,7 @@ export const ptBR = {
       "syncBtn": "Sincronizar usuários",
       "syncingBtn": "Sincronizando…",
       "kpiTotal": "Total de Membros",
+      "kpiSuperusers": "Superusuários",
       "kpiAdmins": "Administradores",
       "kpiSupervisors": "Supervisores",
       "kpiOperators": "Operadores de Piso",
@@ -476,6 +480,8 @@ export const ptBR = {
       "formTitle": "◆ Cadastro de novo usuário no tenant",
       "fullNameLabel": "Nome completo *",
       "emailLabel": "E-mail corporativo *",
+      "passwordLabel": "Senha (opcional, mín. 8 caracteres)",
+      "passwordPlaceholder": "Mínimo 8 caracteres…",
       "roleLabel": "Função operacional *",
       "submitBtn": "Cadastrar usuário",
       "membersTitle": "Membros do tenant e atribuição de funções",
@@ -578,6 +584,29 @@ export const ptBR = {
       "selectHint": "Selecione ou ajuste itens para imprimir",
       "cancelBtn": "Cancelar",
       "printGridBtn": "🖨️ Imprimir Grade"
+    },
+    "auth": {
+      "eyebrow": "◆ ACESSO SEGURO WMS",
+      "loginTitle": "Entrar no Navelo WMS",
+      "loginSubtitle": "Autenticação JWT com cookie HttpOnly seguro e isolamento multi-tenant.",
+      "loginTab": "Entrar",
+      "bootstrapTab": "Inicializar Superusuário",
+      "emailLabel": "E-mail corporativo *",
+      "passwordLabel": "Senha *",
+      "showPassword": "Mostrar senha",
+      "hidePassword": "Ocultar senha",
+      "tenantOptionalLabel": "Tenant ID (opcional se o e-mail for único)",
+      "submitLoginBtn": "Entrar",
+      "loggingInBtn": "Autenticando…",
+      "bootstrapTitle": "Inicializar Superusuário do Sistema",
+      "bootstrapSubtitle": "Crie a conta raiz inicial (admin@navelo.dev) com privilégios globais SUPERUSER.",
+      "bootstrapNameLabel": "Nome completo *",
+      "bootstrapSecretLabel": "Setup Secret (obrigatório em ambiente protegido)",
+      "bootstrapSubmitBtn": "Criar Superusuário",
+      "bootstrappingBtn": "Criando Superusuário…",
+      "sessionActiveTitle": "Sessão ativa verificada",
+      "goToDashboardBtn": "Ir para Torre de Controle",
+      "logoutBtn": "Sair"
     }
   }
 } as const satisfies TranslationDictionary;

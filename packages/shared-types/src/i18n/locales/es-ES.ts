@@ -357,7 +357,10 @@ export const esES = {
       "inventoryTitle": "Inventario y kardex",
       "inventorySub": "Saldos ATP y ledger inmutable",
       "operationsTitle": "Pedidos y tareas",
-      "operationsSub": "Reserva, picking y despacho"
+      "operationsSub": "Reserva, picking y despacho",
+      "loginBtn": "Iniciar sesión",
+      "logoutBtn": "Cerrar sesión",
+      "sessionRoleLabel": "Sesión activa"
     },
     "overview": {
       "pageTitle": "Torre de control operativa",
@@ -465,6 +468,7 @@ export const esES = {
       "syncBtn": "Sincronizar usuarios",
       "syncingBtn": "Sincronizando…",
       "kpiTotal": "Total Miembros",
+      "kpiSuperusers": "Superusers",
       "kpiAdmins": "Administradores",
       "kpiSupervisors": "Supervisores",
       "kpiOperators": "Operadores de Piso",
@@ -474,6 +478,8 @@ export const esES = {
       "formTitle": "◆ Registro de nuevo usuario en el tenant",
       "fullNameLabel": "Nombre completo *",
       "emailLabel": "Email corporativo *",
+      "passwordLabel": "Contraseña (opcional, mín. 8 caracteres)",
+      "passwordPlaceholder": "Mínimo 8 caracteres…",
       "roleLabel": "Rol operativo *",
       "submitBtn": "Registrar usuario",
       "membersTitle": "Miembros del inquilino y asignación de roles",
@@ -576,6 +582,29 @@ export const esES = {
       "selectHint": "Selecciona o ajusta ítems para imprimir",
       "cancelBtn": "Cancelar",
       "printGridBtn": "🖨️ Imprimir Cuadrícula"
+    },
+    "auth": {
+      "eyebrow": "◆ ACCESO SEGURO WMS",
+      "loginTitle": "Iniciar sesión en Navelo WMS",
+      "loginSubtitle": "Autenticación JWT con cookie HttpOnly segura y aislamiento multi-tenant.",
+      "loginTab": "Iniciar sesión",
+      "bootstrapTab": "Inicializar Superuser",
+      "emailLabel": "Email corporativo *",
+      "passwordLabel": "Contraseña *",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña",
+      "tenantOptionalLabel": "Tenant ID (opcional si el email es único)",
+      "submitLoginBtn": "Iniciar sesión",
+      "loggingInBtn": "Autenticando…",
+      "bootstrapTitle": "Inicializar Superuser del Sistema",
+      "bootstrapSubtitle": "Crea la cuenta raíz inicial (admin@navelo.dev) con privilegios globales SUPERUSER.",
+      "bootstrapNameLabel": "Nombre completo *",
+      "bootstrapSecretLabel": "Setup Secret (requerido en entorno protegido)",
+      "bootstrapSubmitBtn": "Crear Superuser",
+      "bootstrappingBtn": "Creando Superuser…",
+      "sessionActiveTitle": "Sesión activa verificada",
+      "goToDashboardBtn": "Ir a Torre de control",
+      "logoutBtn": "Cerrar sesión"
     }
   }
 } as const;

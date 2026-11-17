@@ -359,7 +359,10 @@ export const enUS = {
       "inventoryTitle": "Inventory & ledger",
       "inventorySub": "ATP balances & immutable ledger",
       "operationsTitle": "Orders & tasks",
-      "operationsSub": "Allocation, picking & dispatch"
+      "operationsSub": "Allocation, picking & dispatch",
+      "loginBtn": "Sign in",
+      "logoutBtn": "Sign out",
+      "sessionRoleLabel": "Active session"
     },
     "overview": {
       "pageTitle": "Operational Control Tower",
@@ -467,6 +470,7 @@ export const enUS = {
       "syncBtn": "Sync users",
       "syncingBtn": "Syncing…",
       "kpiTotal": "Total Members",
+      "kpiSuperusers": "Superusers",
       "kpiAdmins": "Administrators",
       "kpiSupervisors": "Supervisors",
       "kpiOperators": "Floor Operators",
@@ -476,6 +480,8 @@ export const enUS = {
       "formTitle": "◆ Register new tenant user",
       "fullNameLabel": "Full name *",
       "emailLabel": "Corporate email *",
+      "passwordLabel": "Password (optional, min. 8 chars)",
+      "passwordPlaceholder": "Minimum 8 characters…",
       "roleLabel": "Operational role *",
       "submitBtn": "Register user",
       "membersTitle": "Tenant members & role assignment",
@@ -578,6 +584,29 @@ export const enUS = {
       "selectHint": "Select or adjust items to print",
       "cancelBtn": "Cancel",
       "printGridBtn": "🖨️ Print Grid"
+    },
+    "auth": {
+      "eyebrow": "◆ WMS SECURE ACCESS",
+      "loginTitle": "Sign in to Navelo WMS",
+      "loginSubtitle": "JWT session authentication with HttpOnly cookie and multi-tenant isolation.",
+      "loginTab": "Sign in",
+      "bootstrapTab": "Bootstrap Superuser",
+      "emailLabel": "Corporate email *",
+      "passwordLabel": "Password *",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "tenantOptionalLabel": "Tenant ID (optional if email is unique)",
+      "submitLoginBtn": "Sign in",
+      "loggingInBtn": "Signing in…",
+      "bootstrapTitle": "Initialize System Superuser",
+      "bootstrapSubtitle": "Create the initial root account (admin@navelo.dev) with global SUPERUSER privileges.",
+      "bootstrapNameLabel": "Full name *",
+      "bootstrapSecretLabel": "Setup Secret (required in protected environments)",
+      "bootstrapSubmitBtn": "Create Superuser",
+      "bootstrappingBtn": "Creating Superuser…",
+      "sessionActiveTitle": "Verified active session",
+      "goToDashboardBtn": "Go to Control Tower",
+      "logoutBtn": "Sign out"
     }
   }
 } as const satisfies TranslationDictionary;

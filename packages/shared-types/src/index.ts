@@ -6,7 +6,13 @@
 // ENUMS DE DOMINIO
 // ─────────────────────────────────────────────────────────────
 
-export type UserRole = "ADMIN" | "SUPERVISOR" | "OPERATOR";
+export const USER_ROLES = [
+  "SUPERUSER",
+  "ADMIN",
+  "SUPERVISOR",
+  "OPERATOR",
+] as const;
+export type UserRole = (typeof USER_ROLES)[number];
 
 export type LocationType = "RECEIVING" | "STORAGE" | "PACKING" | "DISPATCH";
 export type StorageType = "RACK" | "SHELVING" | "FLOOR";
@@ -364,6 +370,8 @@ export interface CreateTenantUserInput {
   email: string;
   role: UserRole;
   clerkId?: string | undefined;
+  password?: string | undefined;
+  tenantId?: string | undefined;
 }
 
 export interface UpdateTenantUserInput {
@@ -371,11 +379,54 @@ export interface UpdateTenantUserInput {
   email?: string | undefined;
   role?: UserRole | undefined;
   isActive?: boolean | undefined;
+  password?: string | undefined;
+  tenantId?: string | undefined;
 }
 
 export interface ListTenantUsersFilters {
   role?: UserRole | undefined;
   includeInactive?: boolean | undefined;
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTENTICACIÓN Y SESIÓN JWT (Hito 10 — F10.1)
+// ─────────────────────────────────────────────────────────────
+
+export const SESSION_COOKIE_NAME = "wms_session" as const;
+
+export interface AuthUserDTO {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+  tenantId?: string | undefined;
+}
+
+export interface LoginResponseDTO {
+  token: string;
+  expiresInSeconds: number;
+  user: AuthUserDTO;
+}
+
+export interface BootstrapSuperuserInput {
+  name: string;
+  email?: string | undefined;
+  password: string;
+  tenantId?: string | undefined;
+  setupSecret?: string | undefined;
+}
+
+export interface BootstrapStatusDTO {
+  hasSuperuser: boolean;
+  requiresSetupSecret: boolean;
+  defaultSuperuserEmail: string;
 }
 
 export interface CreateOrderInput {
@@ -488,6 +539,8 @@ export interface ListDiagnosticErrorsFilters {
 
 export const TENANT_CONTEXT_GUC = "app.current_tenant_id" as const;
 export const AUTH_CLERK_LOOKUP_GUC = "app.auth_clerk_id" as const;
+export const AUTH_EMAIL_LOOKUP_GUC = "app.auth_email" as const;
+export const AUTH_SUPERUSER_CHECK_GUC = "app.auth_superuser_check" as const;
 
 export type TenantIsolationLevel =
   | "ReadUncommitted"
