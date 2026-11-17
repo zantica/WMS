@@ -13,6 +13,9 @@ import {
   type AisleLayoutDetailDTO,
   type ApiError,
   type ApiResponse,
+  type AuthUserDTO,
+  type BootstrapStatusDTO,
+  type BootstrapSuperuserInput,
   type CategoryDTO,
   type CreateCategoryInput,
   type CreateLocationInput,
@@ -32,6 +35,8 @@ import {
   type ListTenantUsersFilters,
   type LocationDTO,
   type LocationType,
+  type LoginInput,
+  type LoginResponseDTO,
   type OrderStatus,
   type ProductDTO,
   type SalesOrderDTO,
@@ -286,6 +291,7 @@ export class WmsWebApiClient {
       response = await this.fetchImpl(url, {
         method,
         headers,
+        credentials: "include",
         ...(hasBody ? { body: JSON.stringify(options?.body) } : {}),
       });
     } catch (err) {
@@ -824,6 +830,55 @@ export class WmsWebApiClient {
       "POST",
       "/api/v1/labels/products",
       { body: request },
+    );
+  }
+
+  /**
+   * POST /api/v1/auth/login — Inicia sesión con email + contraseña y recibe JWT + cookie HttpOnly.
+   */
+  public async login(input: LoginInput): Promise<LoginResponseDTO> {
+    return this.requestEnvelope<LoginResponseDTO>("POST", "/api/v1/auth/login", {
+      body: input,
+    });
+  }
+
+  /**
+   * POST /api/v1/auth/logout — Cierra la sesión actual limpiando la cookie HttpOnly.
+   */
+  public async logout(): Promise<{ loggedOut: boolean }> {
+    return this.requestEnvelope<{ loggedOut: boolean }>(
+      "POST",
+      "/api/v1/auth/logout",
+    );
+  }
+
+  /**
+   * GET /api/v1/auth/me — Obtiene el perfil y rol del usuario autenticado.
+   */
+  public async getMe(): Promise<AuthUserDTO> {
+    return this.requestEnvelope<AuthUserDTO>("GET", "/api/v1/auth/me");
+  }
+
+  /**
+   * GET /api/v1/auth/bootstrap-status — Comprueba si existe una cuenta SUPERUSER inicializada.
+   */
+  public async getBootstrapStatus(): Promise<BootstrapStatusDTO> {
+    return this.requestEnvelope<BootstrapStatusDTO>(
+      "GET",
+      "/api/v1/auth/bootstrap-status",
+    );
+  }
+
+  /**
+   * POST /api/v1/auth/bootstrap-superuser — Inicializa la cuenta SUPERUSER (admin@navelo.dev).
+   */
+  public async bootstrapSuperuser(
+    input: BootstrapSuperuserInput,
+  ): Promise<LoginResponseDTO> {
+    return this.requestEnvelope<LoginResponseDTO>(
+      "POST",
+      "/api/v1/auth/bootstrap-superuser",
+      { body: input },
     );
   }
 }

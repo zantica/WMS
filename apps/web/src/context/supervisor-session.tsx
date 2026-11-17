@@ -1,6 +1,6 @@
 // apps/web/src/context/supervisor-session.tsx
-// Contexto React para la sesión del Supervisor en el Dashboard Web (@wms/web).
-// Gestiona la conexión multi-tenant (x-api-key / Authorization: Bearer), el warehouse activo y persistencia en localStorage.
+// Contexto React para la sesión del Supervisor / Usuario JWT en el Dashboard Web (@wms/web).
+// Gestiona la conexión multi-tenant (JWT Bearer / cookie HttpOnly wms_session / x-api-key), el warehouse activo y persistencia.
 
 import {
   createContext,
@@ -12,11 +12,17 @@ import {
   type JSX,
   type ReactNode,
 } from "react";
+import type {
+  AuthUserDTO,
+  BootstrapSuperuserInput,
+  LoginInput,
+  LoginResponseDTO,
+} from "@wms/shared-types";
 import {
   WmsWebApiClient,
   createWmsWebClient,
   type HealthCheckResponse,
-} from "../lib/api-client";
+} from "../lib/api-client.js";
 
 const STORAGE_KEY = "wms.web.supervisor_session.v1";
 
@@ -26,6 +32,7 @@ export interface SupervisorSession {
   bearerToken?: string | undefined;
   warehouseId: string;
   supervisorName: string;
+  currentUser?: AuthUserDTO | null | undefined;
   isConnected: boolean;
 }
 
@@ -38,6 +45,12 @@ export interface SupervisorSessionContextValue {
     apiKey?: string | undefined;
     bearerToken?: string | undefined;
   }) => Promise<HealthCheckResponse>;
+  login: (input: LoginInput) => Promise<LoginResponseDTO>;
+  bootstrapSuperuser: (
+    input: BootstrapSuperuserInput,
+  ) => Promise<LoginResponseDTO>;
+  logout: () => Promise<void>;
+  refreshSessionUser: () => Promise<AuthUserDTO | null>;
 }
 
 export const DEFAULT_SUPERVISOR_SESSION: SupervisorSession = {
@@ -45,6 +58,7 @@ export const DEFAULT_SUPERVISOR_SESSION: SupervisorSession = {
   apiKey: "demo-api-key-12345",
   warehouseId: "warehouse-demo",
   supervisorName: "Supervisor Turno Central",
+  currentUser: null,
   isConnected: true,
 };
 
@@ -86,6 +100,9 @@ export function SupervisorSessionProvider({
             : {}),
           ...(typeof parsed.supervisorName === "string"
             ? { supervisorName: parsed.supervisorName }
+            : {}),
+          ...(parsed.currentUser !== undefined
+            ? { currentUser: parsed.currentUser }
             : {}),
         }));
       }
@@ -147,14 +164,84 @@ export function SupervisorSessionProvider({
     [session.apiBaseUrl, session.apiKey, session.bearerToken, updateSession],
   );
 
+  const applyAuthenticatedResponse = useCallback(
+    (res: LoginResponseDTO): LoginResponseDTO => {
+      updateSession({
+        bearerToken: res.token,
+        apiKey: "",
+        currentUser: res.user,
+        supervisorName: res.user.name,
+        isConnected: true,
+      });
+      return res;
+    },
+    [updateSession],
+  );
+
+  const login = useCallback(
+    async (input: LoginInput): Promise<LoginResponseDTO> => {
+      const res = await client.login(input);
+      return applyAuthenticatedResponse(res);
+    },
+    [client, applyAuthenticatedResponse],
+  );
+
+  const bootstrapSuperuser = useCallback(
+    async (input: BootstrapSuperuserInput): Promise<LoginResponseDTO> => {
+      const res = await client.bootstrapSuperuser(input);
+      return applyAuthenticatedResponse(res);
+    },
+    [client, applyAuthenticatedResponse],
+  );
+
+  const logout = useCallback(async (): Promise<void> => {
+    try {
+      await client.logout();
+    } finally {
+      updateSession({
+        bearerToken: undefined,
+        currentUser: null,
+        apiKey: DEFAULT_SUPERVISOR_SESSION.apiKey,
+        supervisorName: DEFAULT_SUPERVISOR_SESSION.supervisorName,
+      });
+    }
+  }, [client, updateSession]);
+
+  const refreshSessionUser = useCallback(async (): Promise<AuthUserDTO | null> => {
+    try {
+      const me = await client.getMe();
+      updateSession({
+        currentUser: me,
+        supervisorName: me.name,
+        isConnected: true,
+      });
+      return me;
+    } catch {
+      return null;
+    }
+  }, [client, updateSession]);
+
   const value = useMemo<SupervisorSessionContextValue>(
     () => ({
       session,
       client,
       updateSession,
       testConnection,
+      login,
+      bootstrapSuperuser,
+      logout,
+      refreshSessionUser,
     }),
-    [session, client, updateSession, testConnection],
+    [
+      session,
+      client,
+      updateSession,
+      testConnection,
+      login,
+      bootstrapSuperuser,
+      logout,
+      refreshSessionUser,
+    ],
   );
 
   return (

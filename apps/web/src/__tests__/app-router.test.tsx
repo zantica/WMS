@@ -33,6 +33,18 @@ describe("AppRoutes (SPA Client Router)", () => {
     },
   );
 
+  it("renderiza correctamente la ruta /login con AuthTemplate y LoginForm", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={["/login"]}>
+        <AppRoutes initialLocale="es-ES" />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('data-testid="auth-template"');
+    expect(html).toContain('data-testid="login-form"');
+    expect(html).toContain("Navelo WMS");
+  });
+
   it("renderiza el fallback 404 SPA para rutas desconocidas", () => {
     const html = renderToStaticMarkup(
       <MemoryRouter initialEntries={["/ruta-desconocida"]}>

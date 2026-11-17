@@ -451,12 +451,28 @@ describe("dashboard-metrics (@wms/web)", () => {
     const summary = computeUsersSummary(users);
     expect(summary).toEqual({
       totalUsers: 4,
+      superuserCount: 0,
       adminCount: 1,
       supervisorCount: 1,
       operatorCount: 2,
       activeCount: 3,
       inactiveCount: 1,
     });
+
+    const withSuper = computeUsersSummary([
+      ...users,
+      {
+        id: "u5",
+        tenantId: "t1",
+        clerkId: "user_navelo_superuser",
+        name: "Superuser",
+        email: "admin@navelo.dev",
+        role: "SUPERUSER",
+        isActive: true,
+      },
+    ]);
+    expect(withSuper.superuserCount).toBe(1);
+    expect(withSuper.totalUsers).toBe(5);
 
     const emptySummary = computeUsersSummary([]);
     expect(emptySummary.totalUsers).toBe(0);

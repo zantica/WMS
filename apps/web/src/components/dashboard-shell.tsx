@@ -11,6 +11,7 @@ import {
 } from "@wms/shared-types";
 import { useTranslation } from "../context/locale-context";
 import { useSupervisorSession } from "../context/supervisor-session";
+import { SessionUserChip } from "./molecules/SessionUserChip.js";
 
 interface NavItemConfig {
   href: string;
@@ -64,11 +65,23 @@ export interface DashboardShellProps {
 
 export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
   const { pathname } = useLocation();
-  const { session, updateSession, testConnection } = useSupervisorSession();
+  const { session, updateSession, testConnection, logout } =
+    useSupervisorSession();
   const { locale, setLocale, t } = useTranslation();
   const [configOpen, setConfigOpen] = useState(false);
   const [pingMessage, setPingMessage] = useState<string | null>(null);
   const [isPinging, setIsPinging] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  async function handleLogout(): Promise<void> {
+    if (typeof logout !== "function") return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   async function handlePing(): Promise<void> {
     setIsPinging(true);
@@ -179,9 +192,11 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
               {session.apiBaseUrl}
             </span>
 
-            <span className="wms-tag wms-tag-slate wms-mono">
-              x-api-key: {session.apiKey.slice(0, 10)}…
-            </span>
+            {session.apiKey ? (
+              <span className="wms-tag wms-tag-slate wms-mono">
+                x-api-key: {session.apiKey.slice(0, 10)}…
+              </span>
+            ) : null}
 
             {pingMessage ? (
               <span className="wms-ping-msg" aria-live="polite">
@@ -220,6 +235,13 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
             >
               {isPinging ? t("web.shell.pingingBtn") : t("web.shell.pingBtn")}
             </button>
+            <SessionUserChip
+              currentUser={session.currentUser}
+              loginLabel={t("web.shell.loginBtn")}
+              logoutLabel={t("web.shell.logoutBtn")}
+              onLogout={typeof logout === "function" ? handleLogout : undefined}
+              loggingOut={isLoggingOut}
+            />
             <button
               type="button"
               className="wms-btn wms-btn-outline wms-btn-sm"

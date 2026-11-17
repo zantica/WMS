@@ -13,6 +13,7 @@ import {
 import CatalogMasterPage from "./pages/catalog-page.js";
 import InventoryAndKardexPage from "./pages/inventory-page.js";
 import WarehouseLocationsPage from "./pages/locations-page.js";
+import LoginPage from "./pages/login-page.js";
 import NotFoundPage from "./pages/not-found-page.js";
 import OperationsMonitorPage from "./pages/operations-page.js";
 import SupervisorOverviewPage from "./pages/overview-page.js";
@@ -38,6 +39,7 @@ export function AppRoutes({
             <Route path="/locations" element={<WarehouseLocationsPage />} />
             <Route path="/operations" element={<OperationsMonitorPage />} />
             <Route path="/users" element={<TenantUsersPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </DashboardShell>

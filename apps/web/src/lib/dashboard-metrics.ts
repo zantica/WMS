@@ -132,6 +132,7 @@ export interface TopologySummary {
 
 export interface UsersSummary {
   totalUsers: number;
+  superuserCount: number;
   adminCount: number;
   supervisorCount: number;
   operatorCount: number;
@@ -522,6 +523,7 @@ export function computeTopologySummary(
 export function computeUsersSummary(
   users: readonly TenantUserDTO[],
 ): UsersSummary {
+  let superuserCount = 0;
   let adminCount = 0;
   let supervisorCount = 0;
   let operatorCount = 0;
@@ -529,7 +531,9 @@ export function computeUsersSummary(
   let inactiveCount = 0;
 
   for (const u of users) {
-    if (u.role === "ADMIN") {
+    if (u.role === "SUPERUSER") {
+      superuserCount += 1;
+    } else if (u.role === "ADMIN") {
       adminCount += 1;
     } else if (u.role === "SUPERVISOR") {
       supervisorCount += 1;
@@ -546,6 +550,7 @@ export function computeUsersSummary(
 
   return {
     totalUsers: users.length,
+    superuserCount,
     adminCount,
     supervisorCount,
     operatorCount,

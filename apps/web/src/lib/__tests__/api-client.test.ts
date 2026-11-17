@@ -891,4 +891,90 @@ describe("WmsWebApiClient (@wms/web)", () => {
       }),
     );
   });
+
+  it("supports auth session endpoints (login, logout, getMe, getBootstrapStatus, bootstrapSuperuser) with credentials include", async () => {
+    const authUser = {
+      id: "usr-super",
+      tenantId: "demo-tenant",
+      name: "Navelo Superuser",
+      email: "admin@navelo.dev",
+      role: "SUPERUSER" as const,
+      isActive: true,
+    };
+
+    const mockFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            hasSuperuser: false,
+            requiresSetupSecret: false,
+            defaultSuperuserEmail: "admin@navelo.dev",
+          },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { token: "jwt-boot", expiresInSeconds: 28800, user: authUser },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { token: "jwt-login", expiresInSeconds: 28800, user: authUser },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ success: true, data: authUser }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { loggedOut: true },
+        }),
+      } as unknown as Response);
+
+    const client = createWmsWebClient({
+      baseUrl: "http://localhost:3001",
+      fetchImpl: mockFetch,
+    });
+
+    const status = await client.getBootstrapStatus();
+    expect(status.hasSuperuser).toBe(false);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:3001/api/v1/auth/bootstrap-status",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+
+    const boot = await client.bootstrapSuperuser({
+      name: "Navelo Superuser",
+      password: "Password!2026",
+    });
+    expect(boot.user.role).toBe("SUPERUSER");
+
+    const logged = await client.login({
+      email: "admin@navelo.dev",
+      password: "Password!2026",
+    });
+    expect(logged.token).toBe("jwt-login");
+
+    const me = await client.getMe();
+    expect(me.email).toBe("admin@navelo.dev");
+
+    const out = await client.logout();
+    expect(out.loggedOut).toBe(true);
+  });
 });

@@ -2041,6 +2041,232 @@ textarea:focus-visible {
 }
 
 /* ==========================================================================
+   Diseño Atómico, Sesión JWT y Auth Template (F10.1)
+   ========================================================================== */
+.wms-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.wms-label-required {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.wms-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.wms-input,
+.wms-select {
+  width: 100%;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  min-height: 38px;
+  padding: 0.45rem 0.7rem;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.wms-input::placeholder {
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+.wms-input:hover:not(:disabled),
+.wms-select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.wms-input:disabled,
+.wms-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wms-input-invalid {
+  border-color: var(--danger);
+  background-color: var(--danger-tint);
+}
+
+.wms-field-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.wms-field-error {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.wms-password-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.wms-password-wrap .wms-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.wms-alert-info {
+  border-radius: var(--radius-lg);
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--accent-border);
+  background-color: var(--accent-tint);
+  color: var(--text);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.wms-alert-warning {
+  border-radius: var(--radius-lg);
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--warning-border);
+  background-color: var(--warning-tint);
+  color: var(--text);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.wms-session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background-color: var(--surface-card);
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.wms-session-chip-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wms-auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 1.5rem 0.75rem;
+  min-height: 70vh;
+}
+
+.wms-auth-card {
+  width: 100%;
+  max-width: 520px;
+  background-color: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.wms-auth-header {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.wms-auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  background-color: var(--surface);
+  padding: 0.3rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.wms-auth-tab {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+
+.wms-auth-tab:hover {
+  color: var(--text);
+}
+
+.wms-auth-tab-active {
+  background-color: var(--accent-tint);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.wms-auth-footer {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 960px) {
+  .wms-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .wms-sidebar {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wms-grid-4,
+  .wms-grid-3,
+  .wms-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
    Impresión Logística de Etiquetas (F5.2) — Térmica / A4
    ========================================================================== */
 @media print {
