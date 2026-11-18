@@ -10,7 +10,11 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import type { TenantUserDTO } from "@wms/shared-types";
 import { LocaleProvider } from "../../context/locale-context.js";
-import { SupervisorSessionProvider } from "../../context/supervisor-session.js";
+import {
+  SupervisorSessionProvider,
+  useSupervisorSession,
+  type SupervisorSessionContextValue,
+} from "../../context/supervisor-session.js";
 import LoginPage from "../../pages/login-page.js";
 import TenantUsersPage from "../../pages/users-page.js";
 import { Alert } from "../atoms/Alert.js";
@@ -102,9 +106,14 @@ describe("F10.1 — Diseño Atómico UI, Auth JWT y Gestión de Usuarios", () =>
 
     expect(html).toContain("Campo obligatorio");
     expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain("wms-password-toggle");
     expect(html).toContain("★");
     expect(html).toContain("admin@navelo.dev");
     expect(html).toContain('href="/login"');
+    expect(html).toContain("wms-login-trigger");
+    expect(html).toContain("wms-session-chip-active");
+    expect(html).toContain("wms-session-active-dot");
+    expect(html).toContain(">NS</span>");
     expect(html).toContain("Cerrar sesión");
   });
 
@@ -165,8 +174,20 @@ describe("F10.1 — Diseño Atómico UI, Auth JWT y Gestión de Usuarios", () =>
     expect(superCreateHtml).toContain('data-testid="bootstrap-superuser-form"');
     expect(superCreateHtml).toContain('data-testid="login-form"');
     expect(superCreateHtml).toContain('id="wms-bootstrap-secret"');
+    expect(superCreateHtml).toContain("¿Usar Tenant ID específico?");
+    expect(superCreateHtml).toContain('aria-expanded="false"');
+    expect(superCreateHtml).not.toContain('id="wms-login-tenant"');
+    expect(superCreateHtml).toContain("wms-btn-block");
     expect(superCreateHtml).toContain('value="SUPERUSER"');
     expect(superCreateHtml).toContain("admin@navelo.dev");
+
+    const loginOnlyHtml = renderToStaticMarkup(
+      <LocaleProvider initialLocale="es-ES">
+        <LoginForm onSubmit={vi.fn()} defaultEmail="admin@navelo.dev" />
+      </LocaleProvider>,
+    );
+    expect(loginOnlyHtml).toContain("wms-btn-block");
+    expect(loginOnlyHtml).not.toContain("wms-form-footer");
 
     // ADMIN no tiene opción SUPERUSER en CreateUserPanel
     const adminCreateHtml = renderToStaticMarkup(
@@ -204,12 +225,62 @@ describe("F10.1 — Diseño Atómico UI, Auth JWT y Gestión de Usuarios", () =>
       </MemoryRouter>,
     );
 
+    expect(html).toContain('data-testid="active-session-panel"');
     expect(html).toContain("Sesión activa verificada");
+    expect(html).toContain("Ya tienes una sesión iniciada como Navelo Superuser (admin@navelo.dev)");
+    expect(html).toContain("Ir al Dashboard");
+    expect(html).toContain("Cerrar sesión y cambiar de cuenta");
     expect(html).toContain("admin@navelo.dev");
     expect(html).toContain("Control de Usuarios y Roles (RBAC)");
   });
 
-  it("garantiza cero colores hex crudos en los componentes TSX de Diseño Atómico", () => {
+  it("bloquea login() y bootstrapSuperuser() cuando ya existe una sesión activa", async () => {
+    let captured: SupervisorSessionContextValue | null = null;
+    function SessionProbe(): React.JSX.Element {
+      captured = useSupervisorSession();
+      return <div />;
+    }
+
+    renderToStaticMarkup(
+      <LocaleProvider initialLocale="es-ES">
+        <SupervisorSessionProvider
+          initialSession={{
+            currentUser: {
+              id: "u-root",
+              tenantId: "demo-tenant",
+              name: "Navelo Superuser",
+              email: "admin@navelo.dev",
+              role: "SUPERUSER",
+              isActive: true,
+            },
+          }}
+        >
+          <SessionProbe />
+        </SupervisorSessionProvider>
+      </LocaleProvider>,
+    );
+
+    expect(captured).not.toBeNull();
+    expect(captured!.sessionFeedback).toBeNull();
+
+    await expect(
+      captured!.login({ email: "other@navelo.dev", password: "Password123!" }),
+    ).rejects.toThrow(
+      "Ya existe una sesión activa. Cierra la sesión actual antes de iniciar otra.",
+    );
+
+    await expect(
+      captured!.bootstrapSuperuser({
+        name: "Another Admin",
+        email: "other@navelo.dev",
+        password: "Password123!",
+      }),
+    ).rejects.toThrow(
+      "Ya existe una sesión activa. Cierra la sesión actual antes de iniciar otra.",
+    );
+  });
+
+  it("garantiza cero colores hex crudos en los componentes TSX de Diseño Atómico, DashboardShell y LoginPage", () => {
     const componentsDir = path.resolve(__dirname, "..");
     const folders = ["atoms", "molecules", "organisms", "templates"];
     const hexPattern = /#[0-9a-fA-F]{3,8}\b/;
@@ -226,6 +297,21 @@ describe("F10.1 — Diseño Atómico UI, Auth JWT y Gestión de Usuarios", () =>
           `Se encontró hex crudo en ${folder}/${file}`,
         ).toBe(false);
       }
+    }
+
+    const extraFiles = [
+      path.join(componentsDir, "dashboard-shell.tsx"),
+      path.resolve(componentsDir, "../pages/login-page.tsx"),
+    ];
+    for (const filePath of extraFiles) {
+      const content = fs.readFileSync(filePath, "utf8");
+      const codeWithoutComments = content
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      expect(
+        hexPattern.test(codeWithoutComments),
+        `Se encontró hex crudo en ${path.basename(filePath)}`,
+      ).toBe(false);
     }
   });
 });

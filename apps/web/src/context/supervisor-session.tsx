@@ -20,11 +20,18 @@ import type {
 } from "@wms/shared-types";
 import {
   WmsWebApiClient,
+  WmsWebApiError,
   createWmsWebClient,
   type HealthCheckResponse,
 } from "../lib/api-client.js";
+import { useTranslation } from "./locale-context.js";
 
 const STORAGE_KEY = "wms.web.supervisor_session.v1";
+
+export interface SessionFeedback {
+  type: "success" | "info" | "warning";
+  message: string;
+}
 
 export interface SupervisorSession {
   apiBaseUrl: string;
@@ -39,6 +46,8 @@ export interface SupervisorSession {
 export interface SupervisorSessionContextValue {
   session: SupervisorSession;
   client: WmsWebApiClient;
+  sessionFeedback: SessionFeedback | null;
+  clearSessionFeedback: () => void;
   updateSession: (partial: Partial<SupervisorSession>) => void;
   testConnection: (override?: {
     apiBaseUrl?: string | undefined;
@@ -74,41 +83,16 @@ export function SupervisorSessionProvider({
   children,
   initialSession,
 }: SupervisorSessionProviderProps): JSX.Element {
+  const { t } = useTranslation();
   const [session, setSession] = useState<SupervisorSession>(() => ({
     ...DEFAULT_SUPERVISOR_SESSION,
     ...initialSession,
   }));
+  const [sessionFeedback, setSessionFeedback] =
+    useState<SessionFeedback | null>(null);
 
-  useEffect(() => {
-    try {
-      const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<SupervisorSession>;
-        setSession((prev) => ({
-          ...prev,
-          ...(typeof parsed.apiBaseUrl === "string"
-            ? { apiBaseUrl: parsed.apiBaseUrl }
-            : {}),
-          ...(typeof parsed.apiKey === "string"
-            ? { apiKey: parsed.apiKey }
-            : {}),
-          ...(typeof parsed.bearerToken === "string"
-            ? { bearerToken: parsed.bearerToken }
-            : {}),
-          ...(typeof parsed.warehouseId === "string"
-            ? { warehouseId: parsed.warehouseId }
-            : {}),
-          ...(typeof parsed.supervisorName === "string"
-            ? { supervisorName: parsed.supervisorName }
-            : {}),
-          ...(parsed.currentUser !== undefined
-            ? { currentUser: parsed.currentUser }
-            : {}),
-        }));
-      }
-    } catch {
-      // Ignore localStorage read errors in restricted environments
-    }
+  const clearSessionFeedback = useCallback(() => {
+    setSessionFeedback(null);
   }, []);
 
   const updateSession = useCallback((partial: Partial<SupervisorSession>) => {
@@ -125,6 +109,94 @@ export function SupervisorSessionProvider({
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    let parsedStorage: Partial<SupervisorSession> | null = null;
+    try {
+      const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
+      if (raw) {
+        parsedStorage = JSON.parse(raw) as Partial<SupervisorSession>;
+        setSession((prev) => ({
+          ...prev,
+          ...(typeof parsedStorage?.apiBaseUrl === "string"
+            ? { apiBaseUrl: parsedStorage.apiBaseUrl }
+            : {}),
+          ...(typeof parsedStorage?.apiKey === "string"
+            ? { apiKey: parsedStorage.apiKey }
+            : {}),
+          ...(typeof parsedStorage?.bearerToken === "string"
+            ? { bearerToken: parsedStorage.bearerToken }
+            : {}),
+          ...(typeof parsedStorage?.warehouseId === "string"
+            ? { warehouseId: parsedStorage.warehouseId }
+            : {}),
+          ...(typeof parsedStorage?.supervisorName === "string"
+            ? { supervisorName: parsedStorage.supervisorName }
+            : {}),
+          ...(parsedStorage?.currentUser !== undefined
+            ? { currentUser: parsedStorage.currentUser }
+            : {}),
+        }));
+      }
+    } catch {
+      // Ignore localStorage read errors in restricted environments
+    }
+
+    const effectiveUser =
+      initialSession?.currentUser ?? parsedStorage?.currentUser ?? null;
+    const effectiveToken =
+      parsedStorage?.bearerToken ?? initialSession?.bearerToken;
+    const effectiveBaseUrl =
+      parsedStorage?.apiBaseUrl ??
+      initialSession?.apiBaseUrl ??
+      DEFAULT_SUPERVISOR_SESSION.apiBaseUrl;
+    const effectiveApiKey =
+      parsedStorage?.apiKey ??
+      initialSession?.apiKey ??
+      DEFAULT_SUPERVISOR_SESSION.apiKey;
+
+    const shouldValidateSession =
+      !effectiveUser &&
+      (Boolean(effectiveToken) ||
+        (typeof window !== "undefined" &&
+          typeof globalThis.fetch === "function" &&
+          !initialSession));
+
+    if (!shouldValidateSession) {
+      return;
+    }
+
+    let cancelled = false;
+    const probeClient = createWmsWebClient({
+      baseUrl: effectiveBaseUrl,
+      apiKey: effectiveApiKey,
+      bearerToken: effectiveToken,
+    });
+
+    void probeClient
+      .getMe()
+      .then((me) => {
+        if (cancelled) return;
+        updateSession({
+          currentUser: me,
+          supervisorName: me.name,
+          isConnected: true,
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof WmsWebApiError && err.statusCode === 401 && effectiveToken) {
+          updateSession({
+            bearerToken: undefined,
+            currentUser: null,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSession, updateSession]);
 
   const client = useMemo(
     () =>
@@ -173,25 +245,38 @@ export function SupervisorSessionProvider({
         supervisorName: res.user.name,
         isConnected: true,
       });
+      setSessionFeedback({
+        type: "success",
+        message: t("web.auth.loginSuccessFeedback", {
+          name: res.user.name,
+          role: res.user.role,
+        }),
+      });
       return res;
     },
-    [updateSession],
+    [t, updateSession],
   );
 
   const login = useCallback(
     async (input: LoginInput): Promise<LoginResponseDTO> => {
+      if (session.currentUser) {
+        throw new Error(t("web.auth.activeSessionLoginBlocked"));
+      }
       const res = await client.login(input);
       return applyAuthenticatedResponse(res);
     },
-    [client, applyAuthenticatedResponse],
+    [session.currentUser, t, client, applyAuthenticatedResponse],
   );
 
   const bootstrapSuperuser = useCallback(
     async (input: BootstrapSuperuserInput): Promise<LoginResponseDTO> => {
+      if (session.currentUser) {
+        throw new Error(t("web.auth.activeSessionLoginBlocked"));
+      }
       const res = await client.bootstrapSuperuser(input);
       return applyAuthenticatedResponse(res);
     },
-    [client, applyAuthenticatedResponse],
+    [session.currentUser, t, client, applyAuthenticatedResponse],
   );
 
   const logout = useCallback(async (): Promise<void> => {
@@ -204,8 +289,12 @@ export function SupervisorSessionProvider({
         apiKey: DEFAULT_SUPERVISOR_SESSION.apiKey,
         supervisorName: DEFAULT_SUPERVISOR_SESSION.supervisorName,
       });
+      setSessionFeedback({
+        type: "info",
+        message: t("web.auth.logoutSuccessFeedback"),
+      });
     }
-  }, [client, updateSession]);
+  }, [client, t, updateSession]);
 
   const refreshSessionUser = useCallback(async (): Promise<AuthUserDTO | null> => {
     try {
@@ -225,6 +314,8 @@ export function SupervisorSessionProvider({
     () => ({
       session,
       client,
+      sessionFeedback,
+      clearSessionFeedback,
       updateSession,
       testConnection,
       login,
@@ -235,6 +326,8 @@ export function SupervisorSessionProvider({
     [
       session,
       client,
+      sessionFeedback,
+      clearSessionFeedback,
       updateSession,
       testConnection,
       login,

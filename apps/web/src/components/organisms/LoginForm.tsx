@@ -27,6 +27,7 @@ export function LoginForm({
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
   const [tenantId, setTenantId] = useState("");
+  const [showTenantField, setShowTenantField] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -76,23 +77,46 @@ export function LoginForm({
         hideLabel={t("web.auth.hidePassword")}
       />
 
-      <FormField
-        label={t("web.auth.tenantOptionalLabel")}
-        htmlFor="wms-login-tenant"
-      >
-        <Input
-          id="wms-login-tenant"
-          type="text"
-          mono
-          value={tenantId}
-          onChange={(e) => setTenantId(e.target.value)}
-          placeholder="demo-tenant"
+      <div className="wms-tenant-toggle-wrap">
+        <button
+          type="button"
+          className="wms-tenant-toggle"
+          aria-expanded={showTenantField}
+          aria-controls="wms-login-tenant-panel"
+          onClick={() => setShowTenantField((prev) => !prev)}
           disabled={loading}
-        />
-      </FormField>
+        >
+          <span aria-hidden="true">{showTenantField ? "▾" : "▸"}</span>
+          <span>{t("web.auth.tenantToggleLabel")}</span>
+        </button>
 
-      <div className="wms-form-footer">
-        <Button type="submit" variant="primary" loading={loading}>
+        {showTenantField ? (
+          <div id="wms-login-tenant-panel" className="wms-tenant-panel">
+            <FormField
+              label={t("web.auth.tenantOptionalLabel")}
+              htmlFor="wms-login-tenant"
+            >
+              <Input
+                id="wms-login-tenant"
+                type="text"
+                mono
+                value={tenantId}
+                onChange={(e) => setTenantId(e.target.value)}
+                placeholder="demo-tenant"
+                disabled={loading}
+              />
+            </FormField>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="wms-auth-submit-row">
+        <Button
+          type="submit"
+          variant="primary"
+          className="wms-btn-block"
+          loading={loading}
+        >
           {loading ? t("web.auth.loggingInBtn") : t("web.auth.submitLoginBtn")}
         </Button>
       </div>

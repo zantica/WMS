@@ -26,6 +26,7 @@ import {
 } from "../components/templates/AuthTemplate.js";
 import { useTranslation } from "../context/locale-context.js";
 import { useSupervisorSession } from "../context/supervisor-session.js";
+import { getUserInitials } from "../lib/user-initials.js";
 
 export default function LoginPage(): JSX.Element {
   const navigate = useNavigate();
@@ -90,6 +91,10 @@ export default function LoginPage(): JSX.Element {
   }
 
   if (session.currentUser) {
+    const initials = getUserInitials(
+      session.currentUser.name,
+      session.currentUser.email,
+    );
     return (
       <AuthTemplate
         mode={mode}
@@ -99,26 +104,47 @@ export default function LoginPage(): JSX.Element {
         subtitle={session.currentUser.email}
         footerText={`Tenant: ${session.currentUser.tenantId}`}
       >
-        <div className="wms-stack">
-          <Alert variant="success">
-            <strong>{session.currentUser.name}</strong> ({session.currentUser.email})
-          </Alert>
-          <div className="wms-row-between">
-            <UserRoleBadge role={session.currentUser.role} />
-            <Badge tone="slate">{session.currentUser.tenantId}</Badge>
+        <div className="wms-stack" data-testid="active-session-panel">
+          <div className="wms-active-session-card">
+            <div className="wms-active-session-identity">
+              <span className="wms-active-session-avatar" aria-hidden="true">
+                {initials}
+              </span>
+              <div className="wms-active-session-meta">
+                <div className="wms-active-session-name">
+                  {session.currentUser.name}
+                </div>
+                <div className="wms-active-session-email wms-mono">
+                  {session.currentUser.email}
+                </div>
+              </div>
+            </div>
+            <div className="wms-active-session-badges">
+              <UserRoleBadge role={session.currentUser.role} />
+              <Badge tone="slate">{session.currentUser.tenantId}</Badge>
+            </div>
           </div>
-          <div className="wms-form-footer">
+
+          <Alert variant="warning">
+            {t("web.auth.activeSessionNotice", {
+              name: session.currentUser.name,
+              email: session.currentUser.email,
+            })}
+          </Alert>
+
+          <div className="wms-active-session-actions">
+            <Link to="/" className="wms-btn wms-btn-primary wms-btn-block">
+              {t("web.auth.goToDashboardBtn")}
+            </Link>
             <Button
               variant="outline"
+              className="wms-btn-block"
               onClick={() => {
                 void logout();
               }}
             >
-              {t("web.auth.logoutBtn")}
+              {t("web.auth.logoutAndSwitchBtn")}
             </Button>
-            <Link to="/" className="wms-btn wms-btn-primary">
-              {t("web.auth.goToDashboardBtn")}
-            </Link>
           </div>
         </div>
       </AuthTemplate>

@@ -116,8 +116,13 @@ export function BootstrapSuperuserForm({
         />
       ) : null}
 
-      <div className="wms-form-footer">
-        <Button type="submit" variant="primary" loading={loading}>
+      <div className="wms-auth-submit-row">
+        <Button
+          type="submit"
+          variant="primary"
+          className="wms-btn-block"
+          loading={loading}
+        >
           {loading
             ? t("web.auth.bootstrappingBtn")
             : t("web.auth.bootstrapSubmitBtn")}

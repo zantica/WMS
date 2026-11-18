@@ -31,20 +31,20 @@ export function AuthTemplate({
     <section className="wms-auth-page" data-testid="auth-template">
       <div className="wms-auth-card">
         <header className="wms-auth-header">
-          <div className="wms-brand-badge" aria-hidden="true">
+          <div className="wms-brand-badge wms-auth-brand-badge" aria-hidden="true">
             <img
               src="/icons/navelo-icon.svg"
               alt=""
               aria-hidden="true"
-              width={36}
-              height={36}
+              width={40}
+              height={40}
               className="wms-brand-icon"
             />
           </div>
-          <div>
+          <div className="wms-auth-header-copy">
             <div className="wms-eyebrow">{t("web.auth.eyebrow")}</div>
-            <h1 className="wms-page-title">{title}</h1>
-            <p className="wms-page-subtitle">{subtitle}</p>
+            <h1 className="wms-auth-title">{title}</h1>
+            <p className="wms-auth-subtitle">{subtitle}</p>
           </div>
         </header>
 
@@ -75,7 +75,7 @@ export function AuthTemplate({
           </div>
         ) : null}
 
-        <div>{children}</div>
+        <div className="wms-auth-body">{children}</div>
 
         {footerText ? (
           <footer className="wms-auth-footer">

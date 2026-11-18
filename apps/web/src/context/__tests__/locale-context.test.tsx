@@ -42,9 +42,14 @@ vi.mock("../supervisor-session", () => ({
 }));
 
 function TranslationProbe(): React.JSX.Element {
-  const { locale, t, formatNumber } = useTranslation();
+  const { locale, region, availableLocales, t, formatNumber } =
+    useTranslation();
   return (
-    <div data-locale={locale}>
+    <div
+      data-locale={locale}
+      data-region={region}
+      data-available={availableLocales.join(",")}
+    >
       <span data-testid="nav-dash">{t("nav.dashboard")}</span>
       <span data-testid="delivery">{t("domain.deliveryNote")}</span>
       <span data-testid="num">{formatNumber(1234.5)}</span>
@@ -83,10 +88,10 @@ describe("@wms/web LocaleProvider & i18n integration", () => {
     }
   });
 
-  it("renderiza DashboardShell con selector regional (5 opciones) y navegación traducida", () => {
+  it("renderiza DashboardShell con selector compacto por siglas (ES/PT/EN) filtrado por región y navegación traducida", () => {
     const htmlEn = renderToStaticMarkup(
       <MemoryRouter initialEntries={["/"]}>
-        <LocaleProvider initialLocale="en-US">
+        <LocaleProvider initialLocale="en-US" timeZone="Europe/Madrid">
           <DashboardShell>
             <div>Child</div>
           </DashboardShell>
@@ -95,26 +100,76 @@ describe("@wms/web LocaleProvider & i18n integration", () => {
     );
 
     expect(htmlEn).toContain('data-testid="wms-locale-select"');
-    expect(htmlEn).toContain("ES-ES");
-    expect(htmlEn).toContain("ES-419");
-    expect(htmlEn).toContain("EN-US");
-    expect(htmlEn).toContain("PT-BR");
-    expect(htmlEn).toContain("PT-PT");
+    expect(htmlEn).toContain('role="group"');
+    expect(htmlEn).toContain('title="Español (España) (EU)"');
+    expect(htmlEn).toContain('title="Português (Portugal) (EU)"');
+    expect(htmlEn).toContain('title="English (US) (EU)"');
+    expect(htmlEn).toContain(">ES</button>");
+    expect(htmlEn).toContain(">PT</button>");
+    expect(htmlEn).toContain(">EN</button>");
+    expect(htmlEn).toContain('aria-pressed="true" data-locale="en-US"');
     expect(htmlEn).toContain("Control Tower");
     expect(htmlEn).toContain("Master catalog");
     expect(htmlEn).toContain("Test connection (/health)");
 
     const htmlPtBr = renderToStaticMarkup(
       <MemoryRouter initialEntries={["/"]}>
-        <LocaleProvider initialLocale="pt-BR">
+        <LocaleProvider initialLocale="pt-BR" timeZone="America/Sao_Paulo">
           <DashboardShell>
             <div>Child</div>
           </DashboardShell>
         </LocaleProvider>
       </MemoryRouter>,
     );
+    expect(htmlPtBr).toContain('title="Português (Brasil) (SA)"');
+    expect(htmlPtBr).toContain('title="Español (Latam) (SA)"');
     expect(htmlPtBr).toContain("Depósito ativo");
     expect(htmlPtBr).toContain("Estoque e kardex");
+  });
+
+  it("filtra availableLocales según región EU / SA y respeta initialLocale forzado", () => {
+    const htmlEu = renderToStaticMarkup(
+      <LocaleProvider initialLocale="es-ES" timeZone="Europe/Madrid">
+        <TranslationProbe />
+      </LocaleProvider>,
+    );
+    expect(htmlEu).toContain('data-region="EU"');
+    expect(htmlEu).toContain('data-available="es-ES,pt-PT,en-US"');
+
+    const htmlSa = renderToStaticMarkup(
+      <LocaleProvider initialLocale="es-419" timeZone="America/Bogota">
+        <TranslationProbe />
+      </LocaleProvider>,
+    );
+    expect(htmlSa).toContain('data-region="SA"');
+    expect(htmlSa).toContain('data-available="es-419,pt-BR,en-US"');
+
+    // Si initialLocale='pt-BR' se fuerza en un navegador con zona horaria EU, adapta la región para incluir pt-BR
+    const htmlForced = renderToStaticMarkup(
+      <LocaleProvider initialLocale="pt-BR" timeZone="Europe/Madrid">
+        <TranslationProbe />
+      </LocaleProvider>,
+    );
+    expect(htmlForced).toContain('data-region="SA"');
+    expect(htmlForced).toContain('data-available="es-419,pt-BR,en-US"');
+
+    // Fallback por navigator.languages cuando la zona horaria es neutra (UTC)
+    vi.stubGlobal("navigator", {
+      languages: ["pt-BR", "en-US"],
+      language: "pt-BR",
+    });
+    vi.stubGlobal("document", {
+      cookie: "",
+      documentElement: { lang: "es-ES" },
+    });
+    const htmlFallbackSa = renderToStaticMarkup(
+      <LocaleProvider timeZone="UTC">
+        <TranslationProbe />
+      </LocaleProvider>,
+    );
+    expect(htmlFallbackSa).toContain('data-locale="pt-BR"');
+    expect(htmlFallbackSa).toContain('data-region="SA"');
+    expect(htmlFallbackSa).toContain('data-available="es-419,pt-BR,en-US"');
   });
 
   it("traduce LabelPrintModal según el locale activo en LocaleProvider", () => {

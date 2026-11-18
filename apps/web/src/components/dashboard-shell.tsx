@@ -5,8 +5,6 @@ import { Link, useLocation } from "react-router-dom";
 import React, { useState, type JSX, type ReactNode } from "react";
 import {
   LOCALE_METADATA,
-  SUPPORTED_LOCALES,
-  type SupportedLocale,
   type TranslationKey,
 } from "@wms/shared-types";
 import { useTranslation } from "../context/locale-context";
@@ -65,9 +63,15 @@ export interface DashboardShellProps {
 
 export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
   const { pathname } = useLocation();
-  const { session, updateSession, testConnection, logout } =
-    useSupervisorSession();
-  const { locale, setLocale, t } = useTranslation();
+  const {
+    session,
+    sessionFeedback,
+    clearSessionFeedback,
+    updateSession,
+    testConnection,
+    logout,
+  } = useSupervisorSession();
+  const { locale, region, availableLocales, setLocale, t } = useTranslation();
   const [configOpen, setConfigOpen] = useState(false);
   const [pingMessage, setPingMessage] = useState<string | null>(null);
   const [isPinging, setIsPinging] = useState(false);
@@ -206,25 +210,32 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
           </div>
 
           <div className="wms-topbar-actions">
-            <label
-              className="wms-locale-selector"
+            <div
+              role="group"
+              data-testid="wms-locale-select"
               aria-label={t("web.shell.languageLabel")}
+              className="wms-locale-segmented"
             >
-              <select
-                data-testid="wms-locale-select"
-                aria-label={t("web.shell.languageLabel")}
-                value={locale}
-                onChange={(e) => setLocale(e.target.value as SupportedLocale)}
-                className="wms-btn wms-btn-outline wms-btn-sm wms-mono"
-              >
-                {SUPPORTED_LOCALES.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {LOCALE_METADATA[loc].shortLabel} ·{" "}
-                    {LOCALE_METADATA[loc].nativeName}
-                  </option>
-                ))}
-              </select>
-            </label>
+              {availableLocales.map((loc) => {
+                const meta = LOCALE_METADATA[loc];
+                const isActive = loc === locale;
+                return (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => setLocale(loc)}
+                    aria-pressed={isActive}
+                    data-locale={loc}
+                    title={`${meta.nativeName} (${region})`}
+                    className={`wms-locale-pill ${
+                      isActive ? "wms-locale-pill-active" : ""
+                    }`}
+                  >
+                    {meta.code}
+                  </button>
+                );
+              })}
+            </div>
             <button
               type="button"
               className="wms-btn wms-btn-secondary wms-btn-sm"
@@ -316,6 +327,28 @@ export function DashboardShell({ children }: DashboardShellProps): JSX.Element {
         ) : null}
 
         <main id="wms-main-content" className="wms-main">
+          {sessionFeedback ? (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="session-feedback-banner"
+              className={`wms-session-feedback wms-session-feedback-${sessionFeedback.type}`}
+            >
+              <span className="wms-session-feedback-text">
+                {sessionFeedback.message}
+              </span>
+              {typeof clearSessionFeedback === "function" ? (
+                <button
+                  type="button"
+                  className="wms-session-feedback-close"
+                  aria-label={t("common.close")}
+                  onClick={() => clearSessionFeedback()}
+                >
+                  ✕
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {children}
         </main>
       </div>
