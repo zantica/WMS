@@ -1,7 +1,7 @@
 # Estado Actual de la Sesión (`progress/current.md`)
 
-- **Última actualización**: 2026-11-17
-- **Estado General**: ✅ **`F10.1` completada y aprobada (`APPROVED` en `progress/review_F10.1.md`) — Siguiente: `F5.1` (Bulk Import)**
+- **Última actualización**: 2026-11-18
+- **Estado General**: ✅ **`UX-AUTH-LOCALE` completada y aprobada (`APPROVED` en `progress/review_UX-AUTH-LOCALE.md`) — Siguiente feature de `feature_list.json`: `F5.1` (Bulk Import)**
 - **Hito 10 — Sesión, Superuser y Diseño Atómico**:
   - ✅ **`F10.1`** (`done`, `APPROVED` en [`progress/review_F10.1.md`](./review_F10.1.md), ADR 009 en [`docs/adr/009-session-jwt-bcrypt-atomic-ui.md`](../docs/adr/009-session-jwt-bcrypt-atomic-ui.md)) — Capa de sesión JWT dual (`Authorization: Bearer` + cookie `HttpOnly wms_session`) con `BcryptPasswordHasher` (`BCRYPT_SALT_ROUNDS`, default 12), rol `SUPERUSER` ("Dios del sistema", `admin@navelo.dev`), bootstrap inicial, alta de usuarios con contraseña, RBAC estricto y arquitectura de Diseño Atómico (`atoms/`, `molecules/`, `organisms/`, `templates/`) en `@wms/web` (`/login`, `/users`, `DashboardShell`).
 - **Hitos Completados**:

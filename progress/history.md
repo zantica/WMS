@@ -4,6 +4,27 @@ Registro histórico *append-only* de hitos y features completadas bajo el sistem
 
 ---
 
+## [2026-11-18] Fix `FIX-DB-55P04` — Separación de `ALTER TYPE "UserRole"` para evitar PostgreSQL `55P04`
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_FIX-DB-55P04.md`](./impl_FIX-DB-55P04.md)
+  - Revisión: [`progress/review_FIX-DB-55P04.md`](./review_FIX-DB-55P04.md)
+- **Cambios clave**:
+  - `@wms/db`: Creada migración previa `20261116235959_add_superuser_role_enum/migration.sql` con `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'SUPERUSER';` y eliminada de `20261117000000_session_superuser_auth/migration.sql`. Verificadas 8/8 migraciones sobre `wms_test` y 8/8 tests de integración PostgreSQL con `app_test`.
+
+---
+
+## [2026-11-18] Tickets UX `UX-AUTH-LOCALE` — Selector de Idioma (Siglas + EU/SA), Login UI y Feedback de Sesión Activa
+- **Estado**: `done` (`VEREDICTO: APPROVED`)
+- **Reportes en disco**:
+  - Implementación: [`progress/impl_UX-AUTH-LOCALE.md`](./impl_UX-AUTH-LOCALE.md)
+  - Revisión: [`progress/review_UX-AUTH-LOCALE.md`](./review_UX-AUTH-LOCALE.md)
+- **Cambios clave**:
+  - `@wms/shared-types`: `LocaleRegion` (`"EU" | "SA"`), `LocaleShortCode` (`"ES" | "PT" | "EN"`), `getLocalesForRegion`, `detectRegionFromContext` y nuevas claves `web.auth` con paridad en los 5 locales.
+  - `@wms/web`: Selector compacto segmented pill por siglas (`ES`, `PT`, `EN`) filtrado por región `EU`/`SA`; rediseño de `SessionUserChip`, `AuthTemplate`, `PasswordField` unificado, `LoginForm` (`wms-btn-block` + `tenantId` colapsable) y panel de sesión activa en `LoginPage` con bloqueo de doble sesión y banner descartable `sessionFeedback`.
+
+---
+
 ## [2026-10-24] Inicialización del Sistema Harness + Línea Base Hito 1
 - **Features completadas previamente (Línea Base)**:
   - `F1.1`: Monorepo Turborepo + Esquema Prisma Multi-Tenant + Shared Types (`done`)
