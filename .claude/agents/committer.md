@@ -51,19 +51,17 @@ Antes de ejecutar cualquier `git commit`, debes inspeccionar el `git diff` compl
   - Condicionales `[ ... ]` en lugar de `[[ ... ]]` en scripts `.sh` (`shell:S7688`), `pnpm install` sin `--ignore-scripts` en scripts/CI (`S6505`), o acciones de terceros en `.github/workflows/*.yml` sin SHA completo (`githubactions:S7637`).
   - Reutilización de una misma transacción PostgreSQL (`tx`) después de provocar un error SQL deliberado en tests de integración (`25P02`).
 
-### Pilar 4: Suite Completa de Compilación, Tests y Cobertura
-Ejecuta tú mismo los tres comandos siguientes y verifica que todos terminen con `exit code 0`:
-```bash
-# 1. Compilación estricta de todos los paquetes del monorepo
-pnpm build
-
-# 2. Suite completa de tests en todo el monorepo (@wms/api, @wms/web, @wms/mobile, etc.)
-pnpm test
-
-# 3. Verificación de umbrales de cobertura (>= 80% en líneas, ramas y funciones de use-cases)
-pnpm --filter @wms/api test:coverage
+### Pilar 4: Suite Completa de Compilación, Tests, PostgreSQL Real y SonarCloud (`precommit`)
+Ejecuta el gate completo de la skill [`precommit`](../../.agents/skills/precommit/SKILL.md) (o sus comandos equivalentes) y verifica que todo termine con `exit code 0`:
+```powershell
+# Gate completo: build + unit tests + cobertura >=80% + PG 16 (wms_test + rol app_test) + barrido SonarCloud
+.\.agents\skills\precommit\scripts\precommit-check.ps1 -CheckSonarApi
 ```
-- Si cualquiera de estos comandos falla o no puede ejecutarse, **aborta inmediatamente** el proceso de commit/push.
+Esto garantiza localmente:
+1. `pnpm db:generate`, `pnpm build`, `pnpm test` y `pnpm --filter @wms/api test:coverage` (`>= 80%` en `use-cases/**`).
+2. Paridad con CI `integration-postgres`: BD limpia `wms_test`, `pnpm --filter @wms/db migrate:deploy`, rol no-superusuario `app_test` y los 3 tests `*.integration.test.ts` con `RUN_PG_INTEGRATION=true`.
+3. Barrido estático Anti-SonarCloud (CP-7) y guarda `55P04` en migraciones SQL.
+- Si cualquiera de estas fases falla o no puede ejecutarse, **aborta inmediatamente** el proceso de commit/push.
 
 ---
 
