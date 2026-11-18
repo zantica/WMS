@@ -1,10 +1,7 @@
 -- Migration: 20261117000000_session_superuser_auth
 -- Feature F10.1: Capa de Sesión JWT con Bcrypt, Superuser (admin@navelo.dev) y Lookup RLS controlado por email
 
--- 1. Extender enum UserRole con SUPERUSER
-ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'SUPERUSER';
-
--- 2. Añadir columna passwordHash opcional en users (retrocompatible con Clerk y seed)
+-- 1. Añadir columna passwordHash opcional en users (retrocompatible con Clerk y seed)
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
 
 -- 3. Índice para búsqueda controlada de login por email
