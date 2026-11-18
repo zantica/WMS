@@ -596,6 +596,7 @@ export const enUS = {
       "showPassword": "Show password",
       "hidePassword": "Hide password",
       "tenantOptionalLabel": "Tenant ID (optional if email is unique)",
+      "tenantToggleLabel": "Use a specific Tenant ID?",
       "submitLoginBtn": "Sign in",
       "loggingInBtn": "Signing in…",
       "bootstrapTitle": "Initialize System Superuser",
@@ -605,8 +606,14 @@ export const enUS = {
       "bootstrapSubmitBtn": "Create Superuser",
       "bootstrappingBtn": "Creating Superuser…",
       "sessionActiveTitle": "Verified active session",
-      "goToDashboardBtn": "Go to Control Tower",
-      "logoutBtn": "Sign out"
+      "activeSessionNotice": "You are already signed in as {name} ({email}). To sign in with another account, please sign out first.",
+      "activeSessionLoginBlocked": "An active session already exists. Please sign out before signing in with another account.",
+      "activeSessionIndicator": "Active session",
+      "goToDashboardBtn": "Go to Dashboard",
+      "logoutBtn": "Sign out",
+      "logoutAndSwitchBtn": "Sign out and switch account",
+      "loginSuccessFeedback": "Signed in as {name} ({role}).",
+      "logoutSuccessFeedback": "Signed out successfully."
     }
   }
 } as const satisfies TranslationDictionary;

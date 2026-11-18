@@ -7,11 +7,13 @@ import { describe, expect, it } from "vitest";
 import {
   createTranslator,
   DEFAULT_LOCALE,
+  detectRegionFromContext,
   DICTIONARIES,
   extractCookieValue,
   formatDate,
   formatDateTime,
   formatNumber,
+  getLocalesForRegion,
   LOCALE_COOKIE_NAME,
   LOCALE_METADATA,
   normalizeLocale,
@@ -24,6 +26,7 @@ import {
   SUPPORTED_LOCALES,
   translate,
   type LocaleDetectorPort,
+  type LocaleRegion,
   type LocaleStoragePort,
   type SupportedLocale,
 } from "../../index.js";
@@ -86,8 +89,81 @@ describe("@wms/shared-types i18n", () => {
         expect(LOCALE_METADATA[locale].shortLabel).toBe(
           locale.toUpperCase(),
         );
+        expect(["ES", "PT", "EN"]).toContain(LOCALE_METADATA[locale].code);
+        expect(LOCALE_METADATA[locale].regions.length).toBeGreaterThan(0);
         expect(LOCALE_METADATA[locale].nativeName.length).toBeGreaterThan(3);
       }
+
+      expect(LOCALE_METADATA["es-ES"].code).toBe("ES");
+      expect(LOCALE_METADATA["es-ES"].regions).toEqual(["EU"]);
+      expect(LOCALE_METADATA["es-419"].code).toBe("ES");
+      expect(LOCALE_METADATA["es-419"].regions).toEqual(["SA"]);
+      expect(LOCALE_METADATA["pt-PT"].code).toBe("PT");
+      expect(LOCALE_METADATA["pt-PT"].regions).toEqual(["EU"]);
+      expect(LOCALE_METADATA["pt-BR"].code).toBe("PT");
+      expect(LOCALE_METADATA["pt-BR"].regions).toEqual(["SA"]);
+      expect(LOCALE_METADATA["en-US"].code).toBe("EN");
+      expect(LOCALE_METADATA["en-US"].regions).toEqual(["EU", "SA"]);
+    });
+  });
+
+  describe("regiones EU / SA (getLocalesForRegion y detectRegionFromContext)", () => {
+    it("devuelve los locales ordenados por región EU y SA", () => {
+      const eu: readonly SupportedLocale[] = getLocalesForRegion("EU");
+      const sa: readonly SupportedLocale[] = getLocalesForRegion("SA");
+
+      expect(eu).toEqual(["es-ES", "pt-PT", "en-US"]);
+      expect(sa).toEqual(["es-419", "pt-BR", "en-US"]);
+    });
+
+    it("detecta EU desde timezones Europe/* y excepciones atlánticas ibéricas", () => {
+      const euCases: Array<string> = [
+        "Europe/Madrid",
+        "Europe/Lisbon",
+        "Europe/London",
+        "Atlantic/Canary",
+        "Atlantic/Madeira",
+        "Atlantic/Azores",
+      ];
+      for (const tz of euCases) {
+        const region: LocaleRegion = detectRegionFromContext(tz, ["es-MX"]);
+        expect(region, `timeZone=${tz}`).toBe("EU");
+      }
+    });
+
+    it("detecta SA desde timezones America/*", () => {
+      const saCases: Array<string> = [
+        "America/Bogota",
+        "America/Mexico_City",
+        "America/Sao_Paulo",
+        "America/Argentina/Buenos_Aires",
+        "America/New_York",
+      ];
+      for (const tz of saCases) {
+        expect(detectRegionFromContext(tz, ["es-ES"]), `timeZone=${tz}`).toBe(
+          "SA",
+        );
+      }
+    });
+
+    it("hace fallback a languages cuando el timezone es ausente o neutro y default a EU", () => {
+      expect(detectRegionFromContext(null, ["es-ES"])).toBe("EU");
+      expect(detectRegionFromContext(undefined, ["pt-PT"])).toBe("EU");
+      expect(detectRegionFromContext("UTC", ["en-GB"])).toBe("EU");
+
+      expect(detectRegionFromContext(null, ["es-419"])).toBe("SA");
+      expect(detectRegionFromContext("", ["pt-BR"])).toBe("SA");
+      expect(detectRegionFromContext("Asia/Tokyo", ["fr-FR", "es-MX"])).toBe(
+        "SA",
+      );
+      expect(detectRegionFromContext(null, ["es-AR"])).toBe("SA");
+      expect(detectRegionFromContext(null, ["es-CO"])).toBe("SA");
+      expect(detectRegionFromContext(null, ["es-CL"])).toBe("SA");
+      expect(detectRegionFromContext(null, ["en-US"])).toBe("SA");
+
+      // Default final a EU
+      expect(detectRegionFromContext(null, ["fr-FR", "ja-JP"])).toBe("EU");
+      expect(detectRegionFromContext()).toBe("EU");
     });
   });
 

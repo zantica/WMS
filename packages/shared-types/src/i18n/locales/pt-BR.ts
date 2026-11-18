@@ -596,6 +596,7 @@ export const ptBR = {
       "showPassword": "Mostrar senha",
       "hidePassword": "Ocultar senha",
       "tenantOptionalLabel": "Tenant ID (opcional se o e-mail for único)",
+      "tenantToggleLabel": "Usar Tenant ID específico?",
       "submitLoginBtn": "Entrar",
       "loggingInBtn": "Autenticando…",
       "bootstrapTitle": "Inicializar Superusuário do Sistema",
@@ -605,8 +606,14 @@ export const ptBR = {
       "bootstrapSubmitBtn": "Criar Superusuário",
       "bootstrappingBtn": "Criando Superusuário…",
       "sessionActiveTitle": "Sessão ativa verificada",
-      "goToDashboardBtn": "Ir para Torre de Controle",
-      "logoutBtn": "Sair"
+      "activeSessionNotice": "Você já está conectado como {name} ({email}). Para entrar com outra conta, primeiro encerre a sessão atual.",
+      "activeSessionLoginBlocked": "Já existe uma sessão ativa. Encerre a sessão atual antes de iniciar outra.",
+      "activeSessionIndicator": "Sessão ativa",
+      "goToDashboardBtn": "Ir para o Dashboard",
+      "logoutBtn": "Sair",
+      "logoutAndSwitchBtn": "Sair e trocar de conta",
+      "loginSuccessFeedback": "Sessão iniciada como {name} ({role}).",
+      "logoutSuccessFeedback": "Sessão encerrada com sucesso."
     }
   }
 } as const satisfies TranslationDictionary;

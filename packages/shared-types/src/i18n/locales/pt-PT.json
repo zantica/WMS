@@ -593,6 +593,7 @@
       "showPassword": "Mostrar palavra-passe",
       "hidePassword": "Ocultar palavra-passe",
       "tenantOptionalLabel": "Tenant ID (opcional se o e-mail for único)",
+      "tenantToggleLabel": "Utilizar Tenant ID específico?",
       "submitLoginBtn": "Iniciar sessão",
       "loggingInBtn": "A autenticar…",
       "bootstrapTitle": "Inicializar Superutilizador do Sistema",
@@ -602,8 +603,14 @@
       "bootstrapSubmitBtn": "Criar Superutilizador",
       "bootstrappingBtn": "A criar Superutilizador…",
       "sessionActiveTitle": "Sessão ativa verificada",
-      "goToDashboardBtn": "Ir para Torre de Controlo",
-      "logoutBtn": "Terminar sessão"
+      "activeSessionNotice": "Já tem sessão iniciada como {name} ({email}). Para iniciar sessão com outra conta, termine primeiro a sessão atual.",
+      "activeSessionLoginBlocked": "Já existe uma sessão ativa. Termine a sessão atual antes de iniciar outra.",
+      "activeSessionIndicator": "Sessão ativa",
+      "goToDashboardBtn": "Ir para o Dashboard",
+      "logoutBtn": "Terminar sessão",
+      "logoutAndSwitchBtn": "Terminar sessão e mudar de conta",
+      "loginSuccessFeedback": "Sessão iniciada como {name} ({role}).",
+      "logoutSuccessFeedback": "Sessão terminada com sucesso."
     }
   }
 }

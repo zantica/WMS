@@ -5,8 +5,76 @@ import type { LocaleDetectorPort, LocaleStoragePort } from "./ports.js";
 import {
   DEFAULT_LOCALE,
   LOCALE_COOKIE_NAME,
+  type LocaleRegion,
   type SupportedLocale,
 } from "./types.js";
+
+const REGION_LOCALES: Readonly<Record<LocaleRegion, readonly SupportedLocale[]>> =
+  {
+    EU: ["es-ES", "pt-PT", "en-US"],
+    SA: ["es-419", "pt-BR", "en-US"],
+  } as const;
+
+const EU_TIMEZONE_EXCEPTIONS = new Set([
+  "atlantic/canary",
+  "atlantic/madeira",
+  "atlantic/azores",
+]);
+
+const EU_LANGUAGE_CODES = new Set(["es-es", "pt-pt", "en-gb"]);
+
+const SA_LANGUAGE_CODES = new Set([
+  "es-419",
+  "pt-br",
+  "es-mx",
+  "es-ar",
+  "es-co",
+  "es-cl",
+  "en-us",
+]);
+
+/**
+ * Devuelve la lista ordenada de locales correspondientes a una región operativa (`EU` | `SA`).
+ */
+export function getLocalesForRegion(
+  region: LocaleRegion,
+): readonly SupportedLocale[] {
+  return REGION_LOCALES[region];
+}
+
+/**
+ * Detecta la región operativa (`EU` | `SA`) a partir de la zona horaria IANA del navegador
+ * y, como fallback, de las etiquetas de idioma preferidas. Por defecto devuelve `"EU"`.
+ */
+export function detectRegionFromContext(
+  timeZone?: string | null,
+  languages?: readonly string[],
+): LocaleRegion {
+  if (typeof timeZone === "string") {
+    const tz = timeZone.trim().toLowerCase();
+    if (tz.startsWith("europe/") || EU_TIMEZONE_EXCEPTIONS.has(tz)) {
+      return "EU";
+    }
+    if (tz.startsWith("america/")) {
+      return "SA";
+    }
+  }
+
+  if (Array.isArray(languages)) {
+    for (const rawLang of languages) {
+      if (typeof rawLang !== "string") continue;
+      const normalized = rawLang.trim().replace(/_/g, "-").toLowerCase();
+      if (EU_LANGUAGE_CODES.has(normalized)) {
+        return "EU";
+      }
+      if (SA_LANGUAGE_CODES.has(normalized)) {
+        return "SA";
+      }
+    }
+  }
+
+  return "EU";
+}
 
 /**
  * Normaliza un código de idioma o etiqueta BCP-47 a uno de los 5 locales soportados.

@@ -596,6 +596,7 @@ export const es419 = {
       "showPassword": "Mostrar contraseña",
       "hidePassword": "Ocultar contraseña",
       "tenantOptionalLabel": "Tenant ID (opcional si el correo es único)",
+      "tenantToggleLabel": "¿Usar Tenant ID específico?",
       "submitLoginBtn": "Iniciar sesión",
       "loggingInBtn": "Autenticando…",
       "bootstrapTitle": "Inicializar Superuser del Sistema",
@@ -605,8 +606,14 @@ export const es419 = {
       "bootstrapSubmitBtn": "Crear Superuser",
       "bootstrappingBtn": "Creando Superuser…",
       "sessionActiveTitle": "Sesión activa verificada",
-      "goToDashboardBtn": "Ir a Torre de control",
-      "logoutBtn": "Cerrar sesión"
+      "activeSessionNotice": "Ya tienes una sesión iniciada como {name} ({email}). Para iniciar sesión con otra cuenta, primero debes cerrar la sesión actual.",
+      "activeSessionLoginBlocked": "Ya existe una sesión activa. Cierra la sesión actual antes de iniciar otra.",
+      "activeSessionIndicator": "Sesión activa",
+      "goToDashboardBtn": "Ir al Dashboard",
+      "logoutBtn": "Cerrar sesión",
+      "logoutAndSwitchBtn": "Cerrar sesión y cambiar de cuenta",
+      "loginSuccessFeedback": "Sesión iniciada como {name} ({role}).",
+      "logoutSuccessFeedback": "Sesión cerrada correctamente."
     }
   }
 } as const satisfies TranslationDictionary;
